@@ -11,7 +11,7 @@ The **Admin Stream** work to date focuses on detailed property ownership analysi
    - Text files that describe data sourced from Geovation, providing insights into land and property ownership. Includes notes and examples for working with these datasets.
 
 2. **`Public Data`**:
-   - Text files describing publicly available datasets. These include details on the datasets and sample code to demonstrate how to process and analyse them.
+   - Text files describing publicly available datasets. These include details on the datasets, mostly CCOD and OCOD and sample code to demonstrate how to process and analyse them using Companies House API.
 
 3. **`company_codes_and_psc_info.csv.zip`**:
    - A zipped CSV containing a list of company registration numbers from CCOD along with their associated PSC (Person of Significant Control) information.
