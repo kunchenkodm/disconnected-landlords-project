@@ -1,4 +1,3 @@
----
 
 ### Breakdown of the Ellipsis Drive Contents Provided by Geovation:
 
