@@ -1,18 +1,16 @@
 rm(list=ls())
+
+### Requirements ### 
 library('tidyverse')
 library(httr)
 library(jsonlite)
 
-### Accessing API
+### Accessing API ###
 api_key <- "" # API key here
-ccod_url <- "https://use-land-property-data.service.gov.uk/api/v1/datasets/ccod/CCOD_FULL_2025_01.zip"  # Example endpoint for CCOD
-ocod_url <- "https://use-land-property-data.service.gov.uk/api/v1/datasets/ocod/OCOD_FULL_2025_01.zip"  # Example endpoint for OCOD
+ccod_url <- "https://use-land-property-data.service.gov.uk/api/v1/datasets/ccod/CCOD_FULL_2025_01.zip"  # Endpoint for CCOD (update when required)
+ocod_url <- "https://use-land-property-data.service.gov.uk/api/v1/datasets/ocod/OCOD_FULL_2025_01.zip"  # Endpoint for OCOD (update when required)
 
-## Using test data
-# ccod <- read.csv("C:/Users/Kunch/OneDrive - University of Warwick/RA/Test Branch/example-ccod.csv")
-# ocod <- read.csv("C:/Users/Kunch/OneDrive - University of Warwick/RA/Test Branch/example-ocod.csv")
-
-
+### Program to Fetch Data ### 
 fetch_data <- function(api_url, api_key, dest_dir = tempdir()) {
   # Step 1: Fetch the temporary download URL
   response <- GET(
@@ -70,23 +68,20 @@ fetch_data <- function(api_url, api_key, dest_dir = tempdir()) {
   return(data)
 }
 
-
-
-
-# Fetch CCOD and OCOD data
+### Fetch CCOD and OCOD data ###
 ccod <- fetch_data(ccod_url, api_key)
 ocod <- fetch_data(ocod_url, api_key)
 
+ccod$Country.Incorporated..1. = "UNITED KINGDOM" # Labels *all* CCOD observations as UK in the same variable as OCOD
 
-
-
-ccod$Source <- "CCOD"
-ccod$Country.Incorporated..1. = "UNITED KINGDOM"
-
-ccod$Source <- "CCOD"
+ccod$Source <- "CCOD" #Labels source for observations
 ocod$Source <- "OCOD"
 
+## Can be tested using example data
+# ccod <- read.csv("C:/Users/Kunch/OneDrive - University of Warwick/RA/Test Branch/example-ccod.csv")
+# ocod <- read.csv("C:/Users/Kunch/OneDrive - University of Warwick/RA/Test Branch/example-ocod.csv")
 
+### Merge Dataframe ###
 combined <- merge(ccod,ocod, all = TRUE)
 combined <- combined %>%
-  relocate(Country.Incorporated..1., .after = Proprietorship.Category..1.)
+  relocate(Country.Incorporated..1., .after = Proprietorship.Category..1.) # Places country of registration where it would be in the OCOD dataset
