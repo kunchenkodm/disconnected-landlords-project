@@ -82,7 +82,6 @@ ocod$Source <- "OCOD"
 # ocod <- read.csv("C:/Users/Kunch/OneDrive - University of Warwick/RA/Test Branch/example-ocod.csv")
 
 ### Merge Dataframe ###
-combined <- merge(ccod_modified,ocod, all = TRUE)
+combined <- merge(ccod,ocod, all = TRUE)
 combined <- combined %>%
-  relocate(Country.Incorporated..1., .after = Proprietorship.Category..1.) # Places country of registration where it would be in the OCOD dataset
-  
+  relocate(Country.Incorporated..1., .after = Proprietorship.Category..1.) # Places country of registration where it would be in the OCOD dataset  
