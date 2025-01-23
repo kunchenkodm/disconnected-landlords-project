@@ -1,4 +1,4 @@
-# disconnected-landlords-project
+# Disconnected Landlords Project Admin Data
 
 ## Overview
 The **Admin Stream** work to date focuses on detailed property ownership analysis, including corporate and public sector entities. It builds upon datasets enriched with additional metadata, such as Persons of Significant Control (PSC) information, to identify potential subsidiary holdings and local authority involvement.
@@ -19,6 +19,10 @@ The **Admin Stream** work to date focuses on detailed property ownership analysi
 
 4. **`Server Access Notes.txt`**:
    - Documentation for accessing and utilising the Warwick SCRTP Linux server, useful for large-scale data processing.
+  
+5. **`Merge_CCOD_OCOD.r`**:
+   - Simple script that merges the CCOD and OCOD datasets using the Land Registry API
+
 
 ---
 
