@@ -19,6 +19,9 @@ An overview of some publicly available datasets used in the project so far:
 ### 3. **Price Paid Data**
 - [Price Paid Data Download](https://www.gov.uk/government/statistical-data-sets/price-paid-data-downloads)
 
+### 4. **Energy Performance of Buildings Data**
+- [EPC Data Download](https://epc.opendatacommunities.org/domestic/search)
+- [EPC Documentation](https://epc.opendatacommunities.org/docs/index)
 ---
 
 ## Additional Resources
