@@ -18,10 +18,8 @@ fetch_data <- function(api_url, api_key, dest_dir = tempdir()) {
     accept_json(),
     add_headers(Authorization = api_key)
   )
-  
   # Check if the API request was successful
   if (status_code(response) != 200) {
-    print(content(response, "text", encoding = "UTF-8"))  # Debug: Print error message
     stop(paste("Failed to fetch download URL. Status code:", status_code(response)))
   }
   
@@ -30,13 +28,11 @@ fetch_data <- function(api_url, api_key, dest_dir = tempdir()) {
   if (!content_json$success) {
     stop("API response indicates failure: ", content_json)
   }
-  
   download_url <- content_json$result$download_url
   if (is.null(download_url)) {
     stop("Download URL not found in the API response.")
   }
   
-  # Step 2: Download the ZIP file using the temporary link
   temp_zip <- tempfile(fileext = ".zip")
   zip_response <- GET(
     download_url,
@@ -52,14 +48,28 @@ fetch_data <- function(api_url, api_key, dest_dir = tempdir()) {
     unzip(temp_zip, exdir = dest_dir),
     error = function(e) stop("Error extracting ZIP file: ", e$message)
   )
-  
   # Get all CSV files from the extracted content
   csv_files <- list.files(dest_dir, pattern = "\\.csv$", full.names = TRUE)
   if (length(csv_files) == 0) {
     stop("No CSV files found in the extracted ZIP archive.")
   }
+  dataset_type <- if (grepl("ocod", api_url, ignore.case = TRUE)) {
+    "OCOD"
+  } else if (grepl("ccod", api_url, ignore.case = TRUE)) {
+    "CCOD"
+  } else {
+    stop("Unknown dataset type in the API URL.")
+  }
   
-  # Step 4: Read the first CSV file into a data frame
+  # Step 5: Filter for the specific CSV file
+  pattern <- paste0("^", dataset_type, ".*\\.csv$")
+  csv_files <- list.files(dest_dir, pattern = pattern, full.names = TRUE)
+  
+  if (length(csv_files) == 0) {
+    stop(paste("No", dataset_type, "CSV files found in the extracted ZIP archive."))
+  }
+  
+  # Step 6: Read the first matching CSV file into a data frame
   data <- tryCatch(
     read.csv(csv_files[1], stringsAsFactors = FALSE),
     error = function(e) stop("Error reading CSV file: ", e$message)
@@ -72,16 +82,18 @@ fetch_data <- function(api_url, api_key, dest_dir = tempdir()) {
 ccod <- fetch_data(ccod_url, api_key)
 ocod <- fetch_data(ocod_url, api_key)
 
+## Or use a local dataset ###
+# ccod <- read.csv("[FILE PATH HERE]")
+# ocod <- read.csv("[FILE PATH HERE]")
+
 ccod$Country.Incorporated..1. = "UNITED KINGDOM" # Labels *all* CCOD observations as UK in the same variable as OCOD
 
 ccod$Source <- "CCOD" #Labels source for observations
 ocod$Source <- "OCOD"
 
-## Can be tested using example data
-# ccod <- read.csv("C:/Users/Kunch/OneDrive - University of Warwick/RA/Test Branch/example-ccod.csv")
-# ocod <- read.csv("C:/Users/Kunch/OneDrive - University of Warwick/RA/Test Branch/example-ocod.csv")
-
 ### Merge Dataframe ###
 combined <- merge(ccod,ocod, all = TRUE)
-combined <- combined %>%
-  relocate(Country.Incorporated..1., .after = Proprietorship.Category..1.) # Places country of registration where it would be in the OCOD dataset  
+combined <- combined %>% relocate(Country.Incorporated..1., .after = Proprietorship.Category..1.) # Places country of registration where it would be in the OCOD dataset  
+combined <- combined %>% relocate(Country.Incorporated..2., .after = Proprietorship.Category..2.) # Places country of registration where it would be in the OCOD dataset  
+combined <- combined %>% relocate(Country.Incorporated..3., .after = Proprietorship.Category..3.) # Places country of registration where it would be in the OCOD dataset  
+combined <- combined %>% relocate(Country.Incorporated..4., .after = Proprietorship.Category..4.) # Places country of registration where it would be in the OCOD dataset  
