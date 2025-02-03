@@ -97,3 +97,8 @@ combined <- combined %>% relocate(Country.Incorporated..1., .after = Proprietors
 combined <- combined %>% relocate(Country.Incorporated..2., .after = Proprietorship.Category..2.) # Places country of registration where it would be in the OCOD dataset  
 combined <- combined %>% relocate(Country.Incorporated..3., .after = Proprietorship.Category..3.) # Places country of registration where it would be in the OCOD dataset  
 combined <- combined %>% relocate(Country.Incorporated..4., .after = Proprietorship.Category..4.) # Places country of registration where it would be in the OCOD dataset  
+
+
+### Clean Dataset Names
+library(janitor)
+combined <- clean_names(combined)
