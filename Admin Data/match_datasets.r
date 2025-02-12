@@ -6,7 +6,8 @@ library(jsonlite)
 library(data.table)
 
 #### SETUP: INPUTS REQUIRED ####
-api_key <- "" # API key here
+api_key <- "" # Land Registry API key here
+
 ccod_version <- "CCOD_FULL_2025_01"
 ocod_version <- "OCOD_FULL_2025_01"
 admin_path <- "~/RA_local/Admin"
