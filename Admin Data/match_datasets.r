@@ -144,9 +144,9 @@ setkey(combined_expanded, UPRN)
 
 
 
-#### EPC MATCHING BY REGION ####
+#### EPC MATCHING ####
 
-# Function to convert and join all EPC datasets in a folder using the combined admin dataset
+# Function to convert and join all EPC datasets in a folder using the combined admin dataset and regional sub-datasets of EPC (load however many is needed into target folder EPC_path)
 convert_epc_datasets <- function(EPC_path, admin_dataset) {
   # Check if admin_dataset is a data.table
   if (!("data.table" %in% class(admin_dataset))) {
@@ -191,6 +191,37 @@ convert_epc_datasets <- function(EPC_path, admin_dataset) {
   return(EPC_matched)
 }
 
-# Might get difficult with RAM when many datasets included
-EPC_matched_all <- convert_epc_datasets(EPC_path, combined_expanded)
-tables()
+# Loads or creates the matching dataset
+EPC_matched_all_dir <- "~/disconnected-landlords-project/epc_matched_cov_newhan.csv"
+if(file.exists(EPC_matched_all_dir)) {
+  print("Matched dataset found. Loading from disk.") 
+  EPC_matched_all <- fread(EPC_matched_all_dir)
+} else {
+  print("Matched dataset not found. Creating.") 
+  EPC_matched_all <- convert_epc_datasets(EPC_path, combined_expanded)
+  }
+    
+
+#### Cross-sectional datasets split by freehold and leasehold ####
+# Splits the dataset into the freehold and leasehold parts.
+setkey(EPC_matched_all, tenure)
+EPC_matched_lease <- EPC_matched_all["Leasehold"]
+EPC_matched_free <- EPC_matched_all["Freehold"]
+
+# Function to create a cross-sectional dataset with only the most recent EPCs kept.  
+create_xsection <- function(datatable){
+  setDT(datatable)
+  setorder(datatable, UPRN, LODGEMENT_DATETIME)
+  temp_data <- datatable[,.SD[.N], by = UPRN]
+  return(temp_data)
+}
+
+# Creates the cross-sectional datasets. 
+EPC_matched_lease_clean <- create_xsection(EPC_matched_lease)
+EPC_matched_free_clean <- create_xsection(EPC_matched_free)
+
+#Duplicate check
+EPC_matched_free_clean$UPRN[duplicated(EPC_matched_free_clean$UPRN)]
+EPC_matched_lease_clean$UPRN[duplicated(EPC_matched_lease_clean$UPRN)]
+
+#### PANEL DATASET: TO DO ####
