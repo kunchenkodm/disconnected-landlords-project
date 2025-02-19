@@ -10,6 +10,7 @@ api_key <- "" # Land Registry API key here
 
 ccod_version <- "CCOD_FULL_2025_01"
 ocod_version <- "OCOD_FULL_2025_01"
+
 admin_path <- "~/RA_local/Admin"
 UPRN_dt_path <- "C:/Users/Kunch/Documents/RA_local/LR_UPRN_FULL_JAN_2025.csv"
 EPC_path <- "~/RA_local/domestic-EPC/"
@@ -175,7 +176,7 @@ convert_epc_datasets <- function(EPC_path, admin_dataset) {
       setkey(epc_data, UPRN)
       
       # Perform an inner join with admin_dataset using UPRN as key
-      joined_data <- admin_dataset[epc_data, on = "UPRN", nomatch = NULL]
+      joined_data <- admin_dataset[epc_data, on = "UPRN"]
       return(joined_data)
     } else {
       warning("File certificates.csv not found in folder: ", folder)
@@ -192,7 +193,7 @@ convert_epc_datasets <- function(EPC_path, admin_dataset) {
 }
 
 # Loads or creates the matching dataset
-EPC_matched_all_dir <- "~/disconnected-landlords-project/epc_matched_cov_newhan.csv"
+EPC_matched_all_dir <- "~/disconnected-landlords-project/epc_matched_newham.csv"
 if(file.exists(EPC_matched_all_dir)) {
   print("Matched dataset found. Loading from disk.") 
   EPC_matched_all <- fread(EPC_matched_all_dir)
@@ -207,21 +208,32 @@ if(file.exists(EPC_matched_all_dir)) {
 setkey(EPC_matched_all, tenure)
 EPC_matched_lease <- EPC_matched_all["Leasehold"]
 EPC_matched_free <- EPC_matched_all["Freehold"]
+EPC_matched_NA <- EPC_matched_all[is.na(tenure)]
+
 
 # Function to create a cross-sectional dataset with only the most recent EPCs kept.  
 create_xsection <- function(datatable){
   setDT(datatable)
-  setorder(datatable, UPRN, LODGEMENT_DATETIME)
-  temp_data <- datatable[,.SD[.N], by = UPRN]
+  setorder(datatable, BUILDING_REFERENCE_NUMBER, LODGEMENT_DATETIME)
+  temp_data <- datatable[,.SD[.N], by = BUILDING_REFERENCE_NUMBER]
   return(temp_data)
 }
 
 # Creates the cross-sectional datasets. 
 EPC_matched_lease_clean <- create_xsection(EPC_matched_lease)
 EPC_matched_free_clean <- create_xsection(EPC_matched_free)
+EPC_matched_NA_clean <- create_xsection(EPC_matched_NA)
 
 #Duplicate check
-EPC_matched_free_clean$UPRN[duplicated(EPC_matched_free_clean$UPRN)]
-EPC_matched_lease_clean$UPRN[duplicated(EPC_matched_lease_clean$UPRN)]
+EPC_matched_free_clean$BUILDING_REFERENCE_NUMBER[duplicated(EPC_matched_free_clean$BUILDING_REFERENCE_NUMBER)]
+EPC_matched_lease_clean$BUILDING_REFERENCE_NUMBER[duplicated(EPC_matched_lease_clean$BUILDING_REFERENCE_NUMBER)]
+EPC_matched_NA_clean$BUILDING_REFERENCE_NUMBER[duplicated(EPC_matched_NA_clean$BUILDING_REFERENCE_NUMBER)]
+
+# Re-merges datasets
+EPC_matched_combined <- rbind(EPC_matched_free_clean, EPC_matched_lease_clean, EPC_matched_NA_clean)
+
+EPC_matched_combined[, has_duplicate := .N > 1, by = BUILDING_REFERENCE_NUMBER]
+EPC_matched_combined[, EPC_bad := CURRENT_ENERGY_RATING %in% c("D", "E", "F", "G")]
+
 
 #### PANEL DATASET: TO DO ####
