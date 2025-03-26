@@ -10,8 +10,10 @@ api_key <- "" # Land Registry API key here
 
 ccod_version <- "CCOD_FULL_2025_01"
 ocod_version <- "OCOD_FULL_2025_01"
+
 admin_path <- "~/RA_local/Admin"
 UPRN_dt_path <- "C:/Users/Kunch/Documents/RA_local/LR_UPRN_FULL_JAN_2025.csv"
+EPC_archive <- "~/RA_local/all-domestic-certificates.zip"
 EPC_path <- "~/RA_local/domestic-EPC/"
 
 ### PATH TO API URL ###
@@ -128,6 +130,8 @@ setnames(UPRN_dt, c("V1", "V2"), c("title_number","UPRN"))
 UPRN_dt[,V3:=NULL]
 
 setkey(UPRN_dt,title_number)
+
+setDT(combined)
 setkey(combined,title_number)
 
 
@@ -144,9 +148,68 @@ setkey(combined_expanded, UPRN)
 
 
 
-#### EPC MATCHING BY REGION ####
+#### EXTRACT CERTIFICATES FROM ARCHIVE (RANDOM SAMPLE VERSION) ####
 
-# Function to convert and join all EPC datasets in a folder using the combined admin dataset
+extractRandomFolders <- function(zip_file, 
+                                 output_dir, 
+                                 folder_prefix = "domestic-", 
+                                 sample_size, 
+                                 enable_extraction) {
+  if (!enable_extraction) {
+    message("Extraction is disabled (enable_extraction is FALSE).")
+    return(invisible(NULL))
+  }
+  
+  # Check if the zip file exists
+  if (!file.exists(zip_file)) {
+    stop("Zip file does not exist: ", zip_file)
+  }
+  
+  # Create the output directory if it does not exist
+  if (!dir.exists(output_dir)) {
+    dir.create(output_dir, recursive = TRUE)
+  }
+  
+  # List the contents of the ZIP file
+  zip_info <- unzip(zip_file, list = TRUE)
+  zip_files <- zip_info$Name
+  
+  # Filter for entries that start with the given folder prefix
+  domestic_entries <- grep(paste0("^", folder_prefix), zip_files, value = TRUE)
+  
+  # Extract the top-level folder names (assuming folders are delimited by "/")
+  top_folders <- unique(sapply(domestic_entries, function(x) {
+    strsplit(x, "/")[[1]][1]
+  }))
+  
+  # Determine the actual number of folders to sample
+  actual_sample_size <- min(sample_size, length(top_folders))
+  if (actual_sample_size < sample_size) {
+    warning("Only ", actual_sample_size, " folders available for extraction.")
+  }
+  
+  # Randomly select the folders
+  selected_folders <- sample(top_folders, actual_sample_size)
+  message("Selected folders: ", paste(selected_folders, collapse = ", "))
+  
+  # Identify all files in the zip that belong to the selected folders
+  selected_files <- domestic_entries[sapply(domestic_entries, function(x) {
+    folder <- strsplit(x, "/")[[1]][1]
+    folder %in% selected_folders
+  })]
+  
+  # Extract the selected files into the output directory
+  unzip(zip_file, files = selected_files, exdir = output_dir)
+  message("Extraction complete.")
+}
+
+# To extract, make sure to set enable_extraction to TRUE, select an appropriate sample of LADs. 
+extractRandomFolders(EPC_archive, EPC_path, sample_size = 30, enable_extraction = FALSE)
+
+
+#### EPC MATCHING ####
+
+# Function to convert and join all EPC datasets in a folder using the combined admin dataset and regional sub-datasets of EPC (load however many is needed into target folder EPC_path)
 convert_epc_datasets <- function(EPC_path, admin_dataset) {
   # Check if admin_dataset is a data.table
   if (!("data.table" %in% class(admin_dataset))) {
@@ -175,7 +238,7 @@ convert_epc_datasets <- function(EPC_path, admin_dataset) {
       setkey(epc_data, UPRN)
       
       # Perform an inner join with admin_dataset using UPRN as key
-      joined_data <- admin_dataset[epc_data, on = "UPRN", nomatch = NULL]
+      joined_data <- admin_dataset[epc_data, on = "UPRN"]
       return(joined_data)
     } else {
       warning("File certificates.csv not found in folder: ", folder)
@@ -191,6 +254,51 @@ convert_epc_datasets <- function(EPC_path, admin_dataset) {
   return(EPC_matched)
 }
 
-# Might get difficult with RAM when many datasets included
-EPC_matched_all <- convert_epc_datasets(EPC_path, combined_expanded)
-tables()
+
+
+
+
+# Loads or creates the matching dataset
+EPC_matched_all_dir <- "~/disconnected-landlords-project/epc_matched-random_sample.csv"
+if(file.exists(EPC_matched_all_dir)) {
+  print("Matched dataset found. Loading from disk.") 
+  EPC_matched_all <- fread(EPC_matched_all_dir)
+} else {
+  print("Matched dataset not found. Creating.") 
+  EPC_matched_all <- convert_epc_datasets(EPC_path, combined_expanded)
+}
+# write.csv(EPC_matched_all, file ="~/disconnected-landlords-project/epc_matched-random_sample.csv")
+
+#### Cross-sectional datasets split by freehold and leasehold ####
+# Splits the dataset into the freehold and leasehold parts.
+setkey(EPC_matched_all, tenure)
+EPC_matched_lease <- EPC_matched_all["Leasehold"]
+EPC_matched_free <- EPC_matched_all["Freehold"]
+EPC_matched_NA <- EPC_matched_all[is.na(tenure)]
+
+
+# Function to create a cross-sectional dataset with only the most recent EPCs kept.  
+create_xsection <- function(datatable){
+  setDT(datatable)
+  setorder(datatable, BUILDING_REFERENCE_NUMBER, LODGEMENT_DATETIME)
+  temp_data <- datatable[,.SD[.N], by = BUILDING_REFERENCE_NUMBER]
+  return(temp_data)
+}
+
+# Creates the cross-sectional datasets. 
+EPC_matched_lease_clean <- create_xsection(EPC_matched_lease)
+EPC_matched_free_clean <- create_xsection(EPC_matched_free)
+EPC_matched_NA_clean <- create_xsection(EPC_matched_NA)
+
+#Duplicate check
+EPC_matched_free_clean$BUILDING_REFERENCE_NUMBER[duplicated(EPC_matched_free_clean$BUILDING_REFERENCE_NUMBER)]
+EPC_matched_lease_clean$BUILDING_REFERENCE_NUMBER[duplicated(EPC_matched_lease_clean$BUILDING_REFERENCE_NUMBER)]
+EPC_matched_NA_clean$BUILDING_REFERENCE_NUMBER[duplicated(EPC_matched_NA_clean$BUILDING_REFERENCE_NUMBER)]
+
+# Re-merges datasets
+EPC_matched_combined <- rbind(EPC_matched_free_clean, EPC_matched_lease_clean, EPC_matched_NA_clean)
+
+EPC_matched_combined[, has_duplicate := .N > 1, by = BUILDING_REFERENCE_NUMBER]
+EPC_matched_combined[, bad_EPC := CURRENT_ENERGY_RATING %in% c("D", "E", "F", "G")]
+
+#### PANEL DATASET: TO DO ####
