@@ -1,0 +1,654 @@
+---
+title: "Disconnected Landlords PSM Analysis"
+author: "Dmytro Kunchenko"
+date: "2025-06-04"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+# This chunk runs setup code but doesn't show in the document.
+# Load required packages
+library(fixest)
+library(car) 
+library(httr) 
+library(jsonlite) 
+library(data.table)
+library(MatchIt)
+library(cobalt)
+library(optmatch) 
+library(Matching) 
+library(rgenoud) 
+library(marginaleffects)
+library(ggplot2)
+library(gridExtra) 
+library(kableExtra)
+library(rlang) # For handling expressions in the function
+
+# Global chunk options
+knitr::opts_chunk$set(
+  echo = FALSE,      # Hide R code by default
+  cache = FALSE, 
+  message = FALSE,   # Suppress messages
+  warning = FALSE,   # Suppress warnings
+  fig.height = 6,
+  fig.width = 10,
+  include = TRUE     # Include output (plots, tables) by default
+)
+```
+
+# Overview
+
+This document outlines the Propensity Score Matching (PSM) analysis conducted for the "Disconnected Landlords" project. It includes data loading, cleaning, treatment definitions, matching procedures, balance diagnostics, and regression analyses. This version has been refactored to improve conciseness and reduce code duplication by splitting the main analysis function.
+
+# Data Loading and Preprocessing
+
+## Load Data
+
+First, load the dataset. **Ensure the path to the .RData file is correct.**
+
+```{r load_data, echo=TRUE}
+# Load data
+# Replace with the correct path if necessary
+load_path <- "~/disconnected-landlords-project/EPC_matched_combined.RData" 
+# For testing, if the file doesn't exist, create a dummy EPC_matched_combined
+if (!file.exists(load_path)) {
+  warning(paste("Data file not found at:", load_path, ". Using a minimal dummy dataset for demonstration."))
+  EPC_matched_combined <- data.table(
+    UPRN = 1:1000,
+    MAIN_FUEL = sample(c("mains gas", "electricity", "oil", "Gas: mains gas", "INVALID!", "", "To be used only when other fuel specified"), 1000, replace = TRUE),
+    country_incorporated_1 = sample(c("UNITED KINGDOM", "JERSEY", "USA"), 1000, replace = TRUE),
+    coarse_proprietorship = sample(c("For-Profit", "Non-Profit", "Public Sector", "Individual"), 1000, replace = TRUE),
+    country_incorporated_tax_haven = sample(c(0, 1, NA), 1000, replace = TRUE, prob = c(0.7, 0.2, 0.1)),
+    tenure = sample(c("Freehold", "Leasehold", NA), 1000, replace = TRUE),
+    CONSTRUCTION_AGE_BAND = sample(c("2000-Present", "1950-1975", "Pre-1900", NA), 1000, replace = TRUE),
+    PROPERTY_TYPE = sample(c("House", "Flat", "Bungalow", NA), 1000, replace = TRUE),
+    BUILT_FORM = sample(c("Detached", "Semi-Detached", "Terraced", "End-Terrace", NA), 1000, replace = TRUE),
+    TOTAL_FLOOR_AREA = rnorm(1000, 100, 20),
+    NUMBER_HABITABLE_ROOMS = rpois(1000, 5),
+    lodgement_year = sample(2010:2023, 1000, replace = TRUE),
+    bad_EPC = sample(0:1, 1000, replace = TRUE),
+    source = "Dummy",
+    postcode_sector = sample(paste0("AB", 1:10), 1000, replace = TRUE),
+    LOCAL_AUTHORITY_LABEL = sample(paste0("LA_", LETTERS[1:5]), 1000, replace = TRUE)
+  )
+} else {
+  load(load_path)
+}
+
+# Ensure EPC_matched_combined is a data.table
+if (!is.data.table(EPC_matched_combined)) {
+  setDT(EPC_matched_combined)
+}
+# Display a brief summary of the loaded data
+print(head(EPC_matched_combined, 3))
+cat("\nDimensions of loaded data:", dim(EPC_matched_combined), "\n")
+```
+
+## Clean `MAIN_FUEL` Variable
+
+The `MAIN_FUEL` variable requires cleaning and standardization.
+
+```{r clean_main_fuel}
+# Ensure it's a data.table if not already
+setDT(EPC_matched_combined) 
+
+EPC_matched_combined[
+  , MAIN_FUEL_CLEAN := trimws(MAIN_FUEL)
+][
+  MAIN_FUEL_CLEAN == "", MAIN_FUEL_CLEAN := NA_character_
+]
+
+EPC_matched_combined[
+  !is.na(MAIN_FUEL_CLEAN),
+  MAIN_FUEL_CLEAN := gsub("\\s*[–-]\\s*this is for backwards compatibility only and should not be used$", 
+                          "", MAIN_FUEL_CLEAN, ignore.case = TRUE)
+]
+
+EPC_matched_combined[
+  grepl("^To be used only when", MAIN_FUEL_CLEAN, ignore.case = TRUE),
+  MAIN_FUEL_CLEAN := NA_character_
+]
+
+EPC_matched_combined[
+  MAIN_FUEL_CLEAN %in% c("INVALID!", "NO DATA!"),
+  MAIN_FUEL_CLEAN := NA_character_
+]
+
+EPC_matched_combined[
+  !is.na(MAIN_FUEL_CLEAN),
+  MAIN_FUEL_CLEAN := gsub("\\s*\\((community|not community)\\)$", 
+                          "", MAIN_FUEL_CLEAN, ignore.case = TRUE)
+]
+
+EPC_matched_combined[
+  !is.na(MAIN_FUEL_CLEAN),
+  MAIN_FUEL_CLEAN := gsub("^(Gas|Electricity|Oil):\\s*", 
+                          "", MAIN_FUEL_CLEAN, ignore.case = TRUE)
+]
+
+EPC_matched_combined[
+  !is.na(MAIN_FUEL_CLEAN),
+  MAIN_FUEL_CLEAN := tolower(MAIN_FUEL_CLEAN)
+]
+
+# Consolidate MAIN_FUEL categories
+EPC_matched_combined[
+  , MAIN_FUEL_FINAL := fcase(
+    grepl("^anthracite$", MAIN_FUEL_CLEAN), "coal",
+    grepl("^appliances able to use mineral oil or liquid biofuel$", MAIN_FUEL_CLEAN), "dual_fuel",
+    grepl("^b30[dk]$", MAIN_FUEL_CLEAN), "biomass",
+    grepl("^(electricity displaced from grid|electricity, unspecified tariff)$", MAIN_FUEL_CLEAN), "electricity",
+    grepl("^oil$", MAIN_FUEL_CLEAN), "heating_oil",
+    grepl("^mains gas$", MAIN_FUEL_CLEAN), "mains_gas",
+    grepl("lpg", MAIN_FUEL_CLEAN), "lpg",
+    grepl("heating oil|rapeseed oil", MAIN_FUEL_CLEAN), "heating_oil",
+    grepl("coal", MAIN_FUEL_CLEAN), "coal", # Includes "house coal", "smokeless coal"
+    grepl("wood|pellet|chip", MAIN_FUEL_CLEAN), "wood",
+    grepl("biomass|biodiesel|biogas", MAIN_FUEL_CLEAN), "biomass",
+    grepl("^electricity$", MAIN_FUEL_CLEAN), "electricity",
+    # grepl("dual fuel", MAIN_FUEL_CLEAN), "dual_fuel", # Too rare a categories in this sample
+    # !is.na(MAIN_FUEL_CLEAN), "other",
+    default = NA_character_
+  )
+]
+cat("\nFrequency table for MAIN_FUEL_FINAL (including NAs):\n")
+print(table(EPC_matched_combined$MAIN_FUEL_FINAL, useNA="ifany"))
+```
+
+# Treatment Definitions
+The treatments are combinations of coarse proprietorship (for-profit, non-profit, public) and registration country of the landlord. 
+
+Following treatments are proposed: (1) UK for-profit firms `treat_uk_forprofit`; (2) non-UK for-profit firms `treat_foreign_forprofit`; (3) tax haven registred entities, regardless whether for or not-for profit `treat_tax_haven`; (4) UK public sector `treat_uk_public`; (5) [unused] all for-profit firms `treat_all_forprofit`. 
+
+NOTE: I am somewhat surprised that the overwhelming majority of foreign owners are registered (at least partially) in tax havens - since for a property to have a "tax haven" flag, at least one of its proprietors must be in a tax haven. 
+
+
+```{r treatment_definitions, echo=TRUE}
+# Treatment definition 1 - UK For-Profits
+EPC_matched_combined[, treat_uk_forprofit  
+  := as.integer(grepl("UNITED KINGDOM", country_incorporated_1, ignore.case = TRUE) & 
+  grepl("For-Profit", coarse_proprietorship, ignore.case = TRUE))]
+
+# Treatment definition 2 - Non - UK For-Profits
+EPC_matched_combined[, treat_foreign_forprofit := as.integer(
+  grepl("For-Profit", coarse_proprietorship, ignore.case = TRUE) &
+  !grepl("UNITED KINGDOM", country_incorporated_1, ignore.case = TRUE)
+)]
+
+# Treatment definition 3 - Tax Haven
+EPC_matched_combined[, treat_tax_haven := as.integer(country_incorporated_tax_haven == 1)]
+
+# Treatment definition 4 - UK Public Sector
+EPC_matched_combined[, treat_uk_public 
+  := as.integer(grepl("Public Sector", coarse_proprietorship, ignore.case = TRUE))]
+
+# Treatment definition 5 - All For Profit
+EPC_matched_combined[, treat_all_forprofit 
+  := as.integer(grepl("For-Profit", coarse_proprietorship, ignore.case = TRUE))]
+
+cat("Summary of treatment variables:\n")
+print(summary(EPC_matched_combined[, .(treat_uk_forprofit, treat_foreign_forprofit, treat_tax_haven, treat_uk_public, treat_all_forprofit)]))
+```{r treatment_tables}
+# Only showing a subset of tables for brevity in this refactored example
+cat("Cross-tabulation: Tax Haven Status vs Coarse Proprietorship\n")
+print(table(EPC_matched_combined$country_incorporated_tax_haven, EPC_matched_combined$coarse_proprietorship, useNA = "ifany"))
+```
+
+# Matching Procedure
+Propensity score and exact matching variables are taken from "Regulatory barriers to climate action: evidence from conservation areas in England": Exact matching on `tenure` (leasehold/freehold), construction age band, property type, built form (detached/semi-detached/...), main fuel (see note 1 and code above). Propensity score matching (here: nearest neighbour / quick/ but could be others - see note 2) is preformed on total floor area, number of habitable rooms and EPC certificate lodgement year. 
+
+The matching is performed within local authorities, and then the lists get amalgamated together. The local authorities with less than 5 treated or 15 control observations should be skipped. In the end, when regressions are ran, for the benefit of allowing matched-pair fixed effects, the `subclass` variable, created by `matchit` as an index of the matched pair is concatenated with the local authority ID from the EPC dataset, so we actually get unique matched pairs (with two observations within each concatenated ID, as expected). 
+
+The output for each treatment variable includes: the code for the matching, matching balance assesment using a balance table and a love plot, the regression of the relevant treatment on bad_EPC with matched pair fixed effects. 
+
+NOTE 1 : The `FUEL_TYPE` variable, even coarsened as above, significantly reduces the size of the treated cohort. This becomes a more significant problem with matching for foreign for-profit companies later on -- leaving just dozens of treated observation in some cases. 
+
+NOTE 2: The sections of the code for other matching methods can be commented-uncommented as necessary, the matching evaluation code (tables / plots) should work fine. See comments in code. TODO: A more elegant functional programming approach would avoid duplicating all the code everything. 
+
+# Defining Functions
+
+```{r define_psm_functions, echo=TRUE, cache=FALSE}
+# Function to perform matching
+perform_matching <- function(input_dt, 
+                             treatment_var, 
+                             analysis_id, 
+                             prop_score_covs, 
+                             exact_vars,
+                             subset_condition_expr = NULL,
+                             outcome_var = "bad_EPC", # Keep for consistency, though not used directly in matching
+                             min_treated_la = 5,
+                             min_control_la = 15,
+                             verbose = FALSE) {
+
+  cat(paste0("\n--- Performing Matching for: ", analysis_id, " ---\n"))
+  
+  # Apply subset condition if provided
+  if (!is.null(subset_condition_expr)) {
+    current_data <- input_dt[eval(subset_condition_expr)]
+    cat(paste0("Subset applied for ", analysis_id, ". Rows after subset: ", nrow(current_data), "\n"))
+  } else {
+    current_data <- copy(input_dt)
+  }
+  
+  all_nec_vars <- c("source", outcome_var, treatment_var, prop_score_covs, exact_vars, "postcode_sector", "LOCAL_AUTHORITY_LABEL")
+  
+  missing_cols <- setdiff(all_nec_vars, names(current_data))
+  if (length(missing_cols) > 0) {
+    stop(paste("Missing columns for analysis", analysis_id, ":", paste(missing_cols, collapse=", ")))
+  }
+  
+  combined_nomiss <- current_data[complete.cases(current_data[, ..all_nec_vars])]
+
+  if (nrow(combined_nomiss) == 0) {
+    cat("No complete cases for matching in analysis:", analysis_id, "\nSkipping matching.\n")
+    return(list(mdata_nearest = data.table(), mdata_quick = data.table(), combined_nomiss = data.table()))
+  }
+  
+  for (col in exact_vars) {
+    if (!is.factor(combined_nomiss[[col]])) {
+      combined_nomiss[, (col) := as.factor(get(col))]
+    }
+  }
+
+  unique_las <- unique(combined_nomiss$LOCAL_AUTHORITY_LABEL)
+  mdata_list_nearest <- list()
+  mdata_list_quick <- list()
+
+  for (la in unique_las) {
+    la_data <- combined_nomiss[LOCAL_AUTHORITY_LABEL == la]
+    if (verbose) cat("\nProcessing LA:", la, "- Total rows:", nrow(la_data), "\n")
+    
+    n_treated <- sum(la_data[[treatment_var]] == 1, na.rm = TRUE)
+    n_control <- sum(la_data[[treatment_var]] == 0, na.rm = TRUE)
+    if (verbose) cat("Treated units:", n_treated, "Control units:", n_control, "\n")
+    
+    if (n_treated < min_treated_la || n_control < min_control_la) {
+      if (verbose) cat("Skipping LA", la, "due to insufficient treated/control units.\n")
+      next
+    }
+    
+    ps_formula_str <- paste(treatment_var, "~", paste(prop_score_covs, collapse = " + "))
+    ps_formula <- as.formula(ps_formula_str)
+    exact_formula_str <- paste("~", paste(exact_vars, collapse = " + "))
+    exact_formula_la <- as.formula(exact_formula_str)
+    
+    tryCatch({
+      match_obj_nearest <- matchit(ps_formula, data = la_data, method = "nearest",
+                                   distance = "glm", exact = exact_formula_la)
+      mdata_list_nearest[[la]] <- match.data(match_obj_nearest)
+    }, error = function(e) cat("Error Nearest matching LA:", la, "-", e$message, "\n"))
+    
+    tryCatch({
+      match_obj_quick <- matchit(ps_formula, data = la_data, method = "quick", 
+                                 exact = exact_formula_la)
+      mdata_list_quick[[la]] <- match.data(match_obj_quick)
+    }, error = function(e) cat("Error Quick matching LA:", la, "-", e$message, "\n"))
+  }
+
+  mdata_llc_nearest_by_la <- rbindlist(mdata_list_nearest, use.names = TRUE, fill = TRUE, idcol = "original_LA_for_debug")
+  mdata_llc_quick_by_la <- rbindlist(mdata_list_quick, use.names = TRUE, fill = TRUE, idcol = "original_LA_for_debug")
+  
+  cat(paste0("Matching complete for ", analysis_id, ". Nearest matched N=", nrow(mdata_llc_nearest_by_la), ", Quick matched N=", nrow(mdata_llc_quick_by_la),"\n"))
+  
+  return(list(
+    mdata_nearest = mdata_llc_nearest_by_la, 
+    mdata_quick = mdata_llc_quick_by_la,
+    combined_nomiss = combined_nomiss # This is the pre-matching data used for this specific analysis (subsetted if applicable)
+  ))
+}
+
+# Function to generate balance tables
+generate_balance_tables <- function(matching_output, 
+                                    treatment_var, 
+                                    analysis_id, 
+                                    prop_score_covs, 
+                                    exact_vars) {
+  
+  cat(paste0("\n## Balance Assessment Tables for ", analysis_id, "\n"))
+  
+  mdata_nearest <- matching_output$mdata_nearest
+  mdata_quick <- matching_output$mdata_quick
+  combined_nomiss_for_analysis <- matching_output$combined_nomiss # Use the combined_nomiss specific to this analysis
+
+  balance_formula_terms <- c(prop_score_covs, sapply(exact_vars, function(v) paste0("factor(", v, ")")))
+  balance_formula_str <- paste(treatment_var, "~", paste(balance_formula_terms, collapse = " + "))
+  balance_formula <- as.formula(balance_formula_str)
+  
+  bal_tabs <- list()
+
+  # Unadjusted/Baseline
+  if (nrow(combined_nomiss_for_analysis) > 0) {
+    tryCatch({
+      bal_tabs$Unadjusted <- bal.tab(balance_formula, data = combined_nomiss_for_analysis,
+                                     treat = treatment_var,
+                                     s.d.denom = "pooled", binary = "std", disp.means = TRUE)
+      cat("\n### Balance Table: Unadjusted\n")
+      balance_df_unadj <- as.data.frame(bal_tabs$Unadjusted$Balance)
+      if (nrow(balance_df_unadj) > 0) {
+          print(knitr::kable(balance_df_unadj, caption = paste(analysis_id, ": Balance - Unadjusted"), digits = 3) %>%
+                kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE))
+          if (!is.null(bal_tabs$Unadjusted$Observations)) {
+             cat("\n#### Observations (Unadjusted):\n")
+             print(knitr::kable(bal_tabs$Unadjusted$Observations))
+          }
+      } else { cat("No balance info for Unadjusted.\n")}
+    }, error = function(e) cat("Error bal.tab Unadjusted:", e$message, "\n"))
+  } else { cat("No data for Unadjusted balance table in", analysis_id, "\n")}
+
+  # Nearest neighbor
+  if (nrow(mdata_nearest) > 0) {
+    tryCatch({
+      bal_tabs$Nearest <- bal.tab(balance_formula, data = mdata_nearest, 
+                                  weights = "weights", method = "matching", 
+                                  s.d.denom = "pooled", un = TRUE, binary = "std", disp.matched = TRUE, disp.means = TRUE)
+      cat("\n### Balance Table: Nearest Neighbor Matching\n")
+      balance_df_nearest <- as.data.frame(bal_tabs$Nearest$Balance)
+      if (nrow(balance_df_nearest) > 0) {
+          print(knitr::kable(balance_df_nearest, caption = paste(analysis_id, ": Balance - Nearest Neighbor"), digits = 3) %>%
+                kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE))
+          if (!is.null(bal_tabs$Nearest$Observations)) {
+             cat("\n#### Observations (Nearest Neighbor):\n")
+             print(knitr::kable(bal_tabs$Nearest$Observations))
+          }
+      } else { cat("No balance info for Nearest.\n")}
+    }, error = function(e) cat("Error bal.tab Nearest:", e$message, "\n"))
+  } else { cat("No data for Nearest Neighbor balance table in", analysis_id, "\n")}
+  
+  # Quick matching
+  if (nrow(mdata_quick) > 0) {
+    tryCatch({
+      bal_tabs$Quick <- bal.tab(balance_formula, data = mdata_quick, 
+                                weights = "weights", method = "matching", 
+                                s.d.denom = "pooled", un = TRUE, binary = "std", disp.matched = TRUE, disp.means = TRUE)
+      cat("\n### Balance Table: Quick Matching\n")
+      balance_df_quick <- as.data.frame(bal_tabs$Quick$Balance)
+       if (nrow(balance_df_quick) > 0) {
+          print(knitr::kable(balance_df_quick, caption = paste(analysis_id, ": Balance - Quick Matching"), digits = 3) %>%
+                kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE))
+          if (!is.null(bal_tabs$Quick$Observations)) {
+             cat("\n#### Observations (Quick Matching):\n")
+             print(knitr::kable(bal_tabs$Quick$Observations))
+          }
+      } else { cat("No balance info for Quick.\n")}
+    }, error = function(e) cat("Error bal.tab Quick:", e$message, "\n"))
+  } else { cat("No data for Quick Matching balance table in", analysis_id, "\n")}
+  
+  return(bal_tabs)
+}
+
+# Function to generate Love plots
+generate_love_plots <- function(bal_tabs_list, analysis_id) {
+  cat(paste0("\n## Love Plots for ", analysis_id, "\n"))
+  
+  if (!is.null(bal_tabs_list$Quick) && length(bal_tabs_list$Quick) > 0) {
+    tryCatch({
+      lpq <- love.plot(bal_tabs_list$Quick, threshold = .1, abs = TRUE, line = TRUE, stars = "std",
+                       title = paste(analysis_id, ": Covariate Balance (Quick Matching)"), var.order = "unadjusted")
+      print(lpq)
+    }, error = function(e) cat("Error generating Love Plot (Quick) for", analysis_id, ":", e$message, "\n"))
+  } else { cat("Quick matching balance data not available for Love Plot in", analysis_id, ".\n") }
+
+  if (!is.null(bal_tabs_list$Nearest) && length(bal_tabs_list$Nearest) > 0) {
+     tryCatch({
+        lpn <- love.plot(bal_tabs_list$Nearest, threshold = .1, abs = TRUE, line = TRUE, stars = "std",
+                         title = paste(analysis_id, ": Covariate Balance (Nearest Neighbor)"), var.order = "unadjusted")
+        print(lpn)
+     }, error = function(e) cat("Error generating Love Plot (Nearest) for", analysis_id, ":", e$message, "\n"))
+  } else { cat("Nearest Neighbor matching balance data not available for Love Plot in", analysis_id, ".\n") }
+}
+
+# Define common variables for PSM
+common_exact_vars <- c("tenure", "CONSTRUCTION_AGE_BAND", "PROPERTY_TYPE", "BUILT_FORM", "MAIN_FUEL_FINAL")
+common_prop_score_covs <- c("TOTAL_FLOOR_AREA", "NUMBER_HABITABLE_ROOMS", "lodgement_year")
+outcome_variable <- "bad_EPC"
+```
+
+# PSM Analysis 1: UK For-Profits (`treat_uk_forprofit`)
+Treatment: UK for profit; Control: Otherwise
+
+```{r psm1_matching_balance_plots, results='asis', fig.show='hold', cache=FALSE}
+analysis_id_1 <- "PSM1_UK_ForProfit"
+treatment_var_1 <- "treat_uk_forprofit"
+
+# Perform matching
+matching_results_1 <- perform_matching(
+  input_dt = EPC_matched_combined,
+  treatment_var = treatment_var_1,
+  analysis_id = analysis_id_1,
+  prop_score_covs = common_prop_score_covs,
+  exact_vars = common_exact_vars,
+  outcome_var = outcome_variable 
+)
+
+# Generate balance tables
+bal_tabs_1 <- generate_balance_tables(
+  matching_output = matching_results_1,
+  treatment_var = treatment_var_1,
+  analysis_id = analysis_id_1,
+  prop_score_covs = common_prop_score_covs,
+  exact_vars = common_exact_vars
+)
+
+# Generate Love plots
+generate_love_plots(
+  bal_tabs_list = bal_tabs_1,
+  analysis_id = analysis_id_1
+)
+```
+
+## Regression Analysis for `r I(analysis_id_1)`
+
+```{r psm1_regression, echo=TRUE}
+cat("\n## Regression Analysis for", analysis_id_1, "\n")
+cat("Treatment:", treatment_var_1, "; Control: Otherwise (within matched sample - Nearest Neighbor)\n")
+
+mdata_reg_1 <- matching_results_1$mdata_nearest
+if (nrow(mdata_reg_1) > 0) {
+  reg_formula_simple_str <- paste(outcome_variable, "~", treatment_var_1)
+  m_simple_1 <- feols(as.formula(reg_formula_simple_str), data = mdata_reg_1)
+  cat("\n### Regression without fixed effects:\n")
+  print(summary(m_simple_1))
+  
+  if ("subclass" %in% names(mdata_reg_1)) {
+    mdata_reg_1[, LOCAL_AUTHORITY_SUBCLASS := paste(LOCAL_AUTHORITY_LABEL, subclass, sep = "_")]
+    reg_formula_fe_str <- paste(outcome_variable, "~", treatment_var_1, "| LOCAL_AUTHORITY_SUBCLASS")
+    m_fe_1 <- feols(as.formula(reg_formula_fe_str), data = mdata_reg_1)
+    cat("\n### Regression with LOCAL_AUTHORITY_SUBCLASS fixed effects:\n")
+    print(summary(m_fe_1))
+  } else {
+    cat("\n'subclass' column not found. Using LOCAL_AUTHORITY_LABEL as fixed effect instead:\n")
+    reg_formula_la_fe_str <- paste(outcome_variable, "~", treatment_var_1, "| LOCAL_AUTHORITY_LABEL")
+    m_la_fe_1 <- feols(as.formula(reg_formula_la_fe_str), data = mdata_reg_1)
+    print(summary(m_la_fe_1))
+  }
+} else {
+  cat("No matched data available for regression analysis for", analysis_id_1, "\n")
+}
+```
+
+# PSM Analysis 2: Non-UK For-Profits (`treat_foreign_forprofit`)
+Treatment: Non-UK for-profit; Control: Otherwise
+```{r psm2_matching_balance_plots, results='asis', fig.show='hold', cache=FALSE}
+analysis_id_2 <- "PSM2_Foreign_ForProfit"
+treatment_var_2 <- "treat_foreign_forprofit"
+
+matching_results_2 <- perform_matching(
+  input_dt = EPC_matched_combined,
+  treatment_var = treatment_var_2,
+  analysis_id = analysis_id_2,
+  prop_score_covs = common_prop_score_covs,
+  exact_vars = common_exact_vars,
+  outcome_var = outcome_variable
+)
+bal_tabs_2 <- generate_balance_tables(matching_results_2, treatment_var_2, analysis_id_2, common_prop_score_covs, common_exact_vars)
+generate_love_plots(bal_tabs_2, analysis_id_2)
+```
+
+
+## Regression Analysis for `r I(analysis_id_2)`
+
+
+```{r psm2_regression, echo=TRUE}
+cat("\n## Regression Analysis for", analysis_id_2, "\n")
+cat("Treatment:", treatment_var_2, "; Control: Otherwise (within matched sample - Nearest Neighbor)\n")
+mdata_reg_2 <- matching_results_2$mdata_nearest
+if (nrow(mdata_reg_2) > 0) {
+  # ... (regression code similar to PSM1)
+  reg_formula_simple_str <- paste(outcome_variable, "~", treatment_var_2)
+  m_simple_2 <- feols(as.formula(reg_formula_simple_str), data = mdata_reg_2)
+  print(summary(m_simple_2))
+  if ("subclass" %in% names(mdata_reg_2)) {
+    mdata_reg_2[, LOCAL_AUTHORITY_SUBCLASS := paste(LOCAL_AUTHORITY_LABEL, subclass, sep = "_")]
+    reg_formula_fe_str <- paste(outcome_variable, "~", treatment_var_2, "| LOCAL_AUTHORITY_SUBCLASS")
+    m_fe_2 <- feols(as.formula(reg_formula_fe_str), data = mdata_reg_2)
+    print(summary(m_fe_2))
+  } else {
+    reg_formula_la_fe_str <- paste(outcome_variable, "~", treatment_var_2, "| LOCAL_AUTHORITY_LABEL")
+    m_la_fe_2 <- feols(as.formula(reg_formula_la_fe_str), data = mdata_reg_2)
+    print(summary(m_la_fe_2))
+  }
+} else { cat("No matched data for regression in", analysis_id_2, "\n") }
+```
+
+# PSM Analysis 3a: UK for profit (`treat_uk_forprofit`) (within For-Profits)
+Treatment: UK for-profit; Control: all other for-profits (i.e., non-UK for-profits)
+```{r psm3a_matching_balance_plots, results='asis', fig.show='hold', cache=FALSE}
+analysis_id_3a <- "PSM3a_UK_vs_Foreign_FP_within_ForProfits"
+treatment_var_3a <- "treat_uk_forprofit" # Treatment is UK FP (1) vs Foreign FP (0)
+
+matching_results_3a <- perform_matching(
+  input_dt = EPC_matched_combined,
+  treatment_var = treatment_var_3a,
+  analysis_id = analysis_id_3a,
+  prop_score_covs = common_prop_score_covs,
+  exact_vars = common_exact_vars,
+  subset_condition_expr = expr(coarse_proprietorship == "For-Profit"),
+  outcome_var = outcome_variable
+)
+bal_tabs_3a <- generate_balance_tables(matching_results_3a, treatment_var_3a, analysis_id_3a, common_prop_score_covs, common_exact_vars)
+generate_love_plots(bal_tabs_3a, analysis_id_3a)
+```
+
+
+## Regression Analysis for `r I(analysis_id_3a)`
+
+
+```{r psm3a_regression, echo=TRUE}
+cat("\n## Regression Analysis for", analysis_id_3a, "\n")
+cat("Treatment:", treatment_var_3a, "; Control: Foreign For-Profit (within matched sample - Nearest Neighbor)\n")
+mdata_reg_3a <- matching_results_3a$mdata_nearest
+if (nrow(mdata_reg_3a) > 0) {
+  # ... (regression code similar to PSM1)
+  reg_formula_simple_str <- paste(outcome_variable, "~", treatment_var_3a)
+  m_simple_3a <- feols(as.formula(reg_formula_simple_str), data = mdata_reg_3a)
+  print(summary(m_simple_3a))
+  if ("subclass" %in% names(mdata_reg_3a)) {
+    mdata_reg_3a[, LOCAL_AUTHORITY_SUBCLASS := paste(LOCAL_AUTHORITY_LABEL, subclass, sep = "_")]
+    reg_formula_fe_str <- paste(outcome_variable, "~", treatment_var_3a, "| LOCAL_AUTHORITY_SUBCLASS")
+    m_fe_3a <- feols(as.formula(reg_formula_fe_str), data = mdata_reg_3a)
+    print(summary(m_fe_3a))
+  } else {
+    reg_formula_la_fe_str <- paste(outcome_variable, "~", treatment_var_3a, "| LOCAL_AUTHORITY_LABEL")
+    m_la_fe_3a <- feols(as.formula(reg_formula_la_fe_str), data = mdata_reg_3a)
+    print(summary(m_la_fe_3a))
+  }
+} else { cat("No matched data for regression in", analysis_id_3a, "\n") }
+```
+
+# PSM Analysis 3b: Tax Haven (`treat_tax_haven`) (within For-Profits)
+Treatment: tax haven for-profit; Control: all other (non-tax haven) for-profits
+
+```{r psm3b_matching_balance_plots, results='asis',  fig.show='hold', cache=FALSE}
+analysis_id_3b <- "PSM3b_TaxHaven_vs_NonTaxHaven_FP_within_ForProfits"
+treatment_var_3b <- "treat_tax_haven" # Treatment is Tax Haven FP (1) vs Non-Tax Haven FP (0)
+
+matching_results_3b <- perform_matching(
+  input_dt = EPC_matched_combined,
+  treatment_var = treatment_var_3b,
+  analysis_id = analysis_id_3b,
+  prop_score_covs = common_prop_score_covs,
+  exact_vars = common_exact_vars,
+  subset_condition_expr = expr(coarse_proprietorship == "For-Profit"),
+  outcome_var = outcome_variable
+)
+bal_tabs_3b <- generate_balance_tables(matching_results_3b, treatment_var_3b, analysis_id_3b, common_prop_score_covs, common_exact_vars)
+generate_love_plots(bal_tabs_3b, analysis_id_3b)
+```
+
+
+## Regression Analysis for `r I(analysis_id_3b)`
+
+
+```{r psm3b_regression, echo=TRUE}
+cat("\n## Regression Analysis for", analysis_id_3b, "\n")
+cat("Treatment:", treatment_var_3b, "; Control: Non-Tax Haven For-Profit (within matched sample - Nearest Neighbor)\n")
+mdata_reg_3b <- matching_results_3b$mdata_nearest
+if (nrow(mdata_reg_3b) > 0) {
+  # ... (regression code similar to PSM1)
+  reg_formula_simple_str <- paste(outcome_variable, "~", treatment_var_3b)
+  m_simple_3b <- feols(as.formula(reg_formula_simple_str), data = mdata_reg_3b)
+  print(summary(m_simple_3b))
+  if ("subclass" %in% names(mdata_reg_3b)) {
+    mdata_reg_3b[, LOCAL_AUTHORITY_SUBCLASS := paste(LOCAL_AUTHORITY_LABEL, subclass, sep = "_")]
+    reg_formula_fe_str <- paste(outcome_variable, "~", treatment_var_3b, "| LOCAL_AUTHORITY_SUBCLASS")
+    m_fe_3b <- feols(as.formula(reg_formula_fe_str), data = mdata_reg_3b)
+    print(summary(m_fe_3b))
+  } else {
+    reg_formula_la_fe_str <- paste(outcome_variable, "~", treatment_var_3b, "| LOCAL_AUTHORITY_LABEL")
+    m_la_fe_3b <- feols(as.formula(reg_formula_la_fe_str), data = mdata_reg_3b)
+    print(summary(m_la_fe_3b))
+  }
+} else { cat("No matched data for regression in", analysis_id_3b, "\n") }
+```
+
+
+# PSM Analysis 4: UK Public Sector (`treat_uk_public`)
+Treatment: UK public sector (mostly councils); Control: otherwise
+
+
+```{r psm4_matching_balance_plots, results='asis', fig.show='hold', cache=FALSE}
+analysis_id_4 <- "PSM4_UK_Public_Sector"
+treatment_var_4 <- "treat_uk_public"
+
+matching_results_4 <- perform_matching(
+  input_dt = EPC_matched_combined,
+  treatment_var = treatment_var_4,
+  analysis_id = analysis_id_4,
+  prop_score_covs = common_prop_score_covs,
+  exact_vars = common_exact_vars,
+  outcome_var = outcome_variable
+)
+bal_tabs_4 <- generate_balance_tables(matching_results_4, treatment_var_4, analysis_id_4, common_prop_score_covs, common_exact_vars)
+generate_love_plots(bal_tabs_4, analysis_id_4)
+```
+
+
+## Regression Analysis for `r I(analysis_id_4)`
+NB! Quick matching results used here.
+
+```{r psm4_regression, echo=TRUE}
+cat("\n## Regression Analysis for", analysis_id_4, "\n")
+cat("Treatment:", treatment_var_4, "; Control: Otherwise (within matched sample - Nearest Neighbor)\n")
+mdata_reg_4 <- matching_results_4$mdata_quick
+if (nrow(mdata_reg_4) > 0) {
+  # ... (regression code similar to PSM1)
+  reg_formula_simple_str <- paste(outcome_variable, "~", treatment_var_4)
+  m_simple_4 <- feols(as.formula(reg_formula_simple_str), data = mdata_reg_4)
+  print(summary(m_simple_4))
+  if ("subclass" %in% names(mdata_reg_4)) {
+    mdata_reg_4[, LOCAL_AUTHORITY_SUBCLASS := paste(LOCAL_AUTHORITY_LABEL, subclass, sep = "_")]
+    reg_formula_fe_str <- paste(outcome_variable, "~", treatment_var_4, "| LOCAL_AUTHORITY_SUBCLASS")
+    m_fe_4 <- feols(as.formula(reg_formula_fe_str), data = mdata_reg_4)
+    print(summary(m_fe_4))
+  } else {
+    reg_formula_la_fe_str <- paste(outcome_variable, "~", treatment_var_4, "| LOCAL_AUTHORITY_LABEL")
+    m_la_fe_4 <- feols(as.formula(reg_formula_la_fe_str), data = mdata_reg_4)
+    print(summary(m_la_fe_4))
+  }
+} else { cat("No matched data for regression in", analysis_id_4, "\n") }
+```
+

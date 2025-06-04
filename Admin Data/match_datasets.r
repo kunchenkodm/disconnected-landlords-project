@@ -296,10 +296,81 @@ EPC_matched_lease_clean$BUILDING_REFERENCE_NUMBER[duplicated(EPC_matched_lease_c
 EPC_matched_NA_clean$BUILDING_REFERENCE_NUMBER[duplicated(EPC_matched_NA_clean$BUILDING_REFERENCE_NUMBER)]
 
 # Re-merges datasets
-
-
 EPC_matched_combined <- rbind(EPC_matched_free_clean, EPC_matched_lease_clean, EPC_matched_NA_clean)
+# EPC_matched_combined <- rbind(EPC_matched_free_clean, EPC_matched_NA_clean)
 
 EPC_matched_combined[, has_duplicates := .N > 1, by = BUILDING_REFERENCE_NUMBER]
 
-#### PANEL DATASET: TO DO ####
+setkey(EPC_matched_combined, BUILDING_REFERENCE_NUMBER)
+
+
+
+# Helper variables
+EPC_matched_combined[, bad_EPC := CURRENT_ENERGY_RATING %in% c("D", "E", "F", "G")]
+EPC_matched_combined[, good_EPC := CURRENT_ENERGY_RATING %in% c("A", "B", "C")]
+
+
+EPC_matched_combined[is.na(source), source := "Unknown"]
+EPC_matched_combined[is.na(tenure), tenure := "Not in OCOD, CCOD"]
+
+
+# Concatenation
+EPC_matched_combined[, concatenation := paste0(PROPERTY_TYPE,TENURE)]
+
+
+# Coarse proprietorship
+public_sector <- c("County Council", "Local Authority")
+for_profit    <- c("Limited Company or Public Limited Company",
+                   "Limited Liability Partnership",
+                   "Unlimited Company")
+non_profit <- c("Co-operative Society (Company)",
+                "Co-operative Society (Corporate Body)",
+                "Community Benefit Society (Company)",
+                "Community Benefit Society (Corporate Body)",
+                "Corporate Body",
+                "Housing Association Co-operative Society (Company)",
+                "Housing Association Co-operative Society (Corporate Body)",
+                "Housing Association Community Benefit Society (Company)",
+                "Housing Association Community Benefit Society (Corporate Body)",
+                "Housing Association Registered Society (Company)",
+                "Housing Association Registered Society (Corporate Body)",
+                "Housing Association/Society (Company)",
+                "Housing Association/Society (Corporate Body)",
+                "Industrial and Provident Society (Company)",
+                "Industrial and Provident Society (Corporate Body)",
+                "Registered Society (Company)",
+                "Registered Society (Corporate Body)")
+
+EPC_matched_combined[, coarse_proprietorship := fcase(
+  proprietorship_category_1 %in% public_sector, "Public Sector",
+  proprietorship_category_1 %in% for_profit,    "For-Profit",
+  proprietorship_category_1 %in% non_profit,      "Non-Profit/Community Organisations",
+  default = NA
+)]
+
+tax_havens <- c(
+  "ANGUILLA", "ANTIGUA AND BARBUDA", "BAHAMAS", "BAHRAIN", "BARBADOS",
+  "BELIZE", "BERMUDA", "BRITISH VIRGIN ISLANDS", "CAYMAN ISLANDS", "CYPRUS",
+  "GIBRALTAR", "GUERNSEY", "HONG KONG", "ISLE OF MAN", "JERSEY", "LEBANON",
+  "LIECHTENSTEIN", "MACAU", "MACAO", "MALTA", "MARSHALL ISLANDS", "MAURITIUS",
+  "MONACO", "DUTCH ANTILLES", "PANAMA", "SAMOA", "SEYCHELLES",
+  "SINGAPORE", "ST KITTS AND NEVIS", "ST LUCIA", "ST VINCENT AND GRENADINES",
+  "TURKS AND CAICOS ISLANDS"
+)
+
+EPC_matched_combined[, country_incorporated_tax_haven :=
+                       as.integer(
+                         country_incorporated_1 %in% tax_havens |
+                           country_incorporated_2 %in% tax_havens |
+                           country_incorporated_3 %in% tax_havens |
+                           country_incorporated_4 %in% tax_havens
+                       )
+]
+
+EPC_matched_combined[, postcode_area := sub(" .*", "", POSTCODE)]
+EPC_matched_combined[, postcode_sector := sub("^([^ ]+ [A-Z0-9]).*", "\\1", POSTCODE)]
+
+EPC_matched_combined[, lodgement_year := year(LODGEMENT_DATE)]
+
+
+save(EPC_matched_combined, file = "EPC_matched_combined.RData")
