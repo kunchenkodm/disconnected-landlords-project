@@ -1,0 +1,531 @@
+---
+title: "Disconnected Landlords PSM Analysis (Streamlined)"
+author: "Dmytro Kunchenko"
+date: "2025-06-24"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+# This chunk runs setup code but doesn't show in the document.
+# Load required packages
+library(fixest)
+library(car) 
+library(httr) 
+library(jsonlite) 
+library(data.table)
+library(MatchIt)
+library(cobalt)
+library(optmatch) 
+library(Matching) 
+library(rgenoud) 
+library(marginaleffects)
+library(ggplot2)
+library(gridExtra) 
+library(kableExtra)
+library(rlang) # For handling expressions in the function
+
+# Global chunk options
+knitr::opts_chunk$set(
+  echo = FALSE,      # Hide R code by default
+  cache = FALSE, 
+  message = FALSE,   # Suppress messages
+  warning = FALSE,   # Suppress warnings
+  fig.height = 6,
+  fig.width = 10,
+  include = TRUE     # Include output (plots, tables) by default
+)
+```
+
+# Overview
+
+This document outlines a Propensity Score Matching (PSM) and Ordinary Least Squares (OLS) for the "Disconnected Landlords" project. The analysis focuses on privately rented properties and uses nearest neighbor matching to compare two treatment groups (UK For-Profits and Foreign For-Profits) against a control group of properties with no corporate ownership records. 
+
+# Data Loading and Preprocessing
+
+## Load Data
+
+First, load the dataset. **Ensure the path to the .RData file is correct.**
+
+```{r load_data, echo=TRUE}
+# Load data
+# Replace with the correct path if necessary
+load_path <- "~/disconnected-landlords-project/EPC_matched_combined.RData" 
+# For testing, if the file doesn't exist, create a dummy EPC_matched_combined
+if (!file.exists(load_path)) {
+  warning(paste("Data file not found at:", load_path))
+} else {
+  load(load_path)
+}
+
+# Ensure EPC_matched_combined is a data.table
+if (!is.data.table(EPC_matched_combined)) {
+  setDT(EPC_matched_combined)
+}
+# Display a brief summary of the loaded data
+print(head(EPC_matched_combined, 3))
+cat("\nDimensions of loaded data:", dim(EPC_matched_combined), "\n")
+```
+
+## Clean `MAIN_FUEL` Variable
+
+The `MAIN_FUEL` variable requires cleaning and standardization.
+
+```{r clean_main_fuel}
+# Ensure it's a data.table if not already
+setDT(EPC_matched_combined) 
+
+EPC_matched_combined[
+  , MAIN_FUEL_CLEAN := trimws(MAIN_FUEL)
+][
+  MAIN_FUEL_CLEAN == "", MAIN_FUEL_CLEAN := NA_character_
+]
+
+EPC_matched_combined[
+  !is.na(MAIN_FUEL_CLEAN),
+  MAIN_FUEL_CLEAN := gsub("\\s*[–-]\\s*this is for backwards compatibility only and should not be used$", 
+                          "", MAIN_FUEL_CLEAN, ignore.case = TRUE)
+]
+
+EPC_matched_combined[
+  grepl("^To be used only when", MAIN_FUEL_CLEAN, ignore.case = TRUE),
+  MAIN_FUEL_CLEAN := NA_character_
+]
+
+EPC_matched_combined[
+  MAIN_FUEL_CLEAN %in% c("INVALID!", "NO DATA!"),
+  MAIN_FUEL_CLEAN := NA_character_
+]
+
+EPC_matched_combined[
+  !is.na(MAIN_FUEL_CLEAN),
+  MAIN_FUEL_CLEAN := gsub("\\s*\\((community|not community)\\)$", 
+                          "", MAIN_FUEL_CLEAN, ignore.case = TRUE)
+]
+
+EPC_matched_combined[
+  !is.na(MAIN_FUEL_CLEAN),
+  MAIN_FUEL_CLEAN := gsub("^(Gas|Electricity|Oil):\\s*", 
+                          "", MAIN_FUEL_CLEAN, ignore.case = TRUE)
+]
+
+EPC_matched_combined[
+  !is.na(MAIN_FUEL_CLEAN),
+  MAIN_FUEL_CLEAN := tolower(MAIN_FUEL_CLEAN)
+]
+
+# Consolidate MAIN_FUEL categories
+EPC_matched_combined[
+  , MAIN_FUEL_FINAL := fcase(
+    grepl("^anthracite$", MAIN_FUEL_CLEAN), "coal",
+    grepl("^appliances able to use mineral oil or liquid biofuel$", MAIN_FUEL_CLEAN), "dual_fuel",
+    grepl("^b30[dk]$", MAIN_FUEL_CLEAN), "biomass",
+    grepl("^(electricity displaced from grid|electricity, unspecified tariff)$", MAIN_FUEL_CLEAN), "electricity",
+    grepl("^oil$", MAIN_FUEL_CLEAN), "heating_oil",
+    grepl("^mains gas$", MAIN_FUEL_CLEAN), "mains_gas",
+    grepl("lpg", MAIN_FUEL_CLEAN), "lpg",
+    grepl("heating oil|rapeseed oil", MAIN_FUEL_CLEAN), "heating_oil",
+    grepl("coal", MAIN_FUEL_CLEAN), "coal", # Includes "house coal", "smokeless coal"
+    grepl("wood|pellet|chip", MAIN_FUEL_CLEAN), "wood",
+    grepl("biomass|biodiesel|biogas", MAIN_FUEL_CLEAN), "biomass",
+    grepl("^electricity$", MAIN_FUEL_CLEAN), "electricity",
+    default = NA_character_
+  )
+]
+cat("\nFrequency table for MAIN_FUEL_FINAL (including NAs):\n")
+print(table(EPC_matched_combined$MAIN_FUEL_FINAL, useNA="ifany"))
+```
+
+# Treatment and Control Definitions
+
+The analysis is restricted to privately rented properties. The control group is defined as privately rented properties with no CCOD/OCOD record (`source == "Unknown"`).
+
+```{r treatment_definitions, echo=TRUE}
+# Filter for properties that are privately rented
+EPC_matched_combined <- EPC_matched_combined[TENURE == "Rented (private)"]
+
+# Display a brief summary of the filtered data
+cat("\nDimensions of data after filtering for 'Rented (private)':", dim(EPC_matched_combined), "\n")
+cat("\nSummary of source variable for private rentals:\n")
+print(table(EPC_matched_combined$source, useNA = "ifany"))
+
+# Define new treatment and control variables for each analysis
+# A value of 1 indicates treatment, 0 indicates control, and NA for others.
+# Using 1L and 0L to ensure integer type, matching NA_integer_
+
+# Analysis 1: UK For-Profits vs. Private Landlords (No CCOD/OCOD)
+EPC_matched_combined[, treat_ukforprofit := fcase(
+  source == "CCOD" & grepl("For-Profit", coarse_proprietorship, ignore.case = TRUE), 1L,
+  source == "Unknown", 0L,
+  default = NA_integer_
+)]
+
+# Analysis 2: Foreign For-Profits vs. Private Landlords (No CCOD/OCOD)
+EPC_matched_combined[, treat_foreignforprofit := fcase(
+  grepl("For-Profit", coarse_proprietorship, ignore.case = TRUE) & 
+    (source == "OCOD" | (!is.na(country_incorporated_1) & country_incorporated_1 != "UNITED KINGDOM")), 1L,
+  source == "Unknown", 0L,
+  default = NA_integer_
+)]
+
+# Summary of the new treatment variables
+cat("\nSummary of new treatment variables (1=Treated, 0=Control, NA=Not in comparison):\n")
+print(summary(EPC_matched_combined[, .(treat_ukforprofit, treat_foreignforprofit)]))
+```
+
+# Define Common Analysis Variables
+```{r define_common_variables, echo=TRUE}
+# Define common variables for analysis
+common_exact_vars <- c("CONSTRUCTION_AGE_BAND", "PROPERTY_TYPE", "BUILT_FORM", "MAIN_FUEL_FINAL")
+common_prop_score_covs <- c("TOTAL_FLOOR_AREA", "NUMBER_HABITABLE_ROOMS", "lodgement_year")
+outcome_variable <- "bad_EPC"
+regression_controls <- c("TOTAL_FLOOR_AREA", "NUMBER_HABITABLE_ROOMS")
+```
+
+# Create Concatenated Categorical Variable
+For use in OLS models, we create a single variable that represents the interaction of all categorical variables used for exact matching.
+
+```{r create_concatenated_variable, echo=TRUE}
+# Create the concatenated variable using the 'common_exact_vars' object.
+# This ensures that the variables used for OLS fixed effects are the same as for exact matching.
+# This uses an efficient data.table approach with .SDcols
+EPC_matched_combined[, 
+  combined_cats := do.call(paste, c(.SD, sep = "_")), 
+  .SDcols = common_exact_vars
+]
+
+# Convert the new column to a factor, as it will be used as a fixed effect
+EPC_matched_combined[, combined_cats := as.factor(combined_cats)]
+
+# Display a summary of the new variable
+cat("\nFirst 10 values of the new 'combined_cats' variable:\n")
+print(head(EPC_matched_combined$combined_cats, 10))
+cat("\nNumber of unique categories in 'combined_cats':\n")
+print(length(levels(EPC_matched_combined$combined_cats)))
+```
+
+# Matching Procedure
+Propensity score and exact matching variables are taken from "Regulatory barriers to climate action: evidence from conservation areas in England". Exact matching is performed on construction age band, property type, built form, and main fuel. Nearest neighbor propensity score matching is preformed on total floor area, number of habitable rooms and EPC certificate lodgement year. 
+
+# Defining Functions
+```{r define_psm_functions, echo=TRUE, cache=FALSE}
+# Function to perform nearest neighbor matching
+perform_matching <- function(input_dt, treatment_var, analysis_id, prop_score_covs, exact_vars, outcome_var = "bad_EPC",
+                             min_treated_la = 5, min_control_la = 15, verbose = FALSE) {
+
+  cat(paste0("\n--- Performing Matching for: ", analysis_id, " ---\n"))
+  
+  current_data <- input_dt[!is.na(get(treatment_var))]
+  all_nec_vars <- c("source", outcome_var, treatment_var, prop_score_covs, exact_vars, "postcode_sector", "LOCAL_AUTHORITY_LABEL")
+  
+  if (length(setdiff(all_nec_vars, names(current_data))) > 0) {
+    stop(paste("Missing columns for analysis", analysis_id, ":", paste(setdiff(all_nec_vars, names(current_data)), collapse=", ")))
+  }
+
+  combined_nomiss <- current_data[complete.cases(current_data[, ..all_nec_vars])]
+  
+  if (nrow(combined_nomiss) == 0) {
+    cat("No complete cases for matching in analysis:", analysis_id, "\nSkipping matching.\n")
+    return(list(matched_data = data.table(), unmatched_data = data.table()))
+  }
+  
+  for (col in exact_vars) {
+    if (!is.factor(combined_nomiss[[col]])) {
+      combined_nomiss[, (col) := as.factor(get(col))]
+    }
+  }
+
+  unique_las <- unique(combined_nomiss$LOCAL_AUTHORITY_LABEL)
+  mdata_list_nearest <- list()
+
+  for (la in unique_las) {
+    la_data <- combined_nomiss[LOCAL_AUTHORITY_LABEL == la]
+    if (verbose) cat("\nProcessing LA:", la, "- Total rows:", nrow(la_data), "\n")
+    
+    n_treated <- sum(la_data[[treatment_var]] == 1, na.rm = TRUE)
+    n_control <- sum(la_data[[treatment_var]] == 0, na.rm = TRUE)
+    if (verbose) cat("Treated units:", n_treated, "Control units:", n_control, "\n")
+
+    if (n_treated < min_treated_la || n_control < min_control_la) {
+      if (verbose) cat("Skipping LA", la, "due to insufficient treated/control units.\n")
+      next
+    }
+    
+    ps_formula <- as.formula(paste(treatment_var, "~", paste(prop_score_covs, collapse = " + ")))
+    exact_formula_la <- as.formula(paste("~", paste(exact_vars, collapse = " + ")))
+    
+    tryCatch({
+      match_obj_nearest <- matchit(ps_formula, data = la_data, method = "nearest", distance = "glm", exact = exact_formula_la)
+      mdata_list_nearest[[la]] <- match.data(match_obj_nearest)
+    }, error = function(e) cat("Error in Nearest Neighbor matching for LA:", la, "-", e$message, "\n"))
+  }
+  
+  mdata_llc_nearest_by_la <- rbindlist(mdata_list_nearest, use.names = TRUE, fill = TRUE, idcol = "original_LA_for_debug")
+  
+  cat(paste0("Nearest Neighbor matching complete for ", analysis_id, ". Matched N=", nrow(mdata_llc_nearest_by_la), "\n"))
+
+  return(list(
+    matched_data = mdata_llc_nearest_by_la,
+    unmatched_data = combined_nomiss
+  ))
+}
+
+# Function to generate balance tables
+generate_balance_tables <- function(matching_output, treatment_var, analysis_id, prop_score_covs, exact_vars) {
+  
+  if (nrow(matching_output$matched_data) == 0) {
+    cat(paste("\nNo matched data for", analysis_id, "to generate balance tables.\n"))
+    return(NULL)
+  }
+
+  ps_formula <- as.formula(paste(treatment_var, "~", paste(c(prop_score_covs, exact_vars), collapse = " + ")))
+  
+  # Balance table for the matched data
+  bal_tab_matched <- bal.tab(
+    ps_formula, 
+    data = matching_output$matched_data,
+    estimand = "ATT",
+    disp = c("m", "sd")
+  )
+  
+  cat(paste0("\n### Balance Table for ", analysis_id, " (Nearest Neighbor Matching)\n"))
+  print(kable(bal_tab_matched$Balance, caption = "Balance Table (Nearest Neighbor)") %>% kable_styling())
+  
+  return(bal_tab_matched)
+}
+
+# Function to generate Love plots
+generate_love_plots <- function(bal_tab_obj, analysis_id) {
+  cat(paste0("\n## Love Plot for ", analysis_id, "\n"))
+  
+  if (is.null(bal_tab_obj)) {
+    cat("Balance table object is NULL for", analysis_id, ". Skipping Love plot.\n")
+    return()
+  }
+  
+  tryCatch({
+    lpn <- love.plot(bal_tab_obj, threshold = .1, abs = TRUE, line = TRUE, stars = "std",
+                      title = paste(analysis_id, ": Covariate Balance (Nearest Neighbor)"), var.order = "unadjusted")
+    print(lpn)
+  }, error = function(e) cat("Error generating Love Plot for", analysis_id, ":", e$message, "\n"))
+}
+
+# Function to run regression analysis with and without optional controls
+run_regression_analysis <- function(matched_data, outcome_var, treatment_var, analysis_id, control_vars = NULL) {
+  cat("\n## Matched Regression Analysis for", analysis_id, "\n")
+  cat("Treatment:", treatment_var, "; Control: Otherwise (within matched sample)\n")
+
+  if (is.null(matched_data) || nrow(matched_data) == 0) {
+    cat("No matched data available for regression analysis for", analysis_id, "\n")
+    return(invisible(NULL))
+  }
+
+  # --- Setup common elements ---
+  use_weights <- "weights" %in% names(matched_data)
+  weight_formula <- if (use_weights) ~weights else NULL
+  weight_cat <- if (use_weights) "Weighted" else "Unweighted"
+
+  if ("subclass" %in% names(matched_data)) {
+    if (!is.factor(matched_data$subclass)) matched_data[, subclass := as.factor(subclass)]
+    if (!is.factor(matched_data$LOCAL_AUTHORITY_LABEL)) matched_data[, LOCAL_AUTHORITY_LABEL := as.factor(LOCAL_AUTHORITY_LABEL)]
+    matched_data[, LOCAL_AUTHORITY_SUBCLASS := interaction(LOCAL_AUTHORITY_LABEL, subclass, drop = TRUE)]
+    fe_str <- "| LOCAL_AUTHORITY_SUBCLASS"
+    fe_cat <- "with LOCAL_AUTHORITY_SUBCLASS fixed effects"
+  } else {
+    fe_str <- "| LOCAL_AUTHORITY_LABEL"
+    fe_cat <- "with LOCAL_AUTHORITY_LABEL fixed effects ('subclass' not found)"
+  }
+
+  # --- Regressions WITHOUT controls ---
+  cat(paste0("\n\n### --- Regressions WITHOUT controls ---\n"))
+  cat(paste0("\n### ", weight_cat, " regression\n"))
+  formula_rhs_uncontrolled <- treatment_var
+  
+  reg_formula_simple_unc <- as.formula(paste(outcome_var, "~", formula_rhs_uncontrolled))
+  m_simple_unc <- feols(reg_formula_simple_unc, data = matched_data, weights = weight_formula, se = "hetero")
+  print(summary(m_simple_unc))
+
+  cat(paste0("\n### ", weight_cat, " regression, ", fe_cat, "\n"))
+  reg_formula_fe_unc <- as.formula(paste(outcome_var, "~", formula_rhs_uncontrolled, fe_str))
+  m_fe_unc <- feols(reg_formula_fe_unc, data = matched_data, weights = weight_formula, se = "hetero")
+  print(summary(m_fe_unc))
+
+  # --- Regressions WITH controls ---
+  if (!is.null(control_vars) && length(control_vars) > 0) {
+    missing_controls <- setdiff(control_vars, names(matched_data))
+    if (length(missing_controls) > 0) {
+      cat("\nWarning: The following control variables are not in the matched data and will be ignored:", paste(missing_controls, collapse = ", "), "\n")
+      control_vars <- setdiff(control_vars, missing_controls)
+    }
+
+    if (length(control_vars) > 0) {
+      cat(paste0("\n\n### --- Regressions WITH controls (", paste(control_vars, collapse=", "), ") ---\n"))
+      
+      cat(paste0("\n### ", weight_cat, " regression with controls\n"))
+      formula_rhs_controlled <- paste(c(treatment_var, control_vars), collapse = " + ")
+
+      reg_formula_simple_con <- as.formula(paste(outcome_var, "~", formula_rhs_controlled))
+      m_simple_con <- feols(reg_formula_simple_con, data = matched_data, weights = weight_formula, se = "hetero")
+      print(summary(m_simple_con))
+      
+      cat(paste0("\n### ", weight_cat, " regression with controls, ", fe_cat, "\n"))
+      reg_formula_fe_con <- as.formula(paste(outcome_var, "~", formula_rhs_controlled, fe_str))
+      m_fe_con <- feols(reg_formula_fe_con, data = matched_data, weights = weight_formula, se = "hetero")
+      print(summary(m_fe_con))
+    }
+  }
+  
+  return(invisible(NULL))
+}
+
+# Function to run OLS fixed-effects representation
+run_ols_representation <- function(unmatched_data, outcome_var, treatment_var, analysis_id, control_vars = NULL, exact_vars = NULL) {
+  cat(paste0("\n## OLS Fixed-Effects Representation for ", analysis_id, "\n"))
+  
+  if (is.null(unmatched_data) || nrow(unmatched_data) == 0) {
+    cat("No data available for OLS analysis for", analysis_id, "\n")
+    return(invisible(NULL))
+  }
+  
+  # --- Setup formula for covariates ---
+  formula_rhs <- treatment_var
+  if (!is.null(control_vars) && length(control_vars) > 0) {
+    valid_controls <- intersect(control_vars, names(unmatched_data))
+    if(length(valid_controls) > 0) {
+       formula_rhs <- paste(c(treatment_var, valid_controls), collapse = " + ")
+    }
+  }
+  
+  # --- Model (a): Interaction with individual categorical variables ---
+  cat("\n### OLS with interaction of LA and individual categorical fixed effects\n")
+  
+  fe_part_a <- paste0("LOCAL_AUTHORITY_LABEL^", exact_vars, collapse = " + ")
+  ols_formula_a <- as.formula(paste(outcome_var, "~", formula_rhs, "|", fe_part_a))
+  
+  ols_model_a <- tryCatch({
+    feols(ols_formula_a, data = unmatched_data, se = "hetero")
+  }, error = function(e) {
+    cat("Error running OLS Model (a):", e$message, "\n")
+    return(NULL)
+  })
+  
+  if (!is.null(ols_model_a)) {
+    print(summary(ols_model_a))
+  }
+  
+  # --- Model (b): Interaction with concatenated categorical variable ---
+  cat("\n### OLS with interaction of LA and concatenated categorical fixed effect\n")
+  
+  if (!"combined_cats" %in% names(unmatched_data)) {
+    cat("'combined_cats' variable not found in the dataset. Skipping OLS Model (b).\n")
+    return(invisible(NULL))
+  }
+  
+  fe_part_b <- "LOCAL_AUTHORITY_LABEL^combined_cats"
+  ols_formula_b <- as.formula(paste(outcome_var, "~", formula_rhs, "|", fe_part_b))
+  
+  ols_model_b <- tryCatch({
+    feols(ols_formula_b, data = unmatched_data, se = "hetero")
+  }, error = function(e) {
+    cat("Error running OLS Model (b):", e$message, "\n")
+    return(NULL)
+  })
+
+  if (!is.null(ols_model_b)) {
+    print(summary(ols_model_b))
+  }
+  
+  return(invisible(list(model_a = ols_model_a, model_b = ols_model_b)))
+}
+```
+
+# PSM Analysis 1: UK For-Profits vs. Private Landlords
+Treatment: UK for-profit; Control: Private landlords (no CCOD/OCOD record)
+
+```{r psm1_analysis, echo=TRUE, cache=TRUE, results='asis', fig.cap="Love Plots for PSM1_UK_vs_Private"}
+analysis_id_1 <- "PSM1_UK_vs_Private"
+treatment_var_1 <- "treat_ukforprofit"
+
+# Perform matching
+matching_results_1 <- perform_matching(EPC_matched_combined, treatment_var_1, analysis_id_1, common_prop_score_covs, common_exact_vars)
+
+# Generate balance tables
+balance_tab_1 <- generate_balance_tables(matching_results_1, treatment_var_1, analysis_id_1, common_prop_score_covs, common_exact_vars)
+
+# Generate Love plots
+generate_love_plots(balance_tab_1, analysis_id_1)
+```
+
+## Matched Regression Analysis for `r I(analysis_id_1)`
+
+```{r psm1_regression, echo=TRUE}
+# Run regression for analysis 1
+run_regression_analysis(
+  matched_data = matching_results_1$matched_data,
+  outcome_var = outcome_variable,
+  treatment_var = treatment_var_1,
+  analysis_id = analysis_id_1,
+  control_vars = regression_controls
+)
+```
+
+## OLS Fixed-Effects Representation for `r I(analysis_id_1)`
+```{r ols1_regression, echo=TRUE}
+# Run OLS representation for analysis 1
+run_ols_representation(
+  unmatched_data = matching_results_1$unmatched_data,
+  outcome_var = outcome_variable,
+  treatment_var = treatment_var_1,
+  analysis_id = analysis_id_1,
+  control_vars = regression_controls,
+  exact_vars = common_exact_vars
+)
+```
+
+# PSM Analysis 2: Foreign For-Profits vs. Private Landlords
+Treatment: Non-UK for-profit; Control: Private landlords (no CCOD/OCOD record)
+
+```{r psm2_analysis, echo=TRUE, cache=TRUE, results='asis', fig.cap="Love Plots for PSM2_Foreign_vs_Private"}
+analysis_id_2 <- "PSM2_Foreign_vs_Private"
+treatment_var_2 <- "treat_foreignforprofit"
+
+# Perform matching
+matching_results_2 <- perform_matching(EPC_matched_combined, treatment_var_2, analysis_id_2, common_prop_score_covs, common_exact_vars)
+
+# Generate balance tables
+balance_tab_2 <- generate_balance_tables(matching_results_2, treatment_var_2, analysis_id_2, common_prop_score_covs, common_exact_vars)
+
+# Generate Love plots
+generate_love_plots(balance_tab_2, analysis_id_2)
+```
+
+## Matched Regression Analysis for `r I(analysis_id_2)`
+
+```{r psm2_regression, echo=TRUE}
+# Run regression for analysis 2
+run_regression_analysis(
+  matched_data = matching_results_2$matched_data,
+  outcome_var = outcome_variable,
+  treatment_var = treatment_var_2,
+  analysis_id = analysis_id_2,
+  control_vars = regression_controls
+)
+```
+
+## OLS Fixed-Effects Representation for `r I(analysis_id_2)`
+```{r ols2_regression, echo=TRUE}
+# Run OLS representation for analysis 2
+run_ols_representation(
+  unmatched_data = matching_results_2$unmatched_data,
+  outcome_var = outcome_variable,
+  treatment_var = treatment_var_2,
+  analysis_id = analysis_id_2,
+  control_vars = regression_controls,
+  exact_vars = common_exact_vars
+)
+```
+
+
