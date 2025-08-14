@@ -1,0 +1,4 @@
+# Land Registry API Key
+# Get yours from: https://use-land-property-data.service.gov.uk/api-information/
+LAND_REGISTRY_API_KEY="edit the .Renviron file in Project directory"
+

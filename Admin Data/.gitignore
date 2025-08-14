@@ -17,14 +17,6 @@ output/*
 !output/.gitkeep
 !output/*/.gitkeep
 
-# Configuration and secrets
-.env
-config/local.yml
-config/private.yml
-
-# renv
-renv/library/
-renv/staging/
 
 # OS generated files
 .DS_Store

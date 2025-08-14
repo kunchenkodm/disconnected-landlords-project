@@ -5,13 +5,11 @@
 
 library(here)
 
-config <- config::get(file = here::here("config", "config.yml"))# Base path for the project
-
-API_KEY <- Sys.getenv("API_KEY") # Load API key from .env file
-CCOD_VERSION <- config$ccod_version
-OCOD_VERSION <- config$ocod_version
-ENABLE_EXTRACTION <- config$enable_extraction
-SAMPLE_SIZE <- config$sample_size
+API_KEY <- Sys.getenv("LAND_REGISTRY_API_KEY") # Load API key from .env file
+CCOD_VERSION <- "CCOD_FULL_2025_01"
+OCOD_VERSION <- "OCOD_FULL_2025_01"
+ENABLE_EXTRACTION <- FALSE
+SAMPLE_SIZE <- 30L
 
 
 # --- 3. DIRECTORY PATHS ---
