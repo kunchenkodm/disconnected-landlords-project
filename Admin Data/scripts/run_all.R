@@ -8,10 +8,6 @@ library(here)
 message("Starting Disconnected Landlords Analysis Pipeline...")
 start_time <- Sys.time()
 
-# Check if running from correct directory
-if (!file.exists("config/config.yml")) {
-  stop("Please run this script from the project root directory (where config/config.yml exists)")
-}
 
 # Load environment variables
 if (file.exists(".env")) {
