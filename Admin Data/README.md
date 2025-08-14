@@ -1,35 +1,44 @@
-# Disconnected Landlords Project Admin Data
+# Disconnected Landlords: Energy Efficiency Analysis
 
 ## Overview
-The **Admin Stream** work to date focuses on detailed property ownership analysis, including corporate and public sector entities. It builds upon datasets enriched with additional metadata, such as Persons of Significant Control (PSC) information, to identify potential subsidiary holdings and local authority involvement.
+Analysis of energy efficiency in rental properties by ownership type using EPC and Land Registry data.
 
----
+## Quick Start
+1. Clone or download this repository
+2. Install R (>= 4.0.0) and RStudio
+3. Open `disconnected-landlords.Rproj` in RStudio
+4. Install required packages: `renv::restore()`
+5. Copy `.env.example` to `.env` and add your API credentials
+6. Update configuration in `config/config.yml` if needed
+7. Run the analysis: `source("scripts/run_all.R")`
 
-## Key Files and Folders
+## Project Structure
+- `scripts/`: R analysis scripts (run in numerical order)
+- `data/`: Data storage (raw, processed, sample data)
+- `output/`: Analysis outputs (tables, figures, matched datasets)
+- `config/`: Configuration files
+- `functions/`: Reusable R functions
+- `docs/`: Documentation
+- `tests/`: Data validation and tests
 
-1. **`Geovation Ellipsis Data`**:
-   - Text files that describe data sourced from Geovation, providing insights into land and property ownership. Includes notes and examples for working with these datasets.
+## Data Requirements
+This project requires access to:
+- Land Registry CCOD/OCOD data (API key required)
+- EPC (Energy Performance Certificate) data
+- Property price paid data (PPD)
+- Council tax valuation data (VOA)
 
-2. **`Public Data`**:
-   - Text files describing publicly available datasets. These include details on the datasets, mostly CCOD and OCOD and sample code to demonstrate how to process and analyse them using Companies House API.
+See `docs/data_dictionary.md` for detailed data descriptions.
 
-3. **`company_codes_and_psc_info.csv.zip`**:
-   - A zipped CSV containing a list of company registration numbers from CCOD along with their associated PSC (Person of Significant Control) information.
-   - Useful for investigating corporate subsidiary holdings (including but not limited to local authority-related entities).
+## Configuration
+Edit `config/config.yml` to adjust:
+- Dataset versions
+- Sample sizes for testing
+- Analysis parameters
 
-4. **`Server Access Notes.txt`**:
-   - Documentation for accessing and utilising the Warwick SCRTP Linux server, useful for large-scale data processing.
-  
-5. **`Merge_CCOD_OCOD.r`**:
-   - Simple script that merges the CCOD and OCOD datasets using the Land Registry API
+## License
+[Add your license information here]
 
-
----
-
-## Data Integration and Output
-
-Following cleaning the CCOD and using Companies House to fetch the PSC information, companies that are local authority subsidiaries were identified. This information has been linked to the **Title Descriptor dataset** (November 2024 version), creating a supplementary column for **LA Ownership** (whether direct or subsidiary). 
-
-The amended dataset is available for download:  
-[Google Drive Link](https://drive.google.com/file/d/1Wnsl13eZQJezvWN4BpablvTncqAax5eo/view?usp=sharing)
+## Citation
+[Add citation information for academic use]
 

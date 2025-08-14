@@ -1,0 +1,11 @@
+# config/config.yml
+default:
+  ccod_version: "CCOD_FULL_2025_01"
+  ocod_version: "OCOD_FULL_2025_01"
+  sample_mode: true
+  sample_size: 30
+  enable_extraction: false
+
+production:
+  sample_mode: false
+  enable_extraction: true

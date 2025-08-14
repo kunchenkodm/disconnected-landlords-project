@@ -1,130 +1,40 @@
-rm(list=ls())
+# Script: 02_data_merging_pipeline.R
+# Purpose: Load the combined admin dataset, perform UPRN and EPC matching, clean and process data, and save the final matched dataset.
+# Authors: Thiemo Fetzer, Dmytro Kunchenko
+# Date: July 3, 2025
 
-### Requirements ### 
-library(httr)
-library(jsonlite)
+rm(list=setdiff(ls(), "script"))
+
+# Source global setup script for paths and configurations
+source(here::here("scripts", "00_setup.R"))
+### Requirements ###
 library(data.table)
+library(janitor)
 
 #### SETUP: INPUTS REQUIRED ####
-api_key <- "" # Land Registry API key here
+# Configuration section for user customization (using global variables from 00_setup.R)
+ccod_version <- CCOD_VERSION
+ocod_version <- OCOD_VERSION
 
-ccod_version <- "CCOD_FULL_2025_01"
-ocod_version <- "OCOD_FULL_2025_01"
+input_dir <- PROCESSED_DATA_DIR
+output_dir <- PROCESSED_DATA_DIR
+UPRN_dt_path <- file.path(RAW_LR_DIR, "LR_UPRN_FULL_JAN_2025.csv")
+EPC_archive <- file.path(RAW_EPC_DIR, "all-domestic-certificates.zip")
+EPC_path <- file.path(RAW_EPC_DIR, "domestic-EPC")
 
-admin_path <- "~/RA_local/Admin"
-UPRN_dt_path <- "C:/Users/Kunch/Documents/RA_local/LR_UPRN_FULL_JAN_2025.csv"
-EPC_archive <- "~/RA_local/all-domestic-certificates.zip"
-EPC_path <- "~/RA_local/domestic-EPC/"
+# Input file from data sourcing script
+input_file <- file.path(input_dir, paste0("combined_admin_data_", ccod_version, ".RData"))
 
-### PATH TO API URL ###
-# NB! If you wish to request the newest dataset,change this to "https://use-land-property-data.service.gov.uk/api/v1/datasets/ccod/"
-ccod_url <- paste0("https://use-land-property-data.service.gov.uk/api/v1/datasets/history/ccod/", ccod_version, ".zip", sep ='')
-ocod_url <- paste0("https://use-land-property-data.service.gov.uk/api/v1/datasets/history/ocod/", ocod_version, ".zip", sep ='')
-
-# Expected *cod file names #
-ccod_file <- file.path(admin_path, paste0(ccod_version, ".csv"))
-ocod_file <- file.path(admin_path, paste0(ocod_version, ".csv"))
-
-
-
-#### CREATE *cod dataset ####
-
-### Program to Fetch Land Registry Data #
-fetch_cod_data <- function(api_url, api_key, dest_file) {
-  if (file.exists(dest_file)) {
-    message("File ", dest_file, " already exists. Loading from local storage.")
-    return(read.csv(dest_file, stringsAsFactors = FALSE))
-  }
-  
-  # Step 1: Fetch the temporary download URL
-  response <- GET(
-    api_url,
-    accept_json(),
-    add_headers(Authorization = api_key)
-  )
-  # Check if the API request was successful
-  if (status_code(response) != 200) {
-    stop(paste("Failed to fetch download URL. Status code:", status_code(response)))
-  }
-  
-  # Extract the temporary download link from the JSON response
-  content_json <- content(response, "parsed", simplifyVector = TRUE)
-  if (!content_json$success) {
-    stop("API response indicates failure: ", content_json)
-  }
-  download_url <- content_json$result$download_url
-  if (is.null(download_url)) {
-    stop("Download URL not found in the API response.")
-  }
-  
-  # Download the zip file from the link, extract csvs
-  temp_zip <- tempfile(fileext = ".zip")
-  zip_response <- GET(download_url, write_disk(temp_zip, overwrite = TRUE))
-  
-  if (status_code(zip_response) != 200) {
-    stop(paste("Failed to download the ZIP file. Status code:", status_code(zip_response)))
-  }
-  
-  unzip(temp_zip, exdir = admin_path)
-  
-  csv_files <- list.files(admin_path, pattern = "\\.csv$", full.names = TRUE)
-  if (length(csv_files) == 0) {
-    stop("No CSV files found in the extracted ZIP archive.")
-  }
-  
-  # Re-identify dataset in folder
-  dataset_type <- if (grepl("ocod", api_url, ignore.case = TRUE)) "OCOD" else "CCOD"
-  pattern <- paste0("^", dataset_type, ".*\\.csv$")
-  csv_files <- list.files(admin_path, pattern = pattern, full.names = TRUE)
-  
-  if (length(csv_files) == 0) {
-    stop(paste("No", dataset_type, "CSV files found in the extracted ZIP archive."))
-  }
-  
-  
-  # Read the first matching CSV file into a data frame
-  data <- tryCatch(
-    read.csv(csv_files[1], stringsAsFactors = FALSE),
-    error = function(e) stop("Error reading CSV file: ", e$message)
-  )
-  
-  return(data)
+# Load the combined dataset
+if (!file.exists(input_file)) {
+  stop("Input file does not exist: ", input_file)
 }
-
-# Load or download CCOD
-ccod <- fetch_cod_data(ccod_url, api_key, ccod_file)
-ocod <- fetch_cod_data(ocod_url, api_key, ocod_file)
-
-
-ccod$Country.Incorporated..1. = "UNITED KINGDOM" # Labels *all* CCOD observations as UK in the same variable as OCOD
-
-
-# Labels source for admin data observations
-ccod$Source <- "CCOD" 
-ocod$Source <- "OCOD"
-
-# Define datasets as data.tables and merge ###
-setDT(ccod)
-setDT(ocod)
-
-combined <- merge(ccod,ocod, all = TRUE)
-
-
-# Clean Dataset Names 
-library(janitor)
-combined <- clean_names(combined)
-
-# Bring variable ordering in line with the OCOD dataset [optional]
-setcolorder(combined, c("tenure", "property_address", "district", "county", "region", "postcode", "multiple_address_indicator", "price_paid", "proprietor_name_1", "company_registration_no_1", "proprietorship_category_1", "country_incorporated_1", "proprietor_1_address_1","proprietor_1_address_2","proprietor_1_address_3","proprietor_name_2","company_registration_no_2","proprietorship_category_2","country_incorporated_2","proprietor_2_address_1","proprietor_2_address_2" ,"proprietor_2_address_3","proprietor_name_3","company_registration_no_3","proprietorship_category_3","country_incorporated_3","proprietor_3_address_1","proprietor_3_address_2","proprietor_3_address_3","proprietor_name_4","company_registration_no_4","proprietorship_category_4","country_incorporated_4","proprietor_4_address_1","proprietor_4_address_2","proprietor_4_address_3","date_proprietor_added","additional_proprietor_indicator","source"))
-
-# Clear some Ram
-rm(ccod, ocod)
-
-
+message("Loading combined dataset from ", input_file)
+load(input_file)
 
 #### UPRN LOOKUP ####
-
 # Load the geovation Title Number-UPRN lookup dataset and set title_number as data.table key
+message("Loading UPRN dataset...")
 UPRN_dt <- fread(UPRN_dt_path)
 setnames(UPRN_dt, c("V1", "V2"), c("title_number","UPRN"))
 UPRN_dt[,V3:=NULL]
@@ -134,9 +44,9 @@ setkey(UPRN_dt,title_number)
 setDT(combined)
 setkey(combined,title_number)
 
-
-# Assign UPRNS to the Admin dataset.
+# Assign UPRNs to the Admin dataset.
 # Titles with multiple UPRNs: Each UPRN is added as a separate entity in the combined dataset.
+message("Merging UPRN data with combined dataset...")
 combined_expanded <- UPRN_dt[combined, nomatch = 0]
 
 # Clear some memory
@@ -146,10 +56,7 @@ tables()
 combined_expanded$UPRN <- as.character(combined_expanded$UPRN)
 setkey(combined_expanded, UPRN)
 
-
-
 #### EXTRACT CERTIFICATES FROM ARCHIVE (RANDOM SAMPLE VERSION) ####
-
 extractRandomFolders <- function(zip_file, 
                                  output_dir, 
                                  folder_prefix = "domestic-", 
@@ -204,12 +111,9 @@ extractRandomFolders <- function(zip_file,
 }
 
 # To extract, make sure to set enable_extraction to TRUE, select an appropriate sample of LADs. 
-extractRandomFolders(EPC_archive, EPC_path, sample_size = 30, enable_extraction = FALSE)
-
-
+extractRandomFolders(EPC_archive, EPC_path, sample_size = SAMPLE_SIZE, enable_extraction = ENABLE_EXTRACTION)
 #### EPC MATCHING ####
-
-# Function to convert and join all EPC datasets in a folder using the combined admin dataset and regional sub-datasets of EPC (load however many is needed into target folder EPC_path)
+# Function to convert and join all EPC datasets in a folder using the combined admin dataset and regional sub-datasets of EPC
 convert_epc_datasets <- function(EPC_path, admin_dataset) {
   # Check if admin_dataset is a data.table
   if (!("data.table" %in% class(admin_dataset))) {
@@ -254,20 +158,16 @@ convert_epc_datasets <- function(EPC_path, admin_dataset) {
   return(EPC_matched)
 }
 
-
-
-
-
 # Loads or creates the matching dataset
-EPC_matched_all_dir <- "~/disconnected-landlords-project/epc_matched-random_sample.csv"
+EPC_matched_all_dir <- file.path(RAW_EPC_DIR, "epc_matched-random_sample.csv")
 if(file.exists(EPC_matched_all_dir)) {
-  print("Matched dataset found. Loading from disk.") 
+  message("Matched dataset found. Loading from disk.")
   EPC_matched_all <- fread(EPC_matched_all_dir)
 } else {
-  print("Matched dataset not found. Creating.") 
+  message("Matched dataset not found. Creating.")
   EPC_matched_all <- convert_epc_datasets(EPC_path, combined_expanded)
 }
-# write.csv(EPC_matched_all, file ="~/disconnected-landlords-project/epc_matched-random_sample.csv")
+# write.csv(EPC_matched_all, file = file.path(EPC_DATA_DIR, "epc_matched-random_sample.csv"))
 
 #### Cross-sectional datasets split by freehold and leasehold ####
 # Splits the dataset into the freehold and leasehold parts.
@@ -275,7 +175,6 @@ setkey(EPC_matched_all, tenure)
 EPC_matched_lease <- EPC_matched_all["Leasehold"]
 EPC_matched_free <- EPC_matched_all["Freehold"]
 EPC_matched_NA <- EPC_matched_all[is.na(tenure)]
-
 
 # Function to create a cross-sectional dataset with only the most recent EPCs kept.  
 create_xsection <- function(datatable){
@@ -286,11 +185,12 @@ create_xsection <- function(datatable){
 }
 
 # Creates the cross-sectional datasets. 
+message("Creating cross-sectional datasets...")
 EPC_matched_lease_clean <- create_xsection(EPC_matched_lease)
 EPC_matched_free_clean <- create_xsection(EPC_matched_free)
 EPC_matched_NA_clean <- create_xsection(EPC_matched_NA)
 
-#Duplicate check
+# Duplicate check
 EPC_matched_free_clean$BUILDING_REFERENCE_NUMBER[duplicated(EPC_matched_free_clean$BUILDING_REFERENCE_NUMBER)]
 EPC_matched_lease_clean$BUILDING_REFERENCE_NUMBER[duplicated(EPC_matched_lease_clean$BUILDING_REFERENCE_NUMBER)]
 EPC_matched_NA_clean$BUILDING_REFERENCE_NUMBER[duplicated(EPC_matched_NA_clean$BUILDING_REFERENCE_NUMBER)]
@@ -303,20 +203,15 @@ EPC_matched_combined[, has_duplicates := .N > 1, by = BUILDING_REFERENCE_NUMBER]
 
 setkey(EPC_matched_combined, BUILDING_REFERENCE_NUMBER)
 
-
-
 # Helper variables
 EPC_matched_combined[, bad_EPC := CURRENT_ENERGY_RATING %in% c("D", "E", "F", "G")]
 EPC_matched_combined[, good_EPC := CURRENT_ENERGY_RATING %in% c("A", "B", "C")]
 
-
 EPC_matched_combined[is.na(source), source := "Unknown"]
 EPC_matched_combined[is.na(tenure), tenure := "Not in OCOD, CCOD"]
 
-
 # Concatenation
 EPC_matched_combined[, concatenation := paste0(PROPERTY_TYPE,TENURE)]
-
 
 # Coarse proprietorship
 public_sector <- c("County Council", "Local Authority")
@@ -344,7 +239,7 @@ non_profit <- c("Co-operative Society (Company)",
 EPC_matched_combined[, coarse_proprietorship := fcase(
   proprietorship_category_1 %in% public_sector, "Public Sector",
   proprietorship_category_1 %in% for_profit,    "For-Profit",
-  proprietorship_category_1 %in% non_profit,      "Non-Profit/Community Organisations",
+  proprietorship_category_1 %in% non_profit,    "Non-Profit/Community Organisations",
   default = NA
 )]
 
@@ -372,5 +267,7 @@ EPC_matched_combined[, postcode_sector := sub("^([^ ]+ [A-Z0-9]).*", "\\1", POST
 
 EPC_matched_combined[, lodgement_year := year(LODGEMENT_DATE)]
 
-
-save(EPC_matched_combined, file = "EPC_matched_combined.RData")
+# Save the final combined dataset
+output_file <- file.path(output_dir, paste0("epc_matched_combined_", ccod_version, ".RData"))
+save(EPC_matched_combined, file = output_file)
+message("Final combined dataset saved to ", output_file)
