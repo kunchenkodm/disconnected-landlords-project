@@ -3,7 +3,7 @@
 .Rhistory
 .RData
 .Ruserdata
-*.Rproj
+# *.Rproj
 
 # Data files (except samples and .gitkeep)
 data/raw/*
