@@ -8,7 +8,7 @@ Analysis of energy efficiency in rental properties by ownership type using EPC a
 2. Install R (>= 4.0.0) and RStudio
 3. Open `disconnected-landlords.Rproj` in RStudio
 4. Install required packages: `renv::restore()`
-5. Copy `.env.example` to `.env` and add your API credentials
+5. Add your API credentials in  `.Renviron` 
 6. Update configuration in `config/config.yml` if needed
 7. Run the analysis: `source("scripts/run_all.R")`
 
