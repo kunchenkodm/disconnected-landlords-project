@@ -1,21 +1,13 @@
-#!/usr/bin/env Rscript
 # Master script to run entire analysis pipeline
-# Author: [Your name]
-# Date: [Date]
-library(here)
+# Author: Dmytro Kunchenko
+# Date: August 15, 2025
 
+rm(list=ls())
 
 message("Starting Disconnected Landlords Analysis Pipeline...")
 start_time <- Sys.time()
 
-
-# Load environment variables
-if (file.exists(".env")) {
-  readr::read_lines(".env") |>
-    stringr::str_subset("^[A-Z]") |>
-    stringr::str_split_fixed("=", 2) |>
-    apply(1, function(x) Sys.setenv(setNames(x[2], x[1])))
-}
+library(here)
 
 # Source scripts in order
 scripts <- c(
@@ -28,22 +20,22 @@ scripts <- c(
   "06_run_regressions.R"
 )
 
-# Use lapply to correctly scope the 'script' variable in the error handler
-invisible(lapply(scripts, function(script) {
-  script_path <- here::here("scripts", script) 
+# Main Loop
+for (script in scripts) {
+  script_path <- file.path("scripts", script)
   if (file.exists(script_path)) {
     message(sprintf("Running: %s", script))
     tryCatch({
-      source(script_path, local = TRUE)
+      source(script_path)
       message(sprintf("Completed: %s", script))
     }, error = function(e) {
-      # This will now correctly find 'script' and report the error
       stop(sprintf("Error in %s: %s", script, e$message))
     })
   } else {
     warning(sprintf("Script not found: %s", script_path))
   }
-}))
+}
+
 
 total_time <- Sys.time() - start_time
 message(sprintf("Pipeline completed in %.2f %s", 

@@ -244,14 +244,52 @@ EPC_matched_combined[, coarse_proprietorship := fcase(
 )]
 
 tax_havens <- c(
-  "ANGUILLA", "ANTIGUA AND BARBUDA", "BAHAMAS", "BAHRAIN", "BARBADOS",
-  "BELIZE", "BERMUDA", "BRITISH VIRGIN ISLANDS", "CAYMAN ISLANDS", "CYPRUS",
-  "GIBRALTAR", "GUERNSEY", "HONG KONG", "ISLE OF MAN", "JERSEY", "LEBANON",
-  "LIECHTENSTEIN", "MACAU", "MACAO", "MALTA", "MARSHALL ISLANDS", "MAURITIUS",
-  "MONACO", "DUTCH ANTILLES", "PANAMA", "SAMOA", "SEYCHELLES",
-  "SINGAPORE", "ST KITTS AND NEVIS", "ST LUCIA", "ST VINCENT AND GRENADINES",
+    "ANGUILLA", "ANTIGUA AND BARBUDA", "BAHAMAS", "BAHRAIN", "BARBADOS",
+    "BELIZE", "BERMUDA", "BRITISH VIRGIN ISLANDS", "CAYMAN ISLANDS", "CYPRUS",
+    "GIBRALTAR", "GUERNSEY", "HONG KONG", "ISLE OF MAN", "JERSEY", "LEBANON",
+    "LIECHTENSTEIN", "MACAU", "MACAO", "MALTA", "MARSHALL ISLANDS", "MAURITIUS",
+    "MONACO", "DUTCH ANTILLES", "PANAMA", "SAMOA", "SEYCHELLES",
+    "SINGAPORE", "ST KITTS AND NEVIS", "ST LUCIA", "ST VINCENT AND GRENADINES",
+    "TURKS AND CAICOS ISLANDS"
+  )
+
+
+# British Tax Havens
+# Many of these are British Overseas Territories or Crown Dependencies.
+british_havens <- c(
+  "ANGUILLA", "BERMUDA", "BRITISH VIRGIN ISLANDS", "CAYMAN ISLANDS", 
+  "GIBRALTAR", "GUERNSEY", "ISLE OF MAN", "JERSEY", "TURKS AND CAICOS ISLANDS"
+)
+
+# European Tax Havens
+# This group includes sovereign states and dependencies within Europe.
+european_havens <- c(
+  "CYPRUS", "GIBRALTAR", "GUERNSEY", "ISLE OF MAN", "JERSEY", 
+  "LIECHTENSTEIN", "MALTA", "MONACO"
+)
+
+# Caribbean Tax Havens
+# This list comprises nations and territories in the Caribbean region.
+caribbean_havens <- c(
+  "ANGUILLA", "ANTIGUA AND BARBUDA", "BAHAMAS", "BARBADOS", "BELIZE", 
+  "BRITISH VIRGIN ISLANDS", "CAYMAN ISLANDS", "DUTCH ANTILLES", "PANAMA", 
+  "ST KITTS AND NEVIS", "ST LUCIA", "ST VINCENT AND GRENADINES", 
   "TURKS AND CAICOS ISLANDS"
 )
+
+# Other Tax Havens
+# The remaining locations outside of the other specified regions.
+# Note: "MACAU" and "MACAO" from the original list refer to the same entity; 
+# only one is included here to avoid duplication.
+other_havens <- c(
+  "BAHRAIN", "HONG KONG", "LEBANON", "MACAO", "MARSHALL ISLANDS", 
+  "MAURITIUS", "SAMOA", "SEYCHELLES", "SINGAPORE"
+)
+
+
+
+
+
 
 EPC_matched_combined[, country_incorporated_tax_haven :=
                        as.integer(
@@ -261,6 +299,43 @@ EPC_matched_combined[, country_incorporated_tax_haven :=
                            country_incorporated_4 %in% tax_havens
                        )
 ]
+
+EPC_matched_combined[, country_incorporated_british_haven :=
+                       as.integer(
+                         country_incorporated_1 %in% british_havens |
+                           country_incorporated_2 %in% british_havens |
+                           country_incorporated_3 %in% british_havens |
+                           country_incorporated_4 %in% british_havens
+                       )
+]
+
+EPC_matched_combined[, country_incorporated_european_haven :=
+                       as.integer(
+                         country_incorporated_1 %in% european_havens |
+                           country_incorporated_2 %in% european_havens |
+                           country_incorporated_3 %in% european_havens |
+                           country_incorporated_4 %in% european_havens
+                       )
+]
+
+EPC_matched_combined[, country_incorporated_caribbean_haven :=
+                       as.integer(
+                         country_incorporated_1 %in% caribbean_havens |
+                           country_incorporated_2 %in% caribbean_havens |
+                           country_incorporated_3 %in% caribbean_havens |
+                           country_incorporated_4 %in% caribbean_havens
+                       )
+]
+
+EPC_matched_combined[, country_incorporated_other_haven :=
+                       as.integer(
+                         country_incorporated_1 %in% other_havens |
+                           country_incorporated_2 %in% other_havens |
+                           country_incorporated_3 %in% other_havens |
+                           country_incorporated_4 %in% other_havens
+                       )
+]
+
 
 EPC_matched_combined[, postcode_area := sub(" .*", "", POSTCODE)]
 EPC_matched_combined[, postcode_sector := sub("^([^ ]+ [A-Z0-9]).*", "\\1", POSTCODE)]

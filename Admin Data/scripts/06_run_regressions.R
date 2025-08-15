@@ -81,6 +81,17 @@ EPC_matched_combined[, treat_public_sector := fcase(grepl("Public Sector", coars
 # --- Abroad vs. Domestic (For-Profits only) ---
 EPC_matched_combined[, treat_abroad_domestic := fcase(!is.na(coarse_proprietorship) & grepl("For-Profit", coarse_proprietorship, ignore.case = TRUE) & !is.na(country_incorporated_1) & country_incorporated_1 != "UNITED KINGDOM", 1L, !is.na(coarse_proprietorship) & grepl("For-Profit", coarse_proprietorship, ignore.case = TRUE) & !is.na(country_incorporated_1) & country_incorporated_1 == "UNITED KINGDOM", 0L, default = NA_integer_)]
 
+# --- Tax Haven (various) treatments ---
+EPC_matched_combined[, treat_tax_haven := fcase(country_incorporated_tax_haven == 1, 1L, eval(control_group_condition), 0L, default = NA_integer_)]
+EPC_matched_combined[, treat_british_haven := fcase(country_incorporated_british_haven == 1, 1L, eval(control_group_condition), 0L,default = NA_integer_)]
+EPC_matched_combined[, treat_european_haven := fcase(country_incorporated_european_haven == 1, 1L,eval(control_group_condition), 0L,default = NA_integer_)]
+EPC_matched_combined[, treat_caribbean_haven := fcase(country_incorporated_caribbean_haven == 1, 1L,eval(control_group_condition), 0L,default = NA_integer_)]
+EPC_matched_combined[, treat_other_haven := fcase(country_incorporated_other_haven == 1, 1L,eval(control_group_condition), 0L,default = NA_integer_)]
+
+
+
+
+
 
 ##### Variable Setup ####
 outcome_variable <- "bad_epc"
@@ -176,7 +187,12 @@ analysis_configs <- list(
   list(var = "treat_foreign_non_profit", file_id = "foreign_non_profit_vs_private_rental", title = "Effect of Foreign Non-Profit Ownership on Likelihood of a Bad EPC", coef_label = "Foreign Non-Profit"),
   list(var = "treat_tax_haven_non_profit", file_id = "tax_haven_non_profit_vs_private_rental", title = "Effect of Tax Haven Non-Profit Ownership on Likelihood of a Bad EPC", coef_label = "Tax Haven Non-Profit"),
   list(var = "treat_public_sector", file_id = "public_sector_vs_private_rental", title = "Effect of Public Sector Ownership on Likelihood of a Bad EPC", coef_label = "Public Sector"),
-  list(var = "treat_abroad_domestic", file_id = "abroad_vs_domestic", title = "Effect of Abroad vs. Domestic For-Profit Ownership on Likelihood of a Bad EPC", coef_label = "Abroad vs. Domestic")
+  list(var = "treat_abroad_domestic", file_id = "abroad_vs_domestic", title = "Effect of Abroad vs. Domestic For-Profit Ownership on Likelihood of a Bad EPC", coef_label = "Abroad vs. Domestic"),
+  list(var = "treat_tax_haven", file_id = "tax_haven_vs_private_rental", title = "Effect of Tax Haven Ownership on Likelihood of a Bad EPC", coef_label = "Tax Haven"),
+  list(var = "treat_british_haven", file_id = "british_haven_vs_private_rental", title = "Effect of British Haven Ownership on Likelihood of a Bad EPC", coef_label = "British Haven"),
+  list(var = "treat_european_haven", file_id = "european_haven_vs_private_rental", title = "Effect of European Haven Ownership on Likelihood of a Bad EPC", coef_label = "European Haven"),
+  list(var = "treat_caribbean_haven", file_id = "caribbean_haven_vs_private_rental", title = "Effect of Caribbean Haven Ownership on Likelihood of a Bad EPC", coef_label = "Caribbean Haven"),
+  list(var = "treat_other_haven", file_id = "other_haven_vs_private_rental", title = "Effect of Other Haven Ownership on Likelihood of a Bad EPC", coef_label = "Other Haven")
 )
 
 ##### EXECUTION LOOP #####

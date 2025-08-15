@@ -103,16 +103,52 @@ EPC_matched_combined[, treat_public_sector := fcase(
   default = NA_integer_
 )]
 
-# # Treat 99: Abroad vs. Domestic (among For-Profits only)
-# EPC_matched_combined[, treat_abroad_domestic := fcase(
-#   !is.na(coarse_proprietorship) & grepl("For-Profit", coarse_proprietorship, ignore.case = TRUE) & !is.na(country_incorporated_1) & country_incorporated_1 != "UNITED KINGDOM", 1L,
-#   !is.na(coarse_proprietorship) & grepl("For-Profit", coarse_proprietorship, ignore.case = TRUE) & !is.na(country_incorporated_1) & country_incorporated_1 == "UNITED KINGDOM", 0L,
-#   default = NA_integer_
-# )]
+# Treat 99: Abroad vs. Domestic (among For-Profits only)
+EPC_matched_combined[, treat_abroad_domestic := fcase(
+  !is.na(coarse_proprietorship) & grepl("For-Profit", coarse_proprietorship, ignore.case = TRUE) & !is.na(country_incorporated_1) & country_incorporated_1 != "UNITED KINGDOM", 1L,
+  !is.na(coarse_proprietorship) & grepl("For-Profit", coarse_proprietorship, ignore.case = TRUE) & !is.na(country_incorporated_1) & country_incorporated_1 == "UNITED KINGDOM", 0L,
+  default = NA_integer_
+)]
+
+# Tax Haven Treatments:
+# Treat 4: Tax Haven vs Privately Rented
+EPC_matched_combined[, treat_tax_haven := fcase(
+  country_incorporated_tax_haven == 1, 1L,
+  eval(control_group_condition), 0L,
+  default = NA_integer_
+)]
+
+# Treat 5: British Haven vs Privately Rented
+EPC_matched_combined[, treat_british_haven := fcase(
+  country_incorporated_british_haven == 1, 1L,
+  eval(control_group_condition), 0L,
+  default = NA_integer_
+)]
+
+# Treat 6: European Haven vs Privately Rented
+EPC_matched_combined[, treat_european_haven := fcase(
+  country_incorporated_european_haven == 1, 1L,
+  eval(control_group_condition), 0L,
+  default = NA_integer_
+)]
+
+# Treat 7: Caribbean Haven vs Privately Rented
+EPC_matched_combined[, treat_caribbean_haven := fcase(
+  country_incorporated_caribbean_haven == 1, 1L,
+  eval(control_group_condition), 0L,
+  default = NA_integer_
+)]
+
+# Treat 8: Other Haven vs Privately Rented
+EPC_matched_combined[, treat_other_haven := fcase(
+  country_incorporated_other_haven == 1, 1L,
+  eval(control_group_condition), 0L,
+  default = NA_integer_
+)]
 
 
 #### MATCHING PROTOCOL ####
-message("Starting matching process for both treatment definitions...")
+message("Starting matching process for  treatment definitions...")
 
 # Set seed for reproducibility
 set.seed(20230703)
@@ -202,6 +238,12 @@ matched_foreign_non_profit <- perform_matching("treat_foreign_non_profit", "fore
 matched_tax_haven_non_profit <- perform_matching("treat_tax_haven_non_profit", "tax_haven_non_profit_vs_private_rental")
 
 matched_public <- perform_matching("treat_public_sector", "public_sector_vs_private_rental")
+
+matched_tax_haven <- perform_matching("treat_tax_haven", "tax_haven_vs_private_rental")
+matched_british_haven <- perform_matching("treat_british_haven", "british_haven_vs_private_rental")
+matched_european_haven <- perform_matching("treat_european_haven", "european_haven_vs_private_rental")
+matched_caribbean_haven <- perform_matching("treat_caribbean_haven", "caribbean_haven_vs_private_rental")
+matched_other_haven <- perform_matching("treat_other_haven", "other_haven_vs_private_rental")
 
 
 
