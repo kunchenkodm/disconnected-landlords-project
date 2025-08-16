@@ -1,7 +1,7 @@
 # Script: 05_create_matched_pairs.R
 # Purpose: Implement matching logic to create sets of matched pairs based on two treatment definitions (For-Profit vs. Non-Profit and Abroad vs. Domestic) with exact matching by local_authority.
 # Authors: Thiemo Fetzer, Dmytro Kunchenko
-# Date: July 3, 2025. Last Updated August 7, 2025
+# Date: July 3, 2025. Last Updated August 15, 2025
 
 rm(list=setdiff(ls(), "script"))
 

@@ -1,7 +1,7 @@
 # Script: 06_run_regressions.R
 # Purpose: Run OLS regressions on matched data and equivalent unmatched specifications for all treatment definitions.
 # Authors: Dmytro Kunchenko, Thiemo Fetzer
-# Date: July 15, 2025. Last Updated: August 7, 2025.
+# Date: July 15, 2025. Last Updated: August 15, 2025.
 
 rm(list=setdiff(ls(), "script"))
 

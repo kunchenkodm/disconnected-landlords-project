@@ -5,7 +5,6 @@
 rm(list=ls())
 
 message("Starting Disconnected Landlords Analysis Pipeline...")
-start_time <- Sys.time()
 
 library(here)
 
@@ -37,7 +36,4 @@ for (script in scripts) {
 }
 
 
-total_time <- Sys.time() - start_time
-message(sprintf("Pipeline completed in %.2f %s", 
-                as.numeric(total_time), 
-                attr(total_time, "units")))
+message("Pipeline completed.")

@@ -1,7 +1,7 @@
 # Script: 02_data_merging_pipeline.R
 # Purpose: Load the combined admin dataset, perform UPRN and EPC matching, clean and process data, and save the final matched dataset.
 # Authors: Thiemo Fetzer, Dmytro Kunchenko
-# Date: July 3, 2025
+# Date: July 3, 2025, Last updated August 15, 2025
 
 rm(list=setdiff(ls(), "script"))
 
