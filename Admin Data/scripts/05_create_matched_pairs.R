@@ -168,7 +168,14 @@ perform_matching <- function(treatment_var, treatment_name,
   ##### Prepare Data For Matching #### 
   message("Performing matching for ", treatment_name)
   if (!"data.table" %in% class(EPC_matched_combined)) setDT(EPC_matched_combined)
-  dat_all <- copy(EPC_matched_combined)
+  
+  # Work on a compact copy: keep only the columns we actually need (reduces memory)
+  needed_cols <- unique(c(treatment_var,
+                          "number_habitable_rooms", "total_floor_area", "lodgement_year",
+                          "property_type", "main_fuel", "construction_age_band",
+                          "built_form", "local_authority", "NUTS118NM",
+                          "uprn", "tax_band", "ppd_price_sqm", "ppd_year_transfer"))
+  dat_all <- copy(EPC_matched_combined[, intersect(names(EPC_matched_combined), needed_cols), with = FALSE])
   
   # keep only rows where treatment is defined
   dat_all <- dat_all[!is.na(get(treatment_var))]
@@ -180,41 +187,46 @@ perform_matching <- function(treatment_var, treatment_name,
                           "property_type", "main_fuel", "construction_age_band",
                           "built_form", "local_authority", "NUTS118NM")
   
-  # remove rows with NA in any of the core vars (user's original logic)
+  # Remove rows missing any core vars (same logic as before)
   dat_all <- dat_all[complete.cases(dat_all[, ..base_matching_vars])]
   message("Rows after removing NA in base vars: ", nrow(dat_all))
   if (nrow(dat_all) == 0) return(list())
   
-  # ensure region column is character
+  # ensure region column is character and get region names
   dat_all[, NUTS118NM := as.character(NUTS118NM)]
-  # split by region (robust base split)
-  region_list <- split(dat_all, dat_all$NUTS118NM, drop = TRUE)
-  region_names <- names(region_list)
+  region_names <- unique(dat_all$NUTS118NM)
   message("Number of regions to process: ", length(region_names))
   
-  # storage for regional matched results (each element will be a list of up to 3 data.tables)
-  regional_matches <- vector("list", length(region_names))
-  names(regional_matches) <- region_names
+  # Prepare storage for per-region filepaths (we'll write per-region .rds files for each match type)
+  files_by_type <- vector("list", 3)
+  names(files_by_type) <- c("property_level", "with_taxband", "with_price")
+  for (i in seq_along(files_by_type)) files_by_type[[i]] <- character(0)
   
-  # iterate regions
+  # MAIN LOOP: iterate region-by-region (no split -> no big duplication)
   for (reg in region_names) {
     message("Processing region: ", reg)
-    dat <- region_list[[reg]]
+    idx <- which(dat_all$NUTS118NM == reg)
+    if (length(idx) == 0) {
+      message("region has no rows, skipping")
+      next
+    }
     
-    # shuffle rows to avoid ordering issues (reproducible if user set seed before call)
+    # Create a small region DT (will be removed after processing)
+    dat <- dat_all[idx, ]
+    # Shuffle rows deterministically if seed set outside function
     dat[, rand_sort := runif(.N)]
     setorder(dat, rand_sort)
     
-    # container for this region's matched outputs
-    r_matches <- vector("list", 3)
+    # Slot for region matches (not kept in memory longer than necessary)
+    r_matches_files <- vector("character", 3)
     
-    ##### [1] Property-level features #####
+    ### 1) Property-level features
     n_treated <- nrow(dat[get(treatment_var) == 1])
     n_control <- nrow(dat[get(treatment_var) == 0])
     message("  base counts (treated/control): ", n_treated, "/", n_control)
     if (n_treated > min_treated_base && n_control > min_control_base) {
       f1 <- as.formula(paste0(treatment_var, " ~ number_habitable_rooms + total_floor_area + lodgement_year"))
-      try({
+      tryCatch({
         m1 <- matchit(f1,
                       data = dat,
                       exact = ~property_type + main_fuel + construction_age_band + built_form + local_authority,
@@ -222,24 +234,33 @@ perform_matching <- function(treatment_var, treatment_name,
                       distance = "glm")
         md1 <- match.data(m1)
         if (nrow(md1) > 0) {
-          # keep useful columns and add region and original treatment var for traceability
           dt1 <- as.data.table(md1)[, .(NUTS118NM = reg, local_authority, uprn, distance, weights, subclass)]
-          r_matches[[1]] <- dt1
-          message("base: matched rows: ", nrow(dt1))
+          fname1 <- file.path(output_dir, paste0("matched_", treatment_name, "_chars1_", make.names(reg), "_", ccod_version, ".rds"))
+          file_tag <- gsub("\\.rds$", "", basename(fname1))
+          dt1[, subclass := paste(file_tag, subclass, sep = "_")]
+          saveRDS(dt1, fname1, compress = "xz")
+          files_by_type[["property_level"]] <- c(files_by_type[["property_level"]], fname1)
+          message("base: wrote file ", basename(fname1), " (rows: ", nrow(dt1), ")")
+          rm(m1, md1, dt1)
+        } else {
+          message("base: matchdata empty")
         }
-      }, silent = TRUE)
+      }, error = function(e) {
+        message("base: matchit error in region ", reg, " -> ", e$message)
+      })
+      gc()
     } else {
       message("base: skipped (too few treated/control)")
     }
     
-    ##### [2] Council Tax Band #####
+    ### 2) Council Tax Band
     dat_tax <- dat[!is.na(tax_band)]
     n_treated_tax <- nrow(dat_tax[get(treatment_var) == 1])
     n_control_tax <- nrow(dat_tax[get(treatment_var) == 0])
-    message("tax counts (treated/control): ", n_treated_tax, "/", n_control_tax)
+    message("  tax counts (treated/control): ", n_treated_tax, "/", n_control_tax)
     if (n_treated_tax > min_treated_tax && n_control_tax > min_control_tax) {
       f2 <- as.formula(paste0(treatment_var, " ~ number_habitable_rooms + total_floor_area + lodgement_year"))
-      try({
+      tryCatch({
         m2 <- matchit(f2,
                       data = dat_tax,
                       exact = ~property_type + main_fuel + tax_band + construction_age_band + built_form + local_authority,
@@ -248,22 +269,32 @@ perform_matching <- function(treatment_var, treatment_name,
         md2 <- match.data(m2)
         if (nrow(md2) > 0) {
           dt2 <- as.data.table(md2)[, .(NUTS118NM = reg, local_authority, uprn, distance, weights, subclass)]
-          r_matches[[2]] <- dt2
-          message("tax: matched rows: ", nrow(dt2))
+          fname2 <- file.path(output_dir, paste0("matched_", treatment_name, "_tax_", make.names(reg), "_", ccod_version, ".rds"))
+          file_tag <- gsub("\\.rds$", "", basename(fname2))
+          dt2[, subclass := paste(file_tag, subclass, sep = "_")]
+          saveRDS(dt2, fname2, compress = "xz")
+          files_by_type[["with_taxband"]] <- c(files_by_type[["with_taxband"]], fname2)
+          message("    tax: wrote file ", basename(fname2), " (rows: ", nrow(dt2), ")")
+          rm(m2, md2, dt2)
+        } else {
+          message("tax: matchdata empty")
         }
-      }, silent = TRUE)
+      }, error = function(e) {
+        message("tax: matchit error in region ", reg, " -> ", e$message)
+      })
+      gc()
     } else {
       message("tax: skipped (too few treated/control)")
     }
     
-    ##### [3] Price Paid Data #####
+    ### 3) Price Paid Data
     dat_price <- dat[!is.na(tax_band) & !is.na(ppd_price_sqm) & !is.na(ppd_year_transfer) & is.finite(ppd_price_sqm)]
     n_treated_price <- nrow(dat_price[get(treatment_var) == 1])
     n_control_price <- nrow(dat_price[get(treatment_var) == 0])
-    message("price counts (treated/control): ", n_treated_price, "/", n_control_price)
+    message("  price counts (treated/control): ", n_treated_price, "/", n_control_price)
     if (n_treated_price > min_treated_price && n_control_price > 0) {
       f3 <- as.formula(paste0(treatment_var, " ~ number_habitable_rooms + total_floor_area + lodgement_year + ppd_price_sqm"))
-      try({
+      tryCatch({
         m3 <- matchit(f3,
                       data = dat_price,
                       exact = ~property_type + main_fuel + tax_band + ppd_year_transfer + construction_age_band + built_form + local_authority,
@@ -272,42 +303,69 @@ perform_matching <- function(treatment_var, treatment_name,
         md3 <- match.data(m3)
         if (nrow(md3) > 0) {
           dt3 <- as.data.table(md3)[, .(NUTS118NM = reg, local_authority, uprn, distance, weights, subclass)]
-          r_matches[[3]] <- dt3
-          message("    price: matched rows: ", nrow(dt3))
+          fname3 <- file.path(output_dir, paste0("matched_", treatment_name, "_price_", make.names(reg), "_", ccod_version, ".rds"))
+          file_tag <- gsub("\\.rds$", "", basename(fname3))
+          dt3[, subclass := paste(file_tag, subclass, sep = "_")]
+          saveRDS(dt3, fname3, compress = "xz")
+          files_by_type[["with_price"]] <- c(files_by_type[["with_price"]], fname3)
+          message("    price: wrote file ", basename(fname3), " (rows: ", nrow(dt3), ")")
+          rm(m3, md3, dt3)
+        } else {
+          message("price: matchdata empty")
         }
-      }, silent = TRUE)
+      }, error = function(e) {
+        message("    price: matchit error in region ", reg, " -> ", e$message)
+      })
+      gc()
     } else {
       message("price: skipped (too few treated/control)")
     }
     
-    # store regional matches (may contain NULLs for skipped match types)
-    regional_matches[[reg]] <- r_matches
+    # remove per-region object and free memory before next region
+    rm(dat, idx)
+    gc()
   } # end region loop
   
   ##### Recombine Regional Outputs ####
-  # For each of the 3 match types, collect all region-level data.tables (skip NULLs) and rbindlist
+  # For each match type, read per-region files incrementally and rbind into a single data.table
   combined <- vector("list", 3)
   names(combined) <- c("property_level", "with_taxband", "with_price")
-  for (i in seq_len(3)) {
-    pieces <- lapply(regional_matches, function(x) x[[i]])
-    pieces <- pieces[!vapply(pieces, is.null, logical(1))]
-    if (length(pieces) > 0) {
-      combined[[i]] <- rbindlist(pieces, use.names = TRUE, fill = TRUE)
-      message("Combined match type ", i, " rows: ", nrow(combined[[i]]))
-    } else {
-      combined[[i]] <- data.table()  # empty table
-      message("Combined match type ", i, " is empty.")
+  for (i in seq_along(combined)) {
+    typ <- names(combined)[i]
+    fls <- files_by_type[[typ]]
+    if (length(fls) == 0) {
+      combined[[i]] <- data.table()
+      message("Combined match type ", i, " (", typ, ") is empty.")
+      next
     }
+    # read first file, then append subsequent files incrementally (reduces peak overhead)
+    dt_combined <- NULL
+    for (j in seq_along(fls)) {
+      tmp <- readRDS(fls[j])
+      if (is.null(dt_combined)) {
+        dt_combined <- tmp
+      } else {
+        # rbind the new piece onto the existing combined table
+        dt_combined <- rbindlist(list(dt_combined, tmp), use.names = TRUE, fill = TRUE)
+      }
+      rm(tmp); gc()
+    }
+    combined[[i]] <- dt_combined
+    message("Combined match type ", i, " (", typ, ") rows: ", nrow(combined[[i]]))
   }
   
-  # Save results (list of 3 data.tables)
+  # Save results (same shape as before)
   matched_results <- combined
   output_file <- file.path(output_dir, paste0("matched_pairs_", treatment_name, "_", ccod_version, ".RData"))
   save(matched_results, file = output_file)
   message("Matched pairs for ", treatment_name, " saved to ", output_file)
   
+  # final cleanup
+  rm(dat_all, files_by_type)
+  gc()
   return(matched_results)
 }
+
 
 #### Perform Matching and Save Matched Pairs ####
 
