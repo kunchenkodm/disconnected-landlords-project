@@ -16,10 +16,7 @@ Analysis of energy efficiency in rental properties by ownership type using EPC a
 - `scripts/`: R analysis scripts (run in numerical order)
 - `data/`: Data storage (raw, processed, sample data)
 - `output/`: Analysis outputs (tables, figures, matched datasets)
-- `config/`: Configuration files
-- `functions/`: Reusable R functions
 - `docs/`: Documentation
-- `tests/`: Data validation and tests
 
 ## Data Requirements
 This project requires access to:
