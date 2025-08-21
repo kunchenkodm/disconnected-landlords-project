@@ -27,15 +27,3 @@ This project requires access to:
 
 See `docs/data_dictionary.md` for detailed data descriptions.
 
-## Configuration
-Edit `config/config.yml` to adjust:
-- Dataset versions
-- Sample sizes for testing
-- Analysis parameters
-
-## License
-[Add your license information here]
-
-## Citation
-[Add citation information for academic use]
-
