@@ -222,8 +222,8 @@ perform_matching <- function(treatment_var, treatment_name,
                       distance = "glm")
         md1 <- match.data(m1)
         if (nrow(md1) > 0) {
-          # keep useful columns and add region and original treatment var for traceability
           dt1 <- as.data.table(md1)[, .(NUTS118NM = reg, local_authority, uprn, distance, weights, subclass)]
+          dt1[, subclass := paste(reg, subclass, sep = "_")]
           r_matches[[1]] <- dt1
           message("base: matched rows: ", nrow(dt1))
         }
@@ -248,6 +248,7 @@ perform_matching <- function(treatment_var, treatment_name,
         md2 <- match.data(m2)
         if (nrow(md2) > 0) {
           dt2 <- as.data.table(md2)[, .(NUTS118NM = reg, local_authority, uprn, distance, weights, subclass)]
+          dt2[, subclass := paste(reg, subclass, sep = "_")]
           r_matches[[2]] <- dt2
           message("tax: matched rows: ", nrow(dt2))
         }
@@ -272,6 +273,7 @@ perform_matching <- function(treatment_var, treatment_name,
         md3 <- match.data(m3)
         if (nrow(md3) > 0) {
           dt3 <- as.data.table(md3)[, .(NUTS118NM = reg, local_authority, uprn, distance, weights, subclass)]
+          dt3[, subclass := paste(reg, subclass, sep = "_")]
           r_matches[[3]] <- dt3
           message("    price: matched rows: ", nrow(dt3))
         }
