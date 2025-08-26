@@ -19,6 +19,7 @@
 ## Key Variables
 
 ### Treatment Variables
+Defined in `scripts/treatment_definitions.R`.
 - `treat_for_profit`: For-profit ownership vs private rental
 - `treat_uk_for_profit`: UK for-profit vs private rental  
 - `treat_foreign_for_profit`: Foreign for-profit vs private rental

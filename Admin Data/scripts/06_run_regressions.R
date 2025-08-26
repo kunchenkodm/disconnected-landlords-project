@@ -60,39 +60,8 @@ load(input_file)
 
 ##### TREATMENT DEFINITIONS (from script 05) #####
 message("Defining all treatment variables...")
-# Define the common control group condition
-control_group_condition <- quote(source == "Unknown" & grepl("rental \\(private\\)|Rented \\(private\\)", tenure_2, ignore.case = TRUE))
-
-# --- For-Profit Treatments ---
-EPC_matched_combined[, treat_for_profit := fcase(grepl("For-Profit", coarse_proprietorship, ignore.case = TRUE), 1L, eval(control_group_condition), 0L, default = NA_integer_)]
-EPC_matched_combined[, treat_uk_for_profit := fcase(grepl("For-Profit", coarse_proprietorship, ignore.case = TRUE) & !is.na(country_incorporated_1) & country_incorporated_1 == "UNITED KINGDOM", 1L, eval(control_group_condition), 0L, default = NA_integer_)]
-EPC_matched_combined[, treat_foreign_for_profit := fcase(grepl("For-Profit", coarse_proprietorship, ignore.case = TRUE) & !is.na(country_incorporated_1) & country_incorporated_1 != "UNITED KINGDOM", 1L, eval(control_group_condition), 0L, default = NA_integer_)]
-EPC_matched_combined[, treat_tax_haven_for_profit := fcase(grepl("For-Profit", coarse_proprietorship, ignore.case = TRUE) & !is.na(country_incorporated_tax_haven) & country_incorporated_tax_haven == 1, 1L, eval(control_group_condition), 0L, default = NA_integer_)]
-
-# --- Non-Profit Treatments ---
-EPC_matched_combined[, treat_non_profit := fcase(grepl("Non-Profit/Community Organisations", coarse_proprietorship, ignore.case = TRUE), 1L, eval(control_group_condition), 0L, default = NA_integer_)]
-EPC_matched_combined[, treat_uk_non_profit := fcase(grepl("Non-Profit/Community Organisations", coarse_proprietorship, ignore.case = TRUE) & !is.na(country_incorporated_1) & country_incorporated_1 == "UNITED KINGDOM", 1L, eval(control_group_condition), 0L, default = NA_integer_)]
-EPC_matched_combined[, treat_foreign_non_profit := fcase(grepl("Non-Profit/Community Organisations", coarse_proprietorship, ignore.case = TRUE) & !is.na(country_incorporated_1) & country_incorporated_1 != "UNITED KINGDOM", 1L, eval(control_group_condition), 0L, default = NA_integer_)]
-EPC_matched_combined[, treat_tax_haven_non_profit := fcase(grepl("Non-Profit/Community Organisations", coarse_proprietorship, ignore.case = TRUE) & !is.na(country_incorporated_tax_haven) & country_incorporated_tax_haven == 1, 1L, eval(control_group_condition), 0L, default = NA_integer_)]
-
-# --- Public Sector Treatment ---
-EPC_matched_combined[, treat_public_sector := fcase(grepl("Public Sector", coarse_proprietorship, ignore.case = TRUE), 1L, eval(control_group_condition), 0L, default = NA_integer_)]
-
-# --- Abroad vs. Domestic (For-Profits only) ---
-EPC_matched_combined[, treat_abroad_domestic := fcase(!is.na(coarse_proprietorship) & grepl("For-Profit", coarse_proprietorship, ignore.case = TRUE) & !is.na(country_incorporated_1) & country_incorporated_1 != "UNITED KINGDOM", 1L, !is.na(coarse_proprietorship) & grepl("For-Profit", coarse_proprietorship, ignore.case = TRUE) & !is.na(country_incorporated_1) & country_incorporated_1 == "UNITED KINGDOM", 0L, default = NA_integer_)]
-
-# --- Tax Haven (various) treatments ---
-EPC_matched_combined[, treat_tax_haven := fcase(country_incorporated_tax_haven == 1, 1L, eval(control_group_condition), 0L, default = NA_integer_)]
-EPC_matched_combined[, treat_british_haven := fcase(country_incorporated_british_haven == 1, 1L, eval(control_group_condition), 0L,default = NA_integer_)]
-EPC_matched_combined[, treat_european_haven := fcase(country_incorporated_european_haven == 1, 1L,eval(control_group_condition), 0L,default = NA_integer_)]
-EPC_matched_combined[, treat_caribbean_haven := fcase(country_incorporated_caribbean_haven == 1, 1L,eval(control_group_condition), 0L,default = NA_integer_)]
-EPC_matched_combined[, treat_other_haven := fcase(country_incorporated_other_haven == 1, 1L,eval(control_group_condition), 0L,default = NA_integer_)]
-
-
-
-
-
-
+source(here::here("scripts", "treatment_definitions.R"))
+define_treatments(EPC_matched_combined)
 ##### Variable Setup ####
 outcome_variable <- "bad_epc"
 
