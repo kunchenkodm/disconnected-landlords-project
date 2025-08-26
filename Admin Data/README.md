@@ -13,7 +13,7 @@ Analysis of energy efficiency in rental properties by ownership type using EPC a
 7. Run the analysis: `source("scripts/run_all.R")`
 
 ## Project Structure
-- `scripts/`: R analysis scripts (run in numerical order)
+- `scripts/`: R analysis scripts (run in numerical order). Shared treatment variables are defined in `scripts/treatment_definitions.R`
 - `data/`: Data storage (raw, processed, sample data)
 - `output/`: Analysis outputs (tables, figures, matched datasets)
 - `docs/`: Documentation
