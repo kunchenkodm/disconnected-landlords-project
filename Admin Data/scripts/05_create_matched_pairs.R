@@ -116,32 +116,33 @@ perform_matching <- function(treatment_var, treatment_name) {
 }
 
 
-# Perform matching for both treatment definitions
-matched_for_profit <- perform_matching("treat_for_profit", "for_profit_vs_private_rental")
-matched_uk_for_profit <- perform_matching("treat_uk_for_profit", "uk_for_profit_vs_private_rental")
-matched_foreign_for_profit <- perform_matching("treat_foreign_for_profit", "foreign_for_profit_vs_private_rental")
-matched_tax_haven_for_profit <- perform_matching("treat_tax_haven_for_profit", "tax_haven_for_profit_vs_private_rental")
 
-matched_non_profit <- perform_matching("treat_non_profit", "non_profit_vs_private_rental")
-matched_uk_non_profit <- perform_matching("treat_uk_non_profit", "uk_non_profit_vs_private_rental")
-matched_foreign_non_profit <- perform_matching("treat_foreign_non_profit", "foreign_non_profit_vs_private_rental")
-matched_tax_haven_non_profit <- perform_matching("treat_tax_haven_non_profit", "tax_haven_non_profit_vs_private_rental")
+# Mapping of treatment variables to descriptive output identifiers
+treatment_map <- c(
+  treat_for_profit = "for_profit_vs_private_rental",
+  treat_uk_for_profit = "uk_for_profit_vs_private_rental",
+  treat_foreign_for_profit = "foreign_for_profit_vs_private_rental",
+  treat_tax_haven_for_profit = "tax_haven_for_profit_vs_private_rental",
+  treat_non_profit = "non_profit_vs_private_rental",
+  treat_uk_non_profit = "uk_non_profit_vs_private_rental",
+  treat_foreign_non_profit = "foreign_non_profit_vs_private_rental",
+  treat_tax_haven_non_profit = "tax_haven_non_profit_vs_private_rental",
+  treat_public_sector = "public_sector_vs_private_rental",
+  treat_tax_haven = "tax_haven_vs_private_rental",
+  treat_british_haven = "british_haven_vs_private_rental",
+  treat_european_haven = "european_haven_vs_private_rental",
+  treat_caribbean_haven = "caribbean_haven_vs_private_rental",
+  treat_other_haven = "other_haven_vs_private_rental"
+)
 
-matched_public <- perform_matching("treat_public_sector", "public_sector_vs_private_rental")
-
-matched_tax_haven <- perform_matching("treat_tax_haven", "tax_haven_vs_private_rental")
-matched_british_haven <- perform_matching("treat_british_haven", "british_haven_vs_private_rental")
-matched_european_haven <- perform_matching("treat_european_haven", "european_haven_vs_private_rental")
-matched_caribbean_haven <- perform_matching("treat_caribbean_haven", "caribbean_haven_vs_private_rental")
-matched_other_haven <- perform_matching("treat_other_haven", "other_haven_vs_private_rental")
-
-
+# Perform matching for all treatment definitions
+matched_sets <- list()
+for (treat_var in names(treatment_map)) {
+  output_id <- treatment_map[[treat_var]]
+  matched_sets[[output_id]] <- perform_matching(treat_var, output_id)
+}
 
 # matched_abroad_domestic <- perform_matching("treat_abroad_domestic", "abroad_vs_domestic")
-
-
-
-
 
 message("Matching process completed for both treatment definitions.")
 
