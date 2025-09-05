@@ -63,7 +63,8 @@ message("Defining all treatment variables...")
 source(here::here("scripts", "treatment_definitions.R"))
 EPC_matched_combined <- define_treatments(EPC_matched_combined) 
 ##### Variable Setup ####
-outcome_variable <- "bad_epc"
+EPC_matched_combined[, energy_cons_curr_per_floor_area := ifelse(total_floor_area == 0, NA_real_, energy_consumption_current / total_floor_area)] # Could instead be in script 2?
+outcome_variables <- c("bad_epc", "energy_consumption_current", "energy_cons_curr_per_floor_area")
 
 # Lists of control variables for three specifications
 continuous_controls <- list(
@@ -144,60 +145,69 @@ run_regression_analysis <- function(treatment_variable,
   return(invisible(models_list))
 }
 
-##### ANALYSIS CONFIGURATION #####
-# A list of configurations. Each element contains all necessary metadata to run one full analysis.
 analysis_configs <- list(
-  list(var = "treat_for_profit", file_id = "for_profit_vs_private_rental", title = "Effect of For-Profit Ownership on Likelihood of a Bad EPC", coef_label = "For-Profit"),
-  list(var = "treat_uk_for_profit", file_id = "uk_for_profit_vs_private_rental", title = "Effect of UK For-Profit Ownership on Likelihood of a Bad EPC", coef_label = "UK For-Profit"),
-  list(var = "treat_foreign_for_profit", file_id = "foreign_for_profit_vs_private_rental", title = "Effect of Foreign For-Profit Ownership on Likelihood of a Bad EPC", coef_label = "Foreign For-Profit"),
-  list(var = "treat_tax_haven_for_profit", file_id = "tax_haven_for_profit_vs_private_rental", title = "Effect of Tax Haven For-Profit Ownership on Likelihood of a Bad EPC", coef_label = "Tax Haven For-Profit"),
-  list(var = "treat_non_profit", file_id = "non_profit_vs_private_rental", title = "Effect of Non-Profit Ownership on Likelihood of a Bad EPC", coef_label = "Non-Profit"),
-  list(var = "treat_uk_non_profit", file_id = "uk_non_profit_vs_private_rental", title = "Effect of UK Non-Profit Ownership on Likelihood of a Bad EPC", coef_label = "UK Non-Profit"),
-  list(var = "treat_foreign_non_profit", file_id = "foreign_non_profit_vs_private_rental", title = "Effect of Foreign Non-Profit Ownership on Likelihood of a Bad EPC", coef_label = "Foreign Non-Profit"),
-  list(var = "treat_tax_haven_non_profit", file_id = "tax_haven_non_profit_vs_private_rental", title = "Effect of Tax Haven Non-Profit Ownership on Likelihood of a Bad EPC", coef_label = "Tax Haven Non-Profit"),
-  list(var = "treat_public_sector", file_id = "public_sector_vs_private_rental", title = "Effect of Public Sector Ownership on Likelihood of a Bad EPC", coef_label = "Public Sector"),
-  list(var = "treat_abroad_domestic", file_id = "abroad_vs_domestic", title = "Effect of Abroad vs. Domestic For-Profit Ownership on Likelihood of a Bad EPC", coef_label = "Abroad vs. Domestic"),
-  list(var = "treat_tax_haven", file_id = "tax_haven_vs_private_rental", title = "Effect of Tax Haven Ownership on Likelihood of a Bad EPC", coef_label = "Tax Haven"),
-  list(var = "treat_british_haven", file_id = "british_haven_vs_private_rental", title = "Effect of British Haven Ownership on Likelihood of a Bad EPC", coef_label = "British Haven"),
-  list(var = "treat_european_haven", file_id = "european_haven_vs_private_rental", title = "Effect of European Haven Ownership on Likelihood of a Bad EPC", coef_label = "European Haven"),
-  list(var = "treat_caribbean_haven", file_id = "caribbean_haven_vs_private_rental", title = "Effect of Caribbean Haven Ownership on Likelihood of a Bad EPC", coef_label = "Caribbean Haven"),
-  list(var = "treat_other_haven", file_id = "other_haven_vs_private_rental", title = "Effect of Other Haven Ownership on Likelihood of a Bad EPC", coef_label = "Other Haven")
+  list(var = "treat_for_profit", file_id = "for_profit_vs_private_rental", title = "Effect of For-Profit Ownership", coef_label = "For-Profit"),
+  list(var = "treat_uk_for_profit", file_id = "uk_for_profit_vs_private_rental", title = "Effect of UK For-Profit Ownership", coef_label = "UK For-Profit"),
+  list(var = "treat_foreign_for_profit", file_id = "foreign_for_profit_vs_private_rental", title = "Effect of Foreign For-Profit Ownership", coef_label = "Foreign For-Profit"),
+  list(var = "treat_tax_haven_for_profit", file_id = "tax_haven_for_profit_vs_private_rental", title = "Effect of Tax Haven For-Profit Ownership", coef_label = "Tax Haven For-Profit"),
+  list(var = "treat_non_profit", file_id = "non_profit_vs_private_rental", title = "Effect of Non-Profit Ownership", coef_label = "Non-Profit"),
+  list(var = "treat_uk_non_profit", file_id = "uk_non_profit_vs_private_rental", title = "Effect of UK Non-Profit Ownership", coef_label = "UK Non-Profit"),
+  list(var = "treat_foreign_non_profit", file_id = "foreign_non_profit_vs_private_rental", title = "Effect of Foreign Non-Profit Ownership", coef_label = "Foreign Non-Profit"),
+  list(var = "treat_tax_haven_non_profit", file_id = "tax_haven_non_profit_vs_private_rental", title = "Effect of Tax Haven Non-Profit Ownership", coef_label = "Tax Haven Non-Profit"),
+  list(var = "treat_public_sector", file_id = "public_sector_vs_private_rental", title = "Effect of Public Sector Ownership", coef_label = "Public Sector"),
+  list(var = "treat_abroad_domestic", file_id = "abroad_vs_domestic", title = "Effect of Abroad vs. Domestic For-Profit Ownership", coef_label = "Abroad vs. Domestic"),
+  list(var = "treat_tax_haven", file_id = "tax_haven_vs_private_rental", title = "Effect of Tax Haven Ownership", coef_label = "Tax Haven"),
+  list(var = "treat_british_haven", file_id = "british_haven_vs_private_rental", title = "Effect of British Haven Ownership", coef_label = "British Haven"),
+  list(var = "treat_european_haven", file_id = "european_haven_vs_private_rental", title = "Effect of European Haven Ownership", coef_label = "European Haven"),
+  list(var = "treat_caribbean_haven", file_id = "caribbean_haven_vs_private_rental", title = "Effect of Caribbean Haven Ownership", coef_label = "Caribbean Haven"),
+  list(var = "treat_other_haven", file_id = "other_haven_vs_private_rental", title = "Effect of Other Haven Ownership", coef_label = "Other Haven")
 )
 
-##### EXECUTION LOOP #####
-# Loop through each configuration and run the analysis
-for (config in analysis_configs) {
+for (current_outcome in outcome_variables) {
   
-  message(paste0("\n--- Running analysis for: '", config$var, "' ---"))
+  message(paste0("\n\n====================\nRunning analyses for outcome: '", current_outcome, "'\n===================="))
   
-  # Using try() to ensure that an error in one analysis does not stop the entire script
-  try({
-    # 1. Construct file path for matched data
-    matched_file_path <- file.path(matched_data_dir, paste0("matched_pairs_", config$file_id, "_", CCOD_VERSION, ".RData")) 
-    if (file.exists(matched_file_path)) {
-      # 2. Load and expand the matched data
-      load(matched_file_path) # Loads 'matched_results'
-      matched_expanded_data <- expand_matched_data(matched_results, EPC_matched_combined)
-      rm(matched_results)
-      
-      # 3. Call the main analysis function
-      run_regression_analysis(
-        treatment_variable = config$var,
-        matched_data_list = matched_expanded_data,
-        full_data = EPC_matched_combined,
-        outcome_var = outcome_variable,
-        cont_vars = continuous_controls,
-        exact_vars = exact_controls,
-        coef_label = config$coef_label,
-        table_title = config$title,
-        output_filename = file.path(output_dir, paste0("table_", config$file_id, ".html"))
-      )
-    } else {
-      warning("Matched file not found, skipping analysis for ", config$var, ". Path: ", matched_file_path)
-    }
-  })
+  # Original loop
+  for (config in analysis_configs) {
+    
+    
+    message(paste0("\n--- Running analysis for treatment: '", config$var, "' ---"))
+    
+    # Using try() to ensure that an error in one analysis does not stop the entire script
+    try({
+      # 1. Construct file path for matched data
+      matched_file_path <- file.path(matched_data_dir, paste0("matched_pairs_", config$file_id, "_", CCOD_VERSION, ".RData")) 
+      if (file.exists(matched_file_path)) {
+        # 2. Load and expand the matched data
+        load(matched_file_path) # Loads 'matched_results'
+        matched_expanded_data <- expand_matched_data(matched_results, EPC_matched_combined)
+        rm(matched_results)
+        
+        # 3. Create dynamic title and filename for the report
+        table_title_dynamic <- paste(config$title, "on", current_outcome)
+        output_filename_dynamic <- file.path(output_dir, paste0("table_", config$file_id, "_", current_outcome, ".html"))
+        
+        # 4. Call the main analysis function with the current outcome and dynamic names
+        run_regression_analysis(
+          treatment_variable = config$var,
+          matched_data_list = matched_expanded_data,
+          full_data = EPC_matched_combined,
+          outcome_var = current_outcome, # Use the outcome from the outer loop
+          cont_vars = continuous_controls,
+          exact_vars = exact_controls,
+          coef_label = config$coef_label,
+          table_title = table_title_dynamic, # Use the dynamic title
+          output_filename = output_filename_dynamic # Use the dynamic filename
+        )
+      } else {
+        warning("Matched file not found, skipping analysis for ", config$var, ". Path: ", matched_file_path)
+      }
+    })
+  }
 }
-message("Done")
+
+message("\n\nAll analyses completed for all outcome variables.")
+
 # DIAGNOSTICS: RUNTIME
 end.time <- Sys.time()
 time.taken <- end.time - start.time
