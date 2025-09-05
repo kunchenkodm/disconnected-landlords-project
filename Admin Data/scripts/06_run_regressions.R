@@ -61,7 +61,7 @@ load(input_file)
 ##### TREATMENT DEFINITIONS (from script 05) #####
 message("Defining all treatment variables...")
 source(here::here("scripts", "treatment_definitions.R"))
-define_treatments(EPC_matched_combined)
+EPC_matched_combined <- define_treatments(EPC_matched_combined) 
 ##### Variable Setup ####
 outcome_variable <- "bad_epc"
 

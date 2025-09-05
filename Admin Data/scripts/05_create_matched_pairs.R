@@ -36,7 +36,7 @@ load(input_file)
 ##### TREATMENT DEFINITIONS #####
 message("Defining treatment variables...")
 source(here::here("scripts", "treatment_definitions.R"))
-define_treatments(EPC_matched_combined)
+EPC_matched_combined <- define_treatments(EPC_matched_combined) 
 #### MATCHING PROTOCOL ####
 message("Starting matching process for  treatment definitions...")
 
