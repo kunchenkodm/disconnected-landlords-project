@@ -35,118 +35,8 @@ load(input_file)
 
 ##### TREATMENT DEFINITIONS #####
 message("Defining treatment variables...")
-# Define the common control group
-control_group_condition <- quote(source == "Unknown" & grepl("rental \\(private\\)|Rented \\(private\\)", tenure_2, ignore.case = TRUE))
-
-# Treat 1: For-Profit vs. Privately Rented
-EPC_matched_combined[, treat_for_profit := fcase(
-  !is.na(coarse_proprietorship) & grepl("For-Profit", coarse_proprietorship, ignore.case = TRUE), 1L,
-  eval(control_group_condition), 0L,
-  default = NA_integer_
-)]
-
-# Treat 1a: UK For-Profit vs. Privately Rented
-EPC_matched_combined[, treat_uk_for_profit := fcase(
-  !is.na(coarse_proprietorship) & grepl("For-Profit", coarse_proprietorship, ignore.case = TRUE) & !is.na(country_incorporated_1) & country_incorporated_1 == "UNITED KINGDOM", 1L,
-  eval(control_group_condition), 0L,
-  default = NA_integer_
-)]
-
-# Treat 1b: Foreign For-Profit vs. Privately Rented
-EPC_matched_combined[, treat_foreign_for_profit := fcase(
-  !is.na(coarse_proprietorship) & grepl("For-Profit", coarse_proprietorship, ignore.case = TRUE) & !is.na(country_incorporated_1) & country_incorporated_1 != "UNITED KINGDOM", 1L,
-  eval(control_group_condition), 0L,
-  default = NA_integer_
-)]
-
-# Treat 1c: Tax Haven For-Profit vs. Privately Rented
-EPC_matched_combined[, treat_tax_haven_for_profit := fcase(
-  !is.na(coarse_proprietorship) & grepl("For-Profit", coarse_proprietorship, ignore.case = TRUE) & !is.na(country_incorporated_tax_haven) & country_incorporated_tax_haven == 1, 1L,
-  eval(control_group_condition), 0L,
-  default = NA_integer_
-)]
-
-
-# --- Non-Profit Treatments ---
-# Treat 2: Non-Profit vs. Privately Rented
-EPC_matched_combined[, treat_non_profit := fcase(
-  !is.na(coarse_proprietorship) & grepl("Non-Profit/Community Organisations", coarse_proprietorship, ignore.case = TRUE), 1L,
-  eval(control_group_condition), 0L,
-  default = NA_integer_
-)]
-
-# Treat 2a: UK Non-Profit vs. Privately Rented
-EPC_matched_combined[, treat_uk_non_profit := fcase(
-  !is.na(coarse_proprietorship) & grepl("Non-Profit/Community Organisations", coarse_proprietorship, ignore.case = TRUE) & !is.na(country_incorporated_1) & country_incorporated_1 == "UNITED KINGDOM", 1L,
-  eval(control_group_condition), 0L,
-  default = NA_integer_
-)]
-
-# Treat 2b: Foreign Non-Profit vs. Privately Rented
-EPC_matched_combined[, treat_foreign_non_profit := fcase(
-  !is.na(coarse_proprietorship) & grepl("Non-Profit/Community Organisations", coarse_proprietorship, ignore.case = TRUE) & !is.na(country_incorporated_1) & country_incorporated_1 != "UNITED KINGDOM", 1L,
-  eval(control_group_condition), 0L,
-  default = NA_integer_
-)]
-
-# Treat 2c: Tax Haven Non-Profit vs. Privately Rented
-EPC_matched_combined[, treat_tax_haven_non_profit := fcase(
-  !is.na(coarse_proprietorship) & grepl("Non-Profit/Community Organisations", coarse_proprietorship, ignore.case = TRUE) & !is.na(country_incorporated_tax_haven) & country_incorporated_tax_haven == 1, 1L,
-  eval(control_group_condition), 0L,
-  default = NA_integer_
-)]
-
-# Treat 3: Public Sector vs. Privately Rented
-EPC_matched_combined[, treat_public_sector := fcase(
-  !is.na(coarse_proprietorship) & grepl("Public Sector", coarse_proprietorship, ignore.case = TRUE), 1L,
-  eval(control_group_condition), 0L,
-  default = NA_integer_
-)]
-
-# Treat 99: Abroad vs. Domestic (among For-Profits only)
-EPC_matched_combined[, treat_abroad_domestic := fcase(
-  !is.na(coarse_proprietorship) & grepl("For-Profit", coarse_proprietorship, ignore.case = TRUE) & !is.na(country_incorporated_1) & country_incorporated_1 != "UNITED KINGDOM", 1L,
-  !is.na(coarse_proprietorship) & grepl("For-Profit", coarse_proprietorship, ignore.case = TRUE) & !is.na(country_incorporated_1) & country_incorporated_1 == "UNITED KINGDOM", 0L,
-  default = NA_integer_
-)]
-
-# Tax Haven Treatments:
-# Treat 4: Tax Haven vs Privately Rented
-EPC_matched_combined[, treat_tax_haven := fcase(
-  country_incorporated_tax_haven == 1, 1L,
-  eval(control_group_condition), 0L,
-  default = NA_integer_
-)]
-
-# Treat 5: British Haven vs Privately Rented
-EPC_matched_combined[, treat_british_haven := fcase(
-  country_incorporated_british_haven == 1, 1L,
-  eval(control_group_condition), 0L,
-  default = NA_integer_
-)]
-
-# Treat 6: European Haven vs Privately Rented
-EPC_matched_combined[, treat_european_haven := fcase(
-  country_incorporated_european_haven == 1, 1L,
-  eval(control_group_condition), 0L,
-  default = NA_integer_
-)]
-
-# Treat 7: Caribbean Haven vs Privately Rented
-EPC_matched_combined[, treat_caribbean_haven := fcase(
-  country_incorporated_caribbean_haven == 1, 1L,
-  eval(control_group_condition), 0L,
-  default = NA_integer_
-)]
-
-# Treat 8: Other Haven vs Privately Rented
-EPC_matched_combined[, treat_other_haven := fcase(
-  country_incorporated_other_haven == 1, 1L,
-  eval(control_group_condition), 0L,
-  default = NA_integer_
-)]
-
-
+source(here::here("scripts", "treatment_definitions.R"))
+EPC_matched_combined <- define_treatments(EPC_matched_combined) 
 #### MATCHING PROTOCOL ####
 message("Starting matching process for  treatment definitions...")
 
@@ -226,32 +116,33 @@ perform_matching <- function(treatment_var, treatment_name) {
 }
 
 
-# Perform matching for both treatment definitions
-matched_for_profit <- perform_matching("treat_for_profit", "for_profit_vs_private_rental")
-matched_uk_for_profit <- perform_matching("treat_uk_for_profit", "uk_for_profit_vs_private_rental")
-matched_foreign_for_profit <- perform_matching("treat_foreign_for_profit", "foreign_for_profit_vs_private_rental")
-matched_tax_haven_for_profit <- perform_matching("treat_tax_haven_for_profit", "tax_haven_for_profit_vs_private_rental")
 
-matched_non_profit <- perform_matching("treat_non_profit", "non_profit_vs_private_rental")
-matched_uk_non_profit <- perform_matching("treat_uk_non_profit", "uk_non_profit_vs_private_rental")
-matched_foreign_non_profit <- perform_matching("treat_foreign_non_profit", "foreign_non_profit_vs_private_rental")
-matched_tax_haven_non_profit <- perform_matching("treat_tax_haven_non_profit", "tax_haven_non_profit_vs_private_rental")
+# Mapping of treatment variables to descriptive output identifiers
+treatment_map <- c(
+  treat_for_profit = "for_profit_vs_private_rental",
+  treat_uk_for_profit = "uk_for_profit_vs_private_rental",
+  treat_foreign_for_profit = "foreign_for_profit_vs_private_rental",
+  treat_tax_haven_for_profit = "tax_haven_for_profit_vs_private_rental",
+  treat_non_profit = "non_profit_vs_private_rental",
+  treat_uk_non_profit = "uk_non_profit_vs_private_rental",
+  treat_foreign_non_profit = "foreign_non_profit_vs_private_rental",
+  treat_tax_haven_non_profit = "tax_haven_non_profit_vs_private_rental",
+  treat_public_sector = "public_sector_vs_private_rental",
+  treat_tax_haven = "tax_haven_vs_private_rental",
+  treat_british_haven = "british_haven_vs_private_rental",
+  treat_european_haven = "european_haven_vs_private_rental",
+  treat_caribbean_haven = "caribbean_haven_vs_private_rental",
+  treat_other_haven = "other_haven_vs_private_rental"
+)
 
-matched_public <- perform_matching("treat_public_sector", "public_sector_vs_private_rental")
-
-matched_tax_haven <- perform_matching("treat_tax_haven", "tax_haven_vs_private_rental")
-matched_british_haven <- perform_matching("treat_british_haven", "british_haven_vs_private_rental")
-matched_european_haven <- perform_matching("treat_european_haven", "european_haven_vs_private_rental")
-matched_caribbean_haven <- perform_matching("treat_caribbean_haven", "caribbean_haven_vs_private_rental")
-matched_other_haven <- perform_matching("treat_other_haven", "other_haven_vs_private_rental")
-
-
+# Perform matching for all treatment definitions
+matched_sets <- list()
+for (treat_var in names(treatment_map)) {
+  output_id <- treatment_map[[treat_var]]
+  matched_sets[[output_id]] <- perform_matching(treat_var, output_id)
+}
 
 # matched_abroad_domestic <- perform_matching("treat_abroad_domestic", "abroad_vs_domestic")
-
-
-
-
 
 message("Matching process completed for both treatment definitions.")
 
