@@ -64,7 +64,7 @@ source(here::here("scripts", "treatment_definitions.R"))
 EPC_matched_combined <- define_treatments(EPC_matched_combined) 
 ##### Variable Setup ####
 EPC_matched_combined[, energy_cons_curr_per_floor_area := ifelse(total_floor_area == 0, NA_real_, energy_consumption_current / total_floor_area)] # Could instead be in script 2?
-outcome_variables <- c("bad_epc", "energy_consumption_current", "energy_cons_curr_per_floor_area")
+outcome_variables <- c("bad_epc", "energy_consumption_current", "energy_cons_curr_per_floor_area", "el_mean_consumption_k_wh", "gas_mean_consumption_k_wh")
 
 # Lists of control variables for three specifications
 continuous_controls <- list(

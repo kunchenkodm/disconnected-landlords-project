@@ -18,6 +18,12 @@ ccod_version <- CCOD_VERSION
 input_dir <- PROCESSED_DATA_DIR
 output_dir <- PROCESSED_DATA_DIR
 
+la_reg_file <- file.path(RAW_LOOKUPS_DIR, "Local_Authority_District_(December_2018)_to_NUTS3_to_NUTS2_to_NUTS1_(January_2018)_Lookup_in_United_Kingdom.csv")
+ppd_file <- file.path(RAW_DATA_DIR, "ppd_uprn.rdata")
+
+electricity_file <- file.path(RAW_POSTCODE_DIR, "el_postcode.rdata")
+gas_file <- file.path(RAW_POSTCODE_DIR, "gas_postcode.rdata")
+
 
 # Input file from data merging pipeline script
 input_file <- file.path(input_dir, paste0("epc_matched_combined_", CCOD_VERSION, ".RData"))
@@ -42,7 +48,6 @@ EPC_matched_combined$uprn <- as.character(EPC_matched_combined$uprn)
 
 #### LOAD AND MERGE PPD DATASET ####
 # Load PPD dataset
-ppd_file <- file.path(RAW_DATA_DIR, "ppd_uprn.rdata")
 
 if (!file.exists(ppd_file)) {
   stop("PPD dataset file does not exist: ", ppd_file)
@@ -112,7 +117,6 @@ rm(voa_uprn, voa_dedup)
 
 #### LOAD AND MERGE LA-Region lookup DATASET ####
 # Load LA-Region lookup dataset
-la_reg_file <- file.path(RAW_LOOKUPS_DIR, "Local_Authority_District_(December_2018)_to_NUTS3_to_NUTS2_to_NUTS1_(January_2018)_Lookup_in_United_Kingdom.csv")
 
 if (!file.exists(la_reg_file)) {
   stop("LA-Region lookup file does not exist: ", la_reg_file)
@@ -123,6 +127,54 @@ la_region$local_authority <- la_region$LAD18CD
 
 # Merge with EPC_matched_combined
 EPC_matched_combined <- merge(EPC_matched_combined, la_region, all.x = TRUE, by = "local_authority")
+
+
+
+#### LOAD AND MERGE POSTCODE-LEVEL ENERGY CONSUMPTION DATASET ####
+# Load Electricity dataset
+if (!file.exists(electricity_file)) {
+  stop("Postcode level electricity dataset does not exist: ", electricity_file)
+}
+message("Loading postcode level electricity dataset from ", electricity_file)
+load(electricity_file)
+
+setDT(el_postcode)
+setnames(el_postcode, "postcode", "postcode_2")
+
+# "De-duplicate" the dataset by focusing on 2020 energy consumption. Could potentially convert to wide format w/ variables for consumption in 2020, 2017, etc.
+el_postcode <- el_postcode[year == "2020"]
+el_postcode <- el_postcode[,year := NULL]
+
+setkey(EPC_matched_combined, postcode_2)
+
+EPC_matched_combined <- merge(EPC_matched_combined, el_postcode)
+
+rm(el_postcode)
+
+
+
+
+#### LOAD AND MERGE POSTCODE-LEVEL ENERGY CONSUMPTION DATASET ####
+# Load Gas dataset
+if (!file.exists(gas_file)) {
+  stop("Postcode level gas dataset does not exist: ", gas_file)
+}
+message("Loading postcode level electricity dataset from ", gas_file)
+load(gas_file)
+
+setDT(gas_postcode)
+setnames(gas_postcode, "postcode", "postcode_2")
+
+# "De-duplicate" the dataset by focusing on 2020 energy consumption. Could potentially convert to wide format w/ variables for consumption in 2020, 2017, etc.
+gas_postcode <- gas_postcode[year == "2020"]
+gas_postcode <- gas_postcode[,year := NULL]
+
+setkey(EPC_matched_combined, postcode_2)
+
+EPC_matched_combined <- merge(EPC_matched_combined,gas_postcode)
+
+rm(gas_postcode)
+
 
 
 

@@ -27,6 +27,7 @@ RAW_ADMIN_DIR     <- here::here("data", "raw", "admin")
 RAW_EPC_DIR       <- here::here("data", "raw", "epc")
 RAW_LR_DIR        <- here::here("data", "raw", "land_registry")
 RAW_LOOKUPS_DIR   <- here::here("data", "raw", "lookups")
+RAW_POSTCODE_DIR  <- here::here("data", "raw", "postcode_level")
 
 # --- 4. CREATE DIRECTORIES ---
 # Ensure all output directories exist
