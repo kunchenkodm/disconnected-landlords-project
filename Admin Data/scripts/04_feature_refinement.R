@@ -43,6 +43,146 @@ EPC_matched_combined[!is.na(windows_energy_eff), windows_energy_eff_dum := as.nu
 # Normalize multi_glaze_proportion by dividing by 100 (as seen in analysis scripts)
 EPC_matched_combined[, multi_glaze_proportion := multi_glaze_proportion / 100]
 
+# Generate (restore) variable for the current and potential energy consumption of the entire property
+EPC_matched_combined[, energy_consumption_current_property   := energy_consumption_current   * total_floor_area]
+EPC_matched_combined[, energy_consumption_potential_property := energy_consumption_potential * total_floor_area]
+
+# Generate variable for the gap between potential and current energy consumption
+EPC_matched_combined[, energy_consumption_gap   := energy_consumption_potential - energy_consumption_current]
+EPC_matched_combined[, energy_consumption_gap_property   := energy_consumption_potential_property - energy_consumption_current_property]
+
+# Generate variable for the gap between potential and current energy efficiency
+# Memo: [energy_efficiency] = (£/m²/year where cost is derived from kWh)
+EPC_matched_combined[, energy_efficiency_potential_gap  := potential_energy_efficiency - current_energy_efficiency]
+
+# Generate variable for the gap between current energy efficiency and borderline for EPC < C (<=68 numeric)
+EPC_matched_combined[, energy_efficiency_bad_epc_gap  := current_energy_efficiency - 68]
+
+# Generate variable for the gap between current energy efficiency and borderline for next worst EPC rating
+EPC_matched_combined[, energy_efficiency_worse_epc_gap := fcase(
+  is.na(current_energy_efficiency), NA_real_, # Handle NA values first
+  current_energy_efficiency >= 92, current_energy_efficiency - 91, # A -> B
+  current_energy_efficiency >= 81, current_energy_efficiency - 80, # B -> C
+  current_energy_efficiency >= 69, current_energy_efficiency - 68, # C -> D
+  current_energy_efficiency >= 55, current_energy_efficiency - 54, # D -> E
+  current_energy_efficiency >= 39, current_energy_efficiency - 38, # E -> F
+  current_energy_efficiency >= 21, current_energy_efficiency - 20, # F -> G
+  default = 0 # For band G, there is no worse band
+)]
+
+# Generate variable for having a borderline good EPC
+# sd = 11.83, 0.5 sd caliper
+global_sd <- sd(EPC_matched_combined$current_energy_efficiency, na.rm = TRUE)
+global_half_sd <- 0.5 * global_sd   # caliper width
+
+# Flag: borderline around cutoff at 69
+EPC_matched_combined[, borderline_good_epc := fcase(
+  current_energy_efficiency > 69 & 
+    current_energy_efficiency <= 69 + global_half_sd, 1,
+  
+  is.na(current_energy_efficiency), NA_real_,
+  default = 0
+)]
+
+
+# # Generate variable for having a borderline better EPC (0.5 band SD of lower + higher EPC above borderline)
+# # Compute within-band SDs of the gap variable
+# band_sds <- EPC_matched_combined[, .(
+#   sd_gap = sd(energy_efficiency_worse_epc_gap, na.rm = TRUE)
+# ), by = current_energy_rating]
+# 
+# # EPC cutoffs table
+# epc_cutoffs <- data.table(
+#   current_energy_rating = c("A", "B", "C", "D", "E", "F", "G"),
+#   lower_cutoff = c(92, 81, 69, 55, 39, 21, 0),
+#   upper_cutoff = c(100, 91, 80, 68, 54, 38, 20)
+# )
+# 
+# # Merge SDs + cutoffs
+# epc_info <- merge(epc_cutoffs, band_sds, by = "current_energy_rating", all.x = TRUE)
+# 
+# # Compute half-SDs (capped at 5 for stability)
+# epc_info[, half_sd := pmin(0.5 * sd_gap, 5)]
+# 
+# # Merge into main dataset
+# EPC_matched_combined <- merge(
+#   EPC_matched_combined,
+#   epc_info,
+#   by = "current_energy_rating",
+#   all.x = TRUE
+# )
+# 
+# # Band-specific borderline flag
+# EPC_matched_combined[, borderline_better_epc := fcase(
+#   current_energy_efficiency > lower_cutoff & 
+#     current_energy_efficiency <= lower_cutoff + half_sd, 1,
+#   
+#   is.na(current_energy_efficiency), NA_real_,
+#   default = 0
+# )]
+# EPC_matched_combined[, c("lower_cutoff", "half_sd") := NULL]
+# rm(global_sd, global_half_sd, band_sds, epc_cutoffs, epc_info)
+
+band_sds <- EPC_matched_combined[, .(
+  sd_gap = sd(energy_efficiency_worse_epc_gap, na.rm = TRUE),
+  n = .N
+), by = current_energy_rating]
+
+# EPC cutoffs
+epc_cutoffs <- data.table(
+  current_energy_rating = c("A", "B", "C", "D", "E", "F", "G"),
+  lower_cutoff = c(92, 81, 69, 55, 39, 21, 0),
+  upper_cutoff = c(100, 91, 80, 68, 54, 38, 20)
+)
+
+# Merge SDs + cutoffs
+epc_info <- merge(epc_cutoffs, band_sds, by = "current_energy_rating", all.x = TRUE)
+
+# Compute pooled SDs for adjacent bands
+# function for pooled SD
+pooled_sd <- function(sd1, n1, sd2, n2) {
+  sqrt(((n1 - 1) * sd1^2 + (n2 - 1) * sd2^2) / (n1 + n2 - 2))
+}
+
+# create a column with pooled SD of current band + worse band
+setorder(epc_info, -lower_cutoff)  # ensure A → G order
+epc_info[, pooled_sd := fifelse(
+  current_energy_rating != "G",
+  pooled_sd(sd_gap, n, shift(sd_gap, type = "lead"), shift(n, type = "lead")),
+  NA_real_
+)]
+
+# Half SD caliper (capped at the global half sd)
+epc_info[, half_sd := pmin(0.5 * pooled_sd, global_half_sd)]
+
+# Print diagnostics
+print(epc_info[, .(current_energy_rating, pooled_sd, half_sd)])
+
+# Merge into main dataset
+EPC_matched_combined <- merge(
+  EPC_matched_combined,
+  epc_info[, .(current_energy_rating, lower_cutoff, half_sd)],
+  by = "current_energy_rating",
+  all.x = TRUE
+)
+
+# Create borderline dummy
+EPC_matched_combined[, borderline_better_epc := fcase(
+  current_energy_efficiency > lower_cutoff &
+    current_energy_efficiency <= lower_cutoff + half_sd, 1,
+  
+  is.na(current_energy_efficiency), NA_real_,
+  default = 0
+)]
+
+# Clean up helper columns and objects ---
+EPC_matched_combined[, c("lower_cutoff", "half_sd") := NULL]
+rm(band_sds, epc_cutoffs, epc_info, pooled_sd)
+
+
+
+
+
 # Ensure matching variables are formatted correctly
 # These variables are used in matching scripts like '03 create matched pairs.R'
 # No additional transformation needed for most as they are already in the dataset

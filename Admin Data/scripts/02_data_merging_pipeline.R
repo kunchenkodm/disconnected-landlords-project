@@ -207,8 +207,6 @@ setkey(EPC_matched_combined, BUILDING_REFERENCE_NUMBER)
 EPC_matched_combined[, bad_EPC := CURRENT_ENERGY_RATING %in% c("D", "E", "F", "G")]
 EPC_matched_combined[, good_EPC := CURRENT_ENERGY_RATING %in% c("A", "B", "C")]
 
-# EPC_matched_combined[, energy_cons_curr_per_floor_area := ifelse(total_floor_area == 0, NA_real_, energy_consumption_current / total_floor_area)] 
-# # This is done in script 06_run_regressions for now, but probably should be done here
 
 
 EPC_matched_combined[is.na(source), source := "Unknown"]
