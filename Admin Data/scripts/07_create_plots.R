@@ -117,6 +117,6 @@ density_plot <- ggplot(EPC_matched_combined, aes(current_energy_efficiency)) +
 
 density_plot
 density_output_file <- file.path(output_dir, "energy_efficiency_density_plot.png")
-ggsave(filename = density_output_file, plot = density_plot, width = 10, height = 10, dpi = 300)
+ggsave(filename = density_output_file, plot = density_plot, width = 15, height = 10, dpi = 300)
 
 
