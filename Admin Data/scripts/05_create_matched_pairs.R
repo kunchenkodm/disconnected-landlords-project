@@ -39,81 +39,13 @@ source(here::here("scripts", "treatment_definitions.R"))
 EPC_matched_combined <- define_treatments(EPC_matched_combined) 
 #### MATCHING PROTOCOL ####
 message("Starting matching process for  treatment definitions...")
-
-# Set seed for reproducibility
-set.seed(20230703)
-
-# Matching will be done with exact matching by local_authority
-# Following the protocol in '03 create matched pairs.R', create three sets of matched pairs for each treatment
-# with varying matching variables: property level features, council tax band, and property price data
-
-# Function to perform matching and save results
-perform_matching <- function(treatment_var, treatment_name) {
-  message("Performing matching for ", treatment_name)
-  
-  
-  dat <- EPC_matched_combined[!is.na(get(treatment_var))]
-  
-  # 2. From this set, remove rows with NAs in ANY of the covariates used in the first matching step.
-  base_matching_vars <- c(treatment_var, "number_habitable_rooms", "total_floor_area", "lodgement_year", 
-                          "property_type", "main_fuel", "construction_age_band", 
-                          "built_form", "local_authority")
-  dat <- na.omit(dat, cols = base_matching_vars)
-  
-  # # Prepare dataset by removing rows with NA in key matching variables
-  # dat <- na.omit(EPC_matched_combined, cols = c(treatment_var, "number_habitable_rooms", "total_floor_area", "lodgement_year", "property_type", "main_fuel", "construction_age_band", "built_form", "local_authority"))
-  # # Corrected line
-  # # Keep only rows where the treatment is defined (0 or 1)
-
-    # dat <- EPC_matched_combined[!is.na(get(treatment_var))]
-  dat[, rand_sort := runif(nrow(dat))]
-  dat <- dat[order(rand_sort)]
-
-  # Initialize results list
-  matched_results <- list()
-  # First matching set: Property level features
-  if (nrow(dat[get(treatment_var) == 1]) > 10 & nrow(dat[get(treatment_var) == 0]) > 50) {
-    matched_chars1 <- match.data(matchit(as.formula(paste0(treatment_var, " ~ number_habitable_rooms + total_floor_area + lodgement_year")),
-                                         data = dat,
-                                         exact = ~property_type + main_fuel + construction_age_band + built_form + local_authority,
-                                         method = "nearest",
-                                         distance = "glm"))
-    matched_results[[1]] <- matched_chars1[, list(local_authority, uprn, distance, weights, subclass)]
-  }
-
-  # Second matching set: Add council tax band information if available
-  dat_tax <- na.omit(dat, "tax_band")
-  if (nrow(dat_tax[get(treatment_var) == 1]) > 5 & nrow(dat_tax[get(treatment_var) == 0]) > 25) {
-    matched_chars2 <- match.data(matchit(as.formula(paste0(treatment_var, " ~ number_habitable_rooms + total_floor_area + lodgement_year")),
-                                         data = dat_tax,
-                                         exact = ~property_type + main_fuel + tax_band + construction_age_band + built_form + local_authority,
-                                         method = "nearest",
-                                         distance = "glm"))
-    matched_results[[2]] <- matched_chars2[, list(local_authority, uprn, distance, weights, subclass)]
-  }
-
-  # Third matching set: Add property price data if available
-  price_vars <- c("tax_band", "ppd_price_sqm", "ppd_year_transfer")
-  dat_price <- na.omit(dat, cols = price_vars)
-  dat_price <- dat_price[!is.infinite(ppd_price_sqm)]
-  # dat_price <- dat[!is.na(tax_band) & !is.na(ppd_price_sqm) & !is.na(ppd_year_transfer) & !is.infinite(ppd_price_sqm)]
-  if (nrow(dat_price[get(treatment_var) == 1]) > 5) {
-    matched_chars3 <- match.data(matchit(as.formula(paste0(treatment_var, " ~ number_habitable_rooms + total_floor_area + lodgement_year + ppd_price_sqm")),
-                                         data = dat_price,
-                                         exact = ~property_type + main_fuel + tax_band + ppd_year_transfer + construction_age_band + built_form + local_authority,
-                                         method = "nearest",
-                                         distance = "glm"))
-    matched_results[[3]] <- matched_chars3[, list(local_authority, uprn, distance, weights, subclass)]
-  }
-
-  # Save results
-  output_file <- file.path(output_dir, paste0("matched_pairs_", treatment_name, "_", ccod_version, ".RData"))
-  save(matched_results, file = output_file)
-  message("Matched pairs for ", treatment_name, " saved to ", output_file)
-
-  return(matched_results)
-
-}
+# Define core filters
+core_filters <- list(
+  base = quote(rep(TRUE, .N)),
+  council_tax = quote(!is.na(tax_band)),
+  ppd = quote(!is.na(ppd_price_sqm)),
+  ppd_counciltax = quote(!is.na(tax_band) & !is.na(ppd_price_sqm))
+)
 
 
 
@@ -135,14 +67,81 @@ treatment_map <- c(
   treat_other_haven = "other_haven_vs_private_rental"
 )
 
-# Perform matching for all treatment definitions
-matched_sets <- list()
-for (treat_var in names(treatment_map)) {
-  output_id <- treatment_map[[treat_var]]
-  matched_sets[[output_id]] <- perform_matching(treat_var, output_id)
+# Set seed for reproducibility
+set.seed(20230703)
+
+# Matching will be done with exact matching by local_authority
+# Following the protocol in '03 create matched pairs.R', create three sets of matched pairs for each treatment
+# with varying matching variables: property level features, council tax band, and property price data
+
+# Function to perform matching and save results
+perform_matching <- function(treatment_var, treatment_name, core_name, core_data) {
+  message("Performing matching for ", treatment_name, " in core: ", core_name)
+  dat <- core_data[!is.na(get(treatment_var))]
+  base_matching_vars <- c(treatment_var, "number_habitable_rooms", "total_floor_area", "lodgement_year",
+                          "property_type", "main_fuel", "construction_age_band",
+                          "built_form", "local_authority")
+  dat <- na.omit(dat, cols = base_matching_vars)
+  dat[, rand_sort := runif(nrow(dat))]
+  dat <- dat[order(rand_sort)]
+  matched_results <- list()
+  
+  # First set: property features
+  if (nrow(dat[get(treatment_var) == 1]) > 10 & nrow(dat[get(treatment_var) == 0]) > 50) {
+    matched_chars1 <- match.data(matchit(
+      as.formula(paste0(treatment_var, " ~ number_habitable_rooms + total_floor_area + lodgement_year")),
+      data = dat,
+      exact = ~property_type + main_fuel + construction_age_band + built_form + local_authority,
+      method = "nearest",
+      distance = "glm"
+    ))
+    matched_results[[1]] <- matched_chars1[, list(local_authority, uprn, distance, weights, subclass)]
+  }
+  # Second set: add council tax
+  dat_tax <- na.omit(dat, "tax_band")
+  if (nrow(dat_tax[get(treatment_var) == 1]) > 5 & nrow(dat_tax[get(treatment_var) == 0]) > 25) {
+    matched_chars2 <- match.data(matchit(
+      as.formula(paste0(treatment_var, " ~ number_habitable_rooms + total_floor_area + lodgement_year")),
+      data = dat_tax,
+      exact = ~property_type + main_fuel + tax_band + construction_age_band + built_form + local_authority,
+      method = "nearest",
+      distance = "glm"
+    ))
+    matched_results[[2]] <- matched_chars2[, list(local_authority, uprn, distance, weights, subclass)]
+  }
+  # Third set: add price data
+  price_vars <- c("tax_band", "ppd_price_sqm", "ppd_year_transfer")
+  dat_price <- na.omit(dat, cols = price_vars)
+  dat_price <- dat_price[!is.infinite(ppd_price_sqm)]
+  if (nrow(dat_price[get(treatment_var) == 1]) > 5) {
+    matched_chars3 <- match.data(matchit(
+      as.formula(paste0(treatment_var, " ~ number_habitable_rooms + total_floor_area + lodgement_year + ppd_price_sqm")),
+      data = dat_price,
+      exact = ~property_type + main_fuel + tax_band + ppd_year_transfer + construction_age_band + built_form + local_authority,
+      method = "nearest",
+      distance = "glm"
+    ))
+    matched_results[[3]] <- matched_chars3[, list(local_authority, uprn, distance, weights, subclass)]
+  }
+  
+  # Output includes core name
+  output_file <- file.path(output_dir, paste0("matched_pairs_", treatment_name, "_", core_name, "_", ccod_version, ".RData"))
+  save(matched_results, file = output_file)
+  message("Matched pairs for ", treatment_name, " core ", core_name, " saved to ", output_file)
+  return(matched_results)
 }
 
-# matched_abroad_domestic <- perform_matching("treat_abroad_domestic", "abroad_vs_domestic")
+# Run matching for all treatments and all cores
+for (core_name in names(core_filters)) {
+  core_filter <- core_filters[[core_name]]
+  core_data <- EPC_matched_combined[eval(core_filter)]
+  message("Matching for core: ", core_name, " (", nrow(core_data), " rows)")
+  for (treat_var in names(treatment_map)) {
+    treatment_name <- treatment_map[[treat_var]]
+    perform_matching(treat_var, treatment_name, core_name, core_data)
+  }
+}
+
 
 message("Matching process completed for both treatment definitions.")
 
