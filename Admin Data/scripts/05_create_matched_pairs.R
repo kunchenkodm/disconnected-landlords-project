@@ -39,12 +39,31 @@ source(here::here("scripts", "treatment_definitions.R"))
 EPC_matched_combined <- define_treatments(EPC_matched_combined) 
 #### MATCHING PROTOCOL ####
 message("Starting matching process for  treatment definitions...")
-# Define core filters
-core_filters <- list(
+# Define matching core filters
+matching_core_filters <- list(
   base = quote(rep(TRUE, .N)),
   council_tax = quote(!is.na(tax_band)),
   ppd = quote(!is.na(ppd_price_sqm)),
   ppd_counciltax = quote(!is.na(tax_band) & !is.na(ppd_price_sqm))
+)
+
+# Define specification configurations
+spec_configs <- list(
+  list(
+    name = "Baseline",
+    continuous_vars = c("number_habitable_rooms", "total_floor_area", "lodgement_year"),
+    exact_vars = c("property_type", "main_fuel", "construction_age_band", "built_form", "local_authority")
+  ),
+  list(
+    name = "Council Tax", 
+    continuous_vars = c("number_habitable_rooms", "total_floor_area", "lodgement_year"),
+    exact_vars = c("property_type", "main_fuel", "tax_band", "construction_age_band", "built_form", "local_authority")
+  ),
+  list(
+    name = "Council Tax + Price Paid",
+    continuous_vars = c("number_habitable_rooms", "total_floor_area", "lodgement_year", "ppd_price_sqm"),
+    exact_vars = c("property_type", "main_fuel", "tax_band", "ppd_year_transfer", "construction_age_band", "built_form", "local_authority")
+  )
 )
 
 
@@ -75,8 +94,8 @@ set.seed(20230703)
 # with varying matching variables: property level features, council tax band, and property price data
 
 # Function to perform matching and save results
-perform_matching <- function(treatment_var, treatment_name, core_name, core_data) {
-  message("Performing matching for ", treatment_name, " in core: ", core_name)
+perform_matching <- function(treatment_var, treatment_name, matching_core, core_data) {
+  message("Performing matching for ", treatment_name, " in matching core: ", matching_core)
   dat <- core_data[!is.na(get(treatment_var))]
   base_matching_vars <- c(treatment_var, "number_habitable_rooms", "total_floor_area", "lodgement_year",
                           "property_type", "main_fuel", "construction_age_band",
@@ -86,59 +105,65 @@ perform_matching <- function(treatment_var, treatment_name, core_name, core_data
   dat <- dat[order(rand_sort)]
   matched_results <- list()
   
-  # First set: property features
-  if (nrow(dat[get(treatment_var) == 1]) > 10 & nrow(dat[get(treatment_var) == 0]) > 50) {
-    matched_chars1 <- match.data(matchit(
-      as.formula(paste0(treatment_var, " ~ number_habitable_rooms + total_floor_area + lodgement_year")),
-      data = dat,
-      exact = ~property_type + main_fuel + construction_age_band + built_form + local_authority,
-      method = "nearest",
-      distance = "glm"
-    ))
-    matched_results[[1]] <- matched_chars1[, list(local_authority, uprn, distance, weights, subclass)]
-  }
-  # Second set: add council tax
-  dat_tax <- na.omit(dat, "tax_band")
-  if (nrow(dat_tax[get(treatment_var) == 1]) > 5 & nrow(dat_tax[get(treatment_var) == 0]) > 25) {
-    matched_chars2 <- match.data(matchit(
-      as.formula(paste0(treatment_var, " ~ number_habitable_rooms + total_floor_area + lodgement_year")),
-      data = dat_tax,
-      exact = ~property_type + main_fuel + tax_band + construction_age_band + built_form + local_authority,
-      method = "nearest",
-      distance = "glm"
-    ))
-    matched_results[[2]] <- matched_chars2[, list(local_authority, uprn, distance, weights, subclass)]
-  }
-  # Third set: add price data
-  price_vars <- c("tax_band", "ppd_price_sqm", "ppd_year_transfer")
-  dat_price <- na.omit(dat, cols = price_vars)
-  dat_price <- dat_price[!is.infinite(ppd_price_sqm)]
-  if (nrow(dat_price[get(treatment_var) == 1]) > 5) {
-    matched_chars3 <- match.data(matchit(
-      as.formula(paste0(treatment_var, " ~ number_habitable_rooms + total_floor_area + lodgement_year + ppd_price_sqm")),
-      data = dat_price,
-      exact = ~property_type + main_fuel + tax_band + ppd_year_transfer + construction_age_band + built_form + local_authority,
-      method = "nearest",
-      distance = "glm"
-    ))
-    matched_results[[3]] <- matched_chars3[, list(local_authority, uprn, distance, weights, subclass)]
+  # Use spec_configs instead of hardcoded indices
+  for (i in seq_along(spec_configs)) {
+    spec_config <- spec_configs[[i]]
+    
+    # Apply spec-specific data filtering
+    required_vars <- unique(c(base_matching_vars, spec_config$continuous_vars, spec_config$exact_vars))
+    dat_spec <- na.omit(dat, cols = required_vars)
+    
+    # Remove infinite values if ppd_price_sqm is included
+    if ("ppd_price_sqm" %in% spec_config$continuous_vars) {
+      dat_spec <- dat_spec[!is.infinite(ppd_price_sqm)]
+    }
+    
+    # Check minimum sample sizes
+    min_treated <- if ("ppd_price_sqm" %in% spec_config$continuous_vars) 5 else 
+      if ("tax_band" %in% spec_config$exact_vars) 5 else 10
+    min_control <- if ("ppd_price_sqm" %in% spec_config$continuous_vars) 25 else
+      if ("tax_band" %in% spec_config$exact_vars) 25 else 50
+    
+    if (nrow(dat_spec[get(treatment_var) == 1]) > min_treated & 
+        nrow(dat_spec[get(treatment_var) == 0]) > min_control) {
+      
+      # Build formula dynamically
+      continuous_formula <- paste(spec_config$continuous_vars, collapse = " + ")
+      exact_formula <- paste(spec_config$exact_vars, collapse = " + ")
+      
+      matched_chars <- match.data(matchit(
+        as.formula(paste0(treatment_var, " ~ ", continuous_formula)),
+        data = dat_spec,
+        exact = as.formula(paste0("~ ", exact_formula)),
+        method = "nearest",
+        distance = "glm"
+      ))
+      matched_results[[i]] <- matched_chars[, list(local_authority, uprn, distance, weights, subclass)]
+    }
   }
   
-  # Output includes core name
-  output_file <- file.path(output_dir, paste0("matched_pairs_", treatment_name, "_", core_name, "_", ccod_version, ".RData"))
-  save(matched_results, file = output_file)
-  message("Matched pairs for ", treatment_name, " core ", core_name, " saved to ", output_file)
+  # Store matching core information in saved file
+  matching_core_metadata <- list(
+    matching_core_name = matching_core,
+    matching_core_filter_expression = matching_core_filters[[matching_core]],
+    timestamp = Sys.time()
+  )
+  
+  # Output includes matching core name
+  output_file <- file.path(output_dir, paste0("matched_pairs_", treatment_name, "_matching_core_", matching_core, "_", ccod_version, ".RData"))
+  save(matched_results, matching_core_metadata, file = output_file)
+  message("Matched pairs for ", treatment_name, " matching core ", matching_core, " saved to ", output_file)
   return(matched_results)
 }
 
-# Run matching for all treatments and all cores
-for (core_name in names(core_filters)) {
-  core_filter <- core_filters[[core_name]]
-  core_data <- EPC_matched_combined[eval(core_filter)]
-  message("Matching for core: ", core_name, " (", nrow(core_data), " rows)")
+# Run matching for all treatments and all matching cores
+for (matching_core in names(matching_core_filters)) {
+  matching_core_filter <- matching_core_filters[[matching_core]]
+  core_data <- EPC_matched_combined[eval(matching_core_filter)]
+  message("Matching for matching core: ", matching_core, " (", nrow(core_data), " rows)")
   for (treat_var in names(treatment_map)) {
     treatment_name <- treatment_map[[treat_var]]
-    perform_matching(treat_var, treatment_name, core_name, core_data)
+    perform_matching(treat_var, treatment_name, matching_core, core_data)
   }
 }
 
