@@ -16,29 +16,20 @@ matched_data_dir <- MATCHED_DATA_DIR
 summary_dir <- file.path(getwd(), "output", "summary_tables")
 if (!dir.exists(summary_dir)) dir.create(summary_dir, recursive = TRUE)
 
-# Define core filters with hierarchy levels
+# Define core filters
 matching_core_filters <- list(
-  base = list(filter = quote(rep(TRUE, .N)), level = 1),
-  council_tax = list(filter = quote(!is.na(tax_band)), level = 2),
-  ppd = list(filter = quote(!is.na(ppd_price_sqm)), level = 2),
-  ppd_counciltax = list(filter = quote(!is.na(tax_band) & !is.na(ppd_price_sqm)), level = 3)
+  base = quote(rep(TRUE, .N)),
+  council_tax = quote(!is.na(tax_band)),
+  ppd = quote(!is.na(ppd_price_sqm)),
+  ppd_counciltax = quote(!is.na(tax_band) & !is.na(ppd_price_sqm))
 )
 
 regression_core_filters <- list(
-  base = list(filter = quote(rep(TRUE, .N)), level = 1),
-  council_tax = list(filter = quote(!is.na(tax_band)), level = 2),
-  ppd = list(filter = quote(!is.na(ppd_price_sqm)), level = 2),
-  ppd_counciltax = list(filter = quote(!is.na(tax_band) & !is.na(ppd_price_sqm)), level = 3)
+  base = quote(rep(TRUE, .N)),
+  council_tax = quote(!is.na(tax_band)),
+  ppd = quote(!is.na(ppd_price_sqm)),
+  ppd_counciltax = quote(!is.na(tax_band) & !is.na(ppd_price_sqm))
 )
-
-# Function to check if regression core is compatible with matching core
-is_valid_core_combination <- function(matching_core, regression_core) {
-  matching_level <- matching_core_filters[[matching_core]]$level
-  regression_level <- regression_core_filters[[regression_core]]$level
-  
-  # Only allow regression core if it's at same level or narrower (higher level)
-  return(regression_level >= matching_level)
-}
 
 # Define specification configurations
 spec_configs <- list(
@@ -58,6 +49,9 @@ spec_configs <- list(
     exact_vars = c("property_type", "main_fuel", "tax_band", "ppd_year_transfer", "construction_age_band", "built_form", "local_authority")
   )
 )
+
+
+
 
 expand_matched_data <- function(matched_list, full_data) {
   lapply(matched_list, function(matched_dt) {
@@ -91,20 +85,45 @@ build_formula <- function(outcome, treatment_var, continuous_vars, exact_vars, m
 }
 
 get_matching_core_filter <- function(matching_core) {
-  filter_obj <- matching_core_filters[[matching_core]]
-  if (is.null(filter_obj)) {
-    stop("Unknown matching core: ", matching_core)
-  }
-  return(filter_obj$filter)
+  switch(matching_core,
+         base = quote(rep(TRUE, .N)),
+         council_tax = quote(!is.na(tax_band)),
+         ppd = quote(!is.na(ppd_price_sqm)),
+         ppd_counciltax = quote(!is.na(tax_band) & !is.na(ppd_price_sqm)),
+         stop("Unknown matching core: ", matching_core)
+  )
 }
 
 get_regression_core_filter <- function(regression_core) {
-  filter_obj <- regression_core_filters[[regression_core]]
-  if (is.null(filter_obj)) {
-    stop("Unknown regression core: ", regression_core)
-  }
-  return(filter_obj$filter)
+  switch(regression_core,
+         base = quote(rep(TRUE, .N)),
+         council_tax = quote(!is.na(tax_band)),
+         ppd = quote(!is.na(ppd_price_sqm)),
+         ppd_counciltax = quote(!is.na(tax_band) & !is.na(ppd_price_sqm)),
+         stop("Unknown regression core: ", regression_core)
+  )
 }
+
+# Function to count treated and control observations in regressions
+get_simple_counts <- function(data, treat_var, outcome, continuous_vars, exact_vars) {
+  # Create a copy to work with
+  dt <- data
+  
+  # Identify all variables needed for the regression
+  all_vars <- unique(c(outcome, treat_var, continuous_vars, exact_vars))
+  all_vars <- all_vars[all_vars != ""]
+  
+  # Filter to complete cases for all variables used in the model
+  complete_cases <- complete.cases(dt[, ..all_vars])
+  valid_data <- dt[complete_cases]
+  
+  # Count treatment and control
+  treated <- sum(valid_data[[treat_var]] == 1, na.rm = TRUE)
+  control <- sum(valid_data[[treat_var]] == 0, na.rm = TRUE)
+  
+  list(treated = as.integer(treated), control = as.integer(control))
+}
+
 
 message("Loading data...")
 input_file <- file.path(processed_data_dir, paste0("epc_matched_refined_", CCOD_VERSION, ".RData"))
@@ -148,24 +167,12 @@ n_specs <- length(spec_configs)
 
 n_ols_computations <- length(analysis_configs) * length(outcome_variables) * 2 * n_specs * length(regression_core_names)
 n_ols_output_rows <- n_ols_computations * length(matching_core_names)
-
-# Count valid PSM combinations (only where regression_level >= matching_level)
-n_valid_psm_combinations <- 0
-for (matching_core in matching_core_names) {
-  for (regression_core in regression_core_names) {
-    if (is_valid_core_combination(matching_core, regression_core)) {
-      n_valid_psm_combinations <- n_valid_psm_combinations + 1
-    }
-  }
-}
-
-n_psm_computations <- length(analysis_configs) * length(outcome_variables) * 2 * n_specs * n_valid_psm_combinations
+n_psm_computations <- length(analysis_configs) * length(outcome_variables) * 2 * n_specs * 
+  length(matching_core_names) * length(regression_core_names)
 total_computations <- n_ols_computations + n_psm_computations
 total_output_rows <- n_ols_output_rows + n_psm_computations
 
 message(sprintf(" OLS computations: %d (output rows: %d)", n_ols_computations, n_ols_output_rows))
-message(sprintf(" PSM valid combinations: %d (out of %d possible)", n_valid_psm_combinations, 
-                length(matching_core_names) * length(regression_core_names)))
 message(sprintf(" PSM computations: %d", n_psm_computations))
 message(sprintf(" Total computations: %d (output rows: %d)", total_computations, total_output_rows))
 
@@ -218,6 +225,15 @@ run_ols_models_single_core <- function(current_model_name) {
           )
           
           result <- tryCatch({
+            # Calculate counts before fitting the model
+            counts <- get_simple_counts(
+              ols_data_filtered, 
+              config$var, 
+              current_outcome,
+              spec_config$continuous_vars,
+              spec_config$exact_vars
+            )
+            
             model <- feols(fml, data = ols_data_filtered, cluster = ~local_authority)
             ct <- coeftable(model)
             if (!(config$var %in% rownames(ct))) {
@@ -240,6 +256,8 @@ run_ols_models_single_core <- function(current_model_name) {
                 matching_core = NA_character_,
                 regression_core = regression_core,
                 outcome_mean = outcome_mean,
+                treated_n = counts$treated,
+                control_n = counts$control
               )
             }
           }, error = function(e) {
@@ -258,23 +276,23 @@ run_ols_models_single_core <- function(current_model_name) {
   return(ols_results[1:local_result_counter])
 }
 
-replicate_ols_across_matching_cores <- function(ols_results_list) {
-  if (length(ols_results_list) == 0) return(list())
-  
-  ols_base_results <- rbindlist(ols_results_list)
-  matching_core_names <- names(matching_core_filters)
-  
-  replicated_results <- vector("list", length(matching_core_names))
-  
-  for (i in seq_along(matching_core_names)) {
-    matching_core <- matching_core_names[i]
-    replicated_dt <- copy(ols_base_results)
-    replicated_dt[, matching_core := matching_core]
-    replicated_results[[i]] <- replicated_dt
-  }
-  
-  return(replicated_results)
-}
+# replicate_ols_across_matching_cores <- function(ols_results_list) {
+#   if (length(ols_results_list) == 0) return(list())
+#   
+#   ols_base_results <- rbindlist(ols_results_list)
+#   matching_core_names <- names(matching_core_filters)
+#   
+#   replicated_results <- vector("list", length(matching_core_names))
+#   
+#   for (i in seq_along(matching_core_names)) {
+#     matching_core <- matching_core_names[i]
+#     replicated_dt <- copy(ols_base_results)
+#     replicated_dt[, matching_core := matching_core]
+#     replicated_results[[i]] <- replicated_dt
+#   }
+#   
+#   return(replicated_results)
+# }
 
 load_and_filter_matched_data <- function(config, matching_core, regression_core, spec_config) {
   matched_file_path <- file.path(
@@ -309,6 +327,7 @@ load_and_filter_matched_data <- function(config, matching_core, regression_core,
   return(matched_data_for_spec)
 }
 
+
 run_psm_models_full_combinations <- function(current_model_name) {
   psm_results <- vector("list")
   local_result_counter <- 0
@@ -316,15 +335,18 @@ run_psm_models_full_combinations <- function(current_model_name) {
   for (spec_config in spec_configs) {
     spec_name <- spec_config$name
     
+    # Define which regression cores are valid given the matching core
+    valid_core_pairs <- list(
+      base          = c("base", "council_tax", "ppd", "ppd_counciltax"),
+      council_tax    = c("council_tax", "ppd_counciltax"),
+      ppd           = c("ppd", "ppd_counciltax"),
+      ppdcounciltax = c("ppd_counciltax")
+      )
+    
     for (matching_core in names(matching_core_filters)) {
-      for (regression_core in names(regression_core_filters)) {
-        
-        # Skip invalid combinations (wider regression core than matching core)
-        if (!is_valid_core_combination(matching_core, regression_core)) {
-          message(sprintf(" Skipping invalid combination: matching_core='%s', regression_core='%s' (regression core is wider than matching core)",
-                          matching_core, regression_core))
-          next
-        }
+      valid_regression_cores <- valid_core_pairs[[matching_core]]
+      
+      for (regression_core in valid_regression_cores) {
         
         for (config in analysis_configs) {
           matched_data_for_spec <- load_and_filter_matched_data(
@@ -358,6 +380,15 @@ run_psm_models_full_combinations <- function(current_model_name) {
             )
             
             result <- tryCatch({
+              # Calculate counts before fitting the model
+              counts <- get_simple_counts(
+                matched_data_for_spec,
+                config$var,
+                current_outcome,
+                spec_config$continuous_vars,
+                spec_config$exact_vars
+              )
+              
               model <- feols(fml, data = matched_data_for_spec, cluster = ~local_authority)
               ct <- coeftable(model)
               if (!(config$var %in% rownames(ct))) {
@@ -378,6 +409,8 @@ run_psm_models_full_combinations <- function(current_model_name) {
                   matching_core = matching_core,
                   regression_core = regression_core,
                   outcome_mean = outcome_mean,
+                  treated_n = counts$treated,
+                  control_n = counts$control
                 )
               }
             }, error = function(e) {
@@ -403,8 +436,8 @@ for (current_model_name in c("OLS Additive FE", "OLS Interactive FE")) {
   message(sprintf("\n--- Processing %s models ---", current_model_name))
   
   ols_results_for_model <- run_ols_models_single_core(current_model_name)
-  ols_results_replicated <- replicate_ols_across_matching_cores(ols_results_for_model)
-  ols_results_temp <- append(ols_results_temp, ols_results_replicated)
+  # ols_results_replicated <- replicate_ols_across_matching_cores(ols_results_for_model)
+  ols_results_temp <- append(ols_results_temp, ols_results_for_model)
 }
 
 # Process PSM models (full matching_core × regression_core combinations)

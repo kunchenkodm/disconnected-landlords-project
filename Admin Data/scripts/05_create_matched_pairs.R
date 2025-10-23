@@ -37,8 +37,10 @@ load(input_file)
 message("Defining treatment variables...")
 source(here::here("scripts", "treatment_definitions.R"))
 EPC_matched_combined <- define_treatments(EPC_matched_combined) 
+
 #### MATCHING PROTOCOL ####
-message("Starting matching process for  treatment definitions...")
+message("Starting matching process for treatment definitions...")
+
 # Define matching core filters
 matching_core_filters <- list(
   base = quote(rep(TRUE, .N)),
@@ -66,8 +68,6 @@ spec_configs <- list(
   )
 )
 
-
-
 # Mapping of treatment variables to descriptive output identifiers
 treatment_map <- c(
   treat_for_profit = "for_profit_vs_private_rental",
@@ -89,70 +89,183 @@ treatment_map <- c(
 # Set seed for reproducibility
 set.seed(20230703)
 
-# Matching will be done with exact matching by local_authority
-# Following the protocol in '03 create matched pairs.R', create three sets of matched pairs for each treatment
-# with varying matching variables: property level features, council tax band, and property price data
-
-# Function to perform matching and save results
+# Function to perform matching by local authority and save results
 perform_matching <- function(treatment_var, treatment_name, matching_core, core_data) {
   message("Performing matching for ", treatment_name, " in matching core: ", matching_core)
-  dat <- core_data[!is.na(get(treatment_var))]
-  base_matching_vars <- c(treatment_var, "number_habitable_rooms", "total_floor_area", "lodgement_year",
+  
+  # Prepare data
+  if (!"data.table" %in% class(core_data)) setDT(core_data)
+  
+  # Keep only rows where treatment is defined
+  dat_all <- core_data[!is.na(get(treatment_var))]
+  message("  Rows after removing NA in treatment: ", nrow(dat_all))
+  if (nrow(dat_all) == 0) return(list())
+  
+  # Define base matching variables
+  base_matching_vars <- c("number_habitable_rooms", "total_floor_area", "lodgement_year",
                           "property_type", "main_fuel", "construction_age_band",
                           "built_form", "local_authority")
-  dat <- na.omit(dat, cols = base_matching_vars)
-  dat[, rand_sort := runif(nrow(dat))]
-  dat <- dat[order(rand_sort)]
-  matched_results <- list()
   
-  # Use spec_configs instead of hardcoded indices
-  for (i in seq_along(spec_configs)) {
-    spec_config <- spec_configs[[i]]
-    
-    # Apply spec-specific data filtering
-    required_vars <- unique(c(base_matching_vars, spec_config$continuous_vars, spec_config$exact_vars))
-    dat_spec <- na.omit(dat, cols = required_vars)
-    
-    # Remove infinite values if ppd_price_sqm is included
-    if ("ppd_price_sqm" %in% spec_config$continuous_vars) {
-      dat_spec <- dat_spec[!is.infinite(ppd_price_sqm)]
+  # Remove rows missing any base vars
+  dat_all <- dat_all[complete.cases(dat_all[, ..base_matching_vars])]
+  message("  Rows after removing NA in base vars: ", nrow(dat_all))
+  if (nrow(dat_all) == 0) return(list())
+  
+  # Get unique local authorities
+  dat_all[, local_authority := as.character(local_authority)]
+  la_names <- unique(dat_all$local_authority)
+  message("  Number of local authorities to process: ", length(la_names))
+  
+  # Prepare storage for per-LA results for each specification
+  files_by_spec <- vector("list", length(spec_configs))
+  names(files_by_spec) <- sapply(spec_configs, function(x) x$name)
+  for (i in seq_along(files_by_spec)) files_by_spec[[i]] <- character(0)
+  
+  # MAIN LOOP: iterate local authority by local authority
+  for (la in la_names) {
+    message("  Processing local authority: ", la)
+    idx <- which(dat_all$local_authority == la)
+    if (length(idx) == 0) {
+      message("    LA has no rows, skipping")
+      next
     }
     
-    # Check minimum sample sizes
-    min_treated <- if ("ppd_price_sqm" %in% spec_config$continuous_vars) 5 else 
-      if ("tax_band" %in% spec_config$exact_vars) 5 else 10
-    min_control <- if ("ppd_price_sqm" %in% spec_config$continuous_vars) 25 else
-      if ("tax_band" %in% spec_config$exact_vars) 25 else 50
+    # Create a small LA subset
+    dat <- dat_all[idx, ]
+    # Shuffle rows deterministically
+    dat[, rand_sort := runif(.N)]
+    setorder(dat, rand_sort)
     
-    if (nrow(dat_spec[get(treatment_var) == 1]) > min_treated & 
-        nrow(dat_spec[get(treatment_var) == 0]) > min_control) {
+    # Loop through specifications
+    for (i in seq_along(spec_configs)) {
+      spec_config <- spec_configs[[i]]
+      spec_name <- spec_config$name
       
-      # Build formula dynamically
-      continuous_formula <- paste(spec_config$continuous_vars, collapse = " + ")
-      exact_formula <- paste(spec_config$exact_vars, collapse = " + ")
+      # Apply spec-specific data filtering
+      required_vars <- unique(c(base_matching_vars, spec_config$continuous_vars, spec_config$exact_vars))
+      dat_spec <- na.omit(dat, cols = required_vars)
       
-      matched_chars <- match.data(matchit(
-        as.formula(paste0(treatment_var, " ~ ", continuous_formula)),
-        data = dat_spec,
-        exact = as.formula(paste0("~ ", exact_formula)),
-        method = "nearest",
-        distance = "glm"
-      ))
-      matched_results[[i]] <- matched_chars[, list(local_authority, uprn, distance, weights, subclass)]
+      # Remove infinite values if ppd_price_sqm is included
+      if ("ppd_price_sqm" %in% spec_config$continuous_vars) {
+        dat_spec <- dat_spec[!is.infinite(ppd_price_sqm)]
+      }
+      
+      # Check minimum sample sizes
+      min_treated <- if ("ppd_price_sqm" %in% spec_config$continuous_vars) 5 else 
+        if ("tax_band" %in% spec_config$exact_vars) 5 else 10
+      min_control <- if ("ppd_price_sqm" %in% spec_config$continuous_vars) 25 else
+        if ("tax_band" %in% spec_config$exact_vars) 25 else 50
+      
+      n_treated <- nrow(dat_spec[get(treatment_var) == 1])
+      n_control <- nrow(dat_spec[get(treatment_var) == 0])
+      
+      message("    Spec ", i, " (", spec_name, ") counts (treated/control): ", n_treated, "/", n_control)
+      
+      if (n_treated > min_treated && n_control > min_control) {
+        # Build formula dynamically
+        continuous_formula <- paste(spec_config$continuous_vars, collapse = " + ")
+        
+        # Remove local_authority from exact vars since we're matching within LA
+        exact_vars_no_la <- setdiff(spec_config$exact_vars, "local_authority")
+        
+        tryCatch({
+          if (length(exact_vars_no_la) > 0) {
+            exact_formula <- paste(exact_vars_no_la, collapse = " + ")
+            m <- matchit(
+              as.formula(paste0(treatment_var, " ~ ", continuous_formula)),
+              data = dat_spec,
+              exact = as.formula(paste0("~ ", exact_formula)),
+              method = "nearest",
+              distance = "glm"
+            )
+          } else {
+            # No exact matching needed (only continuous vars)
+            m <- matchit(
+              as.formula(paste0(treatment_var, " ~ ", continuous_formula)),
+              data = dat_spec,
+              method = "nearest",
+              distance = "glm"
+            )
+          }
+          
+          md <- match.data(m)
+          
+          if (nrow(md) > 0) {
+            dt <- as.data.table(md)[, .(local_authority = la, uprn, distance, weights, subclass)]
+            
+            # Make subclass unique by prepending LA name
+            dt[, subclass := paste0(make.names(la), "_", subclass)]
+            
+            # Save to file
+            fname <- file.path(output_dir, paste0("matched_", treatment_name, "_", matching_core, "_spec", i, "_", make.names(la), "_", ccod_version, ".rds"))
+            saveRDS(dt, fname, compress = "xz")
+            files_by_spec[[i]] <- c(files_by_spec[[i]], fname)
+            message("      Spec ", i, ": wrote file ", basename(fname), " (rows: ", nrow(dt), ")")
+            rm(m, md, dt)
+          } else {
+            message("      Spec ", i, ": matchdata empty")
+          }
+        }, error = function(e) {
+          message("      Spec ", i, ": matchit error in LA ", la, " -> ", e$message)
+        })
+        gc()
+      } else {
+        message("      Spec ", i, ": skipped (too few treated/control)")
+      }
     }
+    
+    # Clean up per-LA data
+    rm(dat, idx)
+    gc()
+  } # end LA loop
+  
+  ##### Recombine Results by Specification ####
+  matched_results <- vector("list", length(spec_configs))
+  names(matched_results) <- sapply(spec_configs, function(x) x$name)
+  
+  for (i in seq_along(matched_results)) {
+    spec_name <- names(matched_results)[i]
+    fls <- files_by_spec[[i]]
+    
+    if (length(fls) == 0) {
+      matched_results[[i]] <- data.table()
+      message("  Combined spec ", i, " (", spec_name, ") is empty.")
+      next
+    }
+    
+    # Read files incrementally and combine
+    dt_combined <- NULL
+    for (j in seq_along(fls)) {
+      tmp <- readRDS(fls[j])
+      if (is.null(dt_combined)) {
+        dt_combined <- tmp
+      } else {
+        dt_combined <- rbindlist(list(dt_combined, tmp), use.names = TRUE, fill = TRUE)
+      }
+      rm(tmp); gc()
+    }
+    
+    matched_results[[i]] <- dt_combined
+    message("  Combined spec ", i, " (", spec_name, ") rows: ", nrow(matched_results[[i]]))
   }
   
   # Store matching core information in saved file
   matching_core_metadata <- list(
     matching_core_name = matching_core,
     matching_core_filter_expression = matching_core_filters[[matching_core]],
-    timestamp = Sys.time()
+    timestamp = Sys.time(),
+    num_local_authorities = length(la_names)
   )
   
-  # Output includes matching core name
+  # Save combined results
   output_file <- file.path(output_dir, paste0("matched_pairs_", treatment_name, "_matching_core_", matching_core, "_", ccod_version, ".RData"))
   save(matched_results, matching_core_metadata, file = output_file)
-  message("Matched pairs for ", treatment_name, " matching core ", matching_core, " saved to ", output_file)
+  message("  Matched pairs for ", treatment_name, " matching core ", matching_core, " saved to ", output_file)
+  
+  # Final cleanup
+  rm(dat_all, files_by_spec)
+  gc()
+  
   return(matched_results)
 }
 
@@ -161,19 +274,16 @@ for (matching_core in names(matching_core_filters)) {
   matching_core_filter <- matching_core_filters[[matching_core]]
   core_data <- EPC_matched_combined[eval(matching_core_filter)]
   message("Matching for matching core: ", matching_core, " (", nrow(core_data), " rows)")
+  
   for (treat_var in names(treatment_map)) {
     treatment_name <- treatment_map[[treat_var]]
     perform_matching(treat_var, treatment_name, matching_core, core_data)
   }
 }
 
-
-message("Matching process completed for both treatment definitions.")
-
+message("Matching process completed for all treatment definitions.")
 
 # DIAGNOSTICS: RUNTIME
 end.time <- Sys.time()
 time.taken <- end.time - start.time
 message("\n Script 5 runtime: ", round(time.taken, 2), " ", units(time.taken), ".")
-
-
