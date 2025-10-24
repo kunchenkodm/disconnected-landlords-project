@@ -160,21 +160,20 @@ analysis_configs <- list(
 )
 model_types <- c("OLS Additive FE", "OLS Interactive FE", "PSM (Matched)", "PSM (Matched) + Subclass FE")
 
-message("Calculating total number of models...")
-matching_core_names <- names(matching_core_filters)
-regression_core_names <- names(regression_core_filters)
-n_specs <- length(spec_configs)
 
-n_ols_computations <- length(analysis_configs) * length(outcome_variables) * 2 * n_specs * length(regression_core_names)
-n_ols_output_rows <- n_ols_computations * length(matching_core_names)
-n_psm_computations <- length(analysis_configs) * length(outcome_variables) * 2 * n_specs * 
-  length(matching_core_names) * length(regression_core_names)
-total_computations <- n_ols_computations + n_psm_computations
-total_output_rows <- n_ols_output_rows + n_psm_computations
+# Define which regression cores are valid given the matching core
+valid_core_pairs <- list(
+  base          = c("base", "council_tax", "ppd", "ppd_counciltax"),
+  council_tax    = c("council_tax", "ppd_counciltax"),
+  ppd           = c("ppd", "ppd_counciltax"),
+  ppd_counciltax = c("ppd_counciltax")
+)
 
-message(sprintf(" OLS computations: %d (output rows: %d)", n_ols_computations, n_ols_output_rows))
-message(sprintf(" PSM computations: %d", n_psm_computations))
-message(sprintf(" Total computations: %d (output rows: %d)", total_computations, total_output_rows))
+spec_core_pairs <- list(
+  Baseline = c("base", "council_tax", "ppd", "ppd_counciltax"),
+  `Council Tax` = c("council_tax", "ppd_counciltax"),
+  `Council Tax + Price Paid` = c("ppd_counciltax")
+)
 
 # Store results
 ols_results_temp <- vector("list")
@@ -191,8 +190,10 @@ run_ols_models_single_core <- function(current_model_name) {
   
   for (spec_config in spec_configs) {
     spec_name <- spec_config$name
+    allowed_cores <- spec_core_pairs[[spec_name]]
     
     for (regression_core in names(regression_core_filters)) {
+      if (!(regression_core %in% allowed_cores)) next
       regression_core_filter <- get_regression_core_filter(regression_core)
       ols_data_filtered <- EPC_matched_combined[eval(regression_core_filter)]
       
@@ -206,13 +207,11 @@ run_ols_models_single_core <- function(current_model_name) {
           models_counter <<- models_counter + 1
           current_time <- Sys.time()
           if (as.numeric(difftime(current_time, last_update_time, units = "secs")) >= update_interval) {
-            pct <- round(100 * models_counter / total_computations, 1)
-            elapsed <- as.numeric(difftime(current_time, start.time, units = "secs"))
-            rate <- models_counter / elapsed
-            eta_sec <- (total_computations - models_counter) / rate
-            eta_min <- eta_sec / 60
-            message(sprintf(" [%d/%d] %.1f%% | %.1f models/sec | ETA: %.1f min | OLS %s",
-                            models_counter, total_computations, pct, rate, eta_min, current_outcome))
+            elapsed_time <- as.numeric(difftime(current_time, start.time, units = "secs"))
+            message(sprintf(
+              "Model %d | Time since start: %.1f sec | Current model: %s",
+              models_counter, elapsed_time, current_outcome
+            ))
             last_update_time <<- current_time
           }
           
@@ -305,12 +304,9 @@ load_and_filter_matched_data <- function(config, matching_core, regression_core,
   }
   
   load(matched_file_path)
-  
-  # Get the spec index by matching the spec name
-  spec_idx <- which(sapply(spec_configs, function(x) x$name == spec_config$name))
-  
+
   matched_expanded <- expand_matched_data(matched_results, EPC_matched_combined)
-  matched_data_for_spec <- matched_expanded[[spec_idx]]
+  matched_data_for_spec <- matched_expanded[[spec_config$name]]
   
   rm(matched_results, matched_expanded)
   
@@ -334,19 +330,14 @@ run_psm_models_full_combinations <- function(current_model_name) {
   
   for (spec_config in spec_configs) {
     spec_name <- spec_config$name
+    allowed_cores <- spec_core_pairs[[spec_name]]
     
-    # Define which regression cores are valid given the matching core
-    valid_core_pairs <- list(
-      base          = c("base", "council_tax", "ppd", "ppd_counciltax"),
-      council_tax    = c("council_tax", "ppd_counciltax"),
-      ppd           = c("ppd", "ppd_counciltax"),
-      ppdcounciltax = c("ppd_counciltax")
-      )
     
     for (matching_core in names(matching_core_filters)) {
       valid_regression_cores <- valid_core_pairs[[matching_core]]
+      model_cores <- intersect(allowed_cores, valid_regression_cores)
       
-      for (regression_core in valid_regression_cores) {
+      for (regression_core in model_cores) {
         
         for (config in analysis_configs) {
           matched_data_for_spec <- load_and_filter_matched_data(
@@ -361,15 +352,14 @@ run_psm_models_full_combinations <- function(current_model_name) {
             models_counter <<- models_counter + 1
             current_time <- Sys.time()
             if (as.numeric(difftime(current_time, last_update_time, units = "secs")) >= update_interval) {
-              pct <- round(100 * models_counter / total_computations, 1)
-              elapsed <- as.numeric(difftime(current_time, start.time, units = "secs"))
-              rate <- models_counter / elapsed
-              eta_sec <- (total_computations - models_counter) / rate
-              eta_min <- eta_sec / 60
-              message(sprintf(" [%d/%d] %.1f%% | %.1f models/sec | ETA: %.1f min | PSM %s",
-                              models_counter, total_computations, pct, rate, eta_min, current_outcome))
+              elapsed_time <- as.numeric(difftime(current_time, start.time, units = "secs"))
+              message(sprintf(
+                "Model %d | Time since start: %.1f sec | Current model: %s",
+                models_counter, elapsed_time, current_outcome
+              ))
               last_update_time <<- current_time
             }
+            
             
             fml <- build_formula(
               outcome = current_outcome,
@@ -458,7 +448,7 @@ message(paste(" Saved all results to:", output_csv_path_master))
 end.time <- Sys.time()
 time.taken <- end.time - start.time
 message(sprintf("\n=== Script Complete ==="))
-message(sprintf("Models attempted: %d/%d", models_counter, total_computations))
+message(sprintf("Models attempted: %d", models_counter))
 message(sprintf("Rows written: %d ",
                 nrow(master_results) ))
 message(sprintf("Runtime: %.2f %s (%.1f models/sec)",
