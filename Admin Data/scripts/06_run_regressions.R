@@ -80,7 +80,12 @@ build_formula <- function(outcome, treatment_var, continuous_vars, exact_vars, m
     return(as.formula(paste(outcome, "~", rhs)))
   } else if (model_type == "PSM (Matched) + Subclass FE") {
     return(as.formula(paste(outcome, "~", rhs, "| subclass")))
+  }   else if (model_type == "PSM (Matched) PS<=0.2") {
+    return(as.formula(paste(outcome, "~", rhs)))
+  } else if (model_type == "PSM (Matched) PS<=0.2 + Subclass FE") {
+    return(as.formula(paste(outcome, "~", rhs, "| subclass")))
   }
+
   stop("Unknown model type: ", model_type)
 }
 
@@ -158,7 +163,9 @@ analysis_configs <- list(
   list(var = "treat_caribbean_haven", file_id = "caribbean_haven_vs_private_rental", title = "Effect of Caribbean Haven Ownership"),
   list(var = "treat_other_haven", file_id = "other_haven_vs_private_rental", title = "Effect of Other Haven Ownership")
 )
-model_types <- c("OLS Additive FE", "OLS Interactive FE", "PSM (Matched)", "PSM (Matched) + Subclass FE")
+model_types <- c("OLS Additive FE", "OLS Interactive FE", 
+                 "PSM (Matched)", "PSM (Matched) + Subclass FE",
+                 "PSM (Matched) PS<=0.2", "PSM (Matched) PS<=0.2 + Subclass FE")
 
 
 # Define which regression cores are valid given the matching core
@@ -328,6 +335,8 @@ run_psm_models_full_combinations <- function(current_model_name) {
   psm_results <- vector("list")
   local_result_counter <- 0
   
+  apply_ps_restriction <- grepl("PS<=0.2", current_model_name, fixed = TRUE)
+  
   for (spec_config in spec_configs) {
     spec_name <- spec_config$name
     allowed_cores <- spec_core_pairs[[spec_name]]
@@ -346,6 +355,18 @@ run_psm_models_full_combinations <- function(current_model_name) {
           
           if (is.null(matched_data_for_spec) || nrow(matched_data_for_spec) == 0) {
             next
+          }
+          
+          # Apply propensity score restriction if needed
+          if (apply_ps_restriction) {
+            if (!"distance" %in% names(matched_data_for_spec)) {
+              warning(sprintf("No distance variable found for %s - skipping", config$file_id))
+              next
+            }
+            matched_data_for_spec <- matched_data_for_spec[distance <= 0.2]
+            if (nrow(matched_data_for_spec) == 0) {
+              next
+            }
           }
           
           for (current_outcome in outcome_variables) {
@@ -431,7 +452,8 @@ for (current_model_name in c("OLS Additive FE", "OLS Interactive FE")) {
 }
 
 # Process PSM models (full matching_core × regression_core combinations)
-for (current_model_name in c("PSM (Matched)", "PSM (Matched) + Subclass FE")) {
+for (current_model_name in c("PSM (Matched)", "PSM (Matched) + Subclass FE",
+                             "PSM (Matched) PS<=0.2", "PSM (Matched) PS<=0.2 + Subclass FE")) {
   message(sprintf("\n--- Processing %s models ---", current_model_name))
   
   psm_results_for_model <- run_psm_models_full_combinations(current_model_name)
