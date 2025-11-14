@@ -80,12 +80,15 @@ build_formula <- function(outcome, treatment_var, continuous_vars, exact_vars, m
     return(as.formula(paste(outcome, "~", rhs)))
   } else if (model_type == "PSM (Matched) + Subclass FE") {
     return(as.formula(paste(outcome, "~", rhs, "| subclass")))
-  }   else if (model_type == "PSM (Matched) PS<=0.2") {
+  } else if (model_type == "PSM (Matched) PS<=0.2") {
     return(as.formula(paste(outcome, "~", rhs)))
   } else if (model_type == "PSM (Matched) PS<=0.2 + Subclass FE") {
     return(as.formula(paste(outcome, "~", rhs, "| subclass")))
+  } else if (model_type == "PSM (Matched) PS<=0.1") {
+    return(as.formula(paste(outcome, "~", rhs)))
+  } else if (model_type == "PSM (Matched) PS<=0.1 + Subclass FE") {
+    return(as.formula(paste(outcome, "~", rhs, "| subclass")))
   }
-
   stop("Unknown model type: ", model_type)
 }
 
@@ -335,8 +338,7 @@ run_psm_models_full_combinations <- function(current_model_name) {
   psm_results <- vector("list")
   local_result_counter <- 0
   
-  apply_ps_restriction <- grepl("PS<=0.2", current_model_name, fixed = TRUE)
-  
+
   for (spec_config in spec_configs) {
     spec_name <- spec_config$name
     allowed_cores <- spec_core_pairs[[spec_name]]
@@ -358,13 +360,25 @@ run_psm_models_full_combinations <- function(current_model_name) {
           }
           
           # Apply propensity score restriction if needed
-          if (apply_ps_restriction) {
+          if(grepl("PS<=0.1", current_model_name, fixed = TRUE)){
+            if (!"distance" %in% names(matched_data_for_spec)) {
+              warning(sprintf("No distance variable found for %s - skipping", config$file_id))
+              next
+            }
+            matched_data_for_spec <- matched_data_for_spec[distance <= 0.1]
+            if (nrow(matched_data_for_spec) == 0) {
+              warning(sprintf("Dataset %s is empty after applying filter for PS distance - skipping", config$file_id))
+              next
+            }
+          }
+          else if(grepl("PS<=0.1", current_model_name, fixed = TRUE)){
             if (!"distance" %in% names(matched_data_for_spec)) {
               warning(sprintf("No distance variable found for %s - skipping", config$file_id))
               next
             }
             matched_data_for_spec <- matched_data_for_spec[distance <= 0.2]
             if (nrow(matched_data_for_spec) == 0) {
+              warning(sprintf("Dataset %s is empty after applying filter for PS distance - skipping", config$file_id))
               next
             }
           }
@@ -453,7 +467,8 @@ for (current_model_name in c("OLS Additive FE", "OLS Interactive FE")) {
 
 # Process PSM models (full matching_core × regression_core combinations)
 for (current_model_name in c("PSM (Matched)", "PSM (Matched) + Subclass FE",
-                             "PSM (Matched) PS<=0.2", "PSM (Matched) PS<=0.2 + Subclass FE")) {
+                             "PSM (Matched) PS<=0.2", "PSM (Matched) PS<=0.2 + Subclass FE",
+                             "PSM (Matched) PS<=0.1", "PSM (Matched) PS<=0.1 + Subclass FE")) {
   message(sprintf("\n--- Processing %s models ---", current_model_name))
   
   psm_results_for_model <- run_psm_models_full_combinations(current_model_name)
