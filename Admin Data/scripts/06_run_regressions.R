@@ -3,8 +3,9 @@
 # Authors: Dmytro Kunchenko, Thiemo Fetzer
 # Date: July 15, 2025. Last Updated: October 8, 2025.
 
-rm(list = ls())
+rm(list=setdiff(ls(), c("script", "pipeline.start.time")))
 gc()
+
 start.time <- Sys.time()
 source(here::here("scripts", "00_setup.R"))
 library(data.table)

@@ -3,8 +3,8 @@
 # Authors: Thiemo Fetzer, Dmytro Kunchenko
 # Date: July 3, 2025. Last updated August 7, 2025.
 
-rm(list=setdiff(ls(), "script"))
-
+rm(list=setdiff(ls(), c("script", "pipeline.start.time")))
+gc()
 # Source global setup script for paths and configurations
 source(here::here("scripts", "00_setup.R"))
 

@@ -3,12 +3,13 @@
 # Authors: Thiemo Fetzer, Dmytro Kunchenko
 # Date: July 3, 2025. Last Updated August 15, 2025
 
-rm(list=setdiff(ls(), "script"))
-
+rm(list=setdiff(ls(), c("script", "pipeline.start.time")))
+gc()
+# Set seed for reproducibility
+set.seed(20230703)
 
 # DIAGNOSTICS: RUNTIME
 start.time <- Sys.time()
-
 
 # Source global setup script for paths and configurations
 source(here::here("scripts", "00_setup.R"))
@@ -93,8 +94,6 @@ spec_core_pairs <- list(
 )
 
 
-# Set seed for reproducibility
-set.seed(20230703)
 
 # Function to perform matching by local authority and save results
 perform_matching <- function(treatment_var, treatment_name, matching_core, core_data, spec_config) {
