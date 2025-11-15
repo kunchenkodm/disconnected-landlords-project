@@ -1,14 +1,17 @@
 # Script: 00_setup.R
 # Purpose: Define global variables and paths for the Disconnected Landlords project.
 # Authors: Thiemo Fetzer, Dmytro Kunchenko
-# Date: July 3, 2025
+# Date: July 3, 2025, Last updated November 14, 2025
 
 library(here)
+
+# Set seed for reproducibility
+set.seed(14112025)
 
 API_KEY <- Sys.getenv("LAND_REGISTRY_API_KEY") # Load API key from .env file
 CCOD_VERSION <- "CCOD_FULL_2025_01"
 OCOD_VERSION <- "OCOD_FULL_2025_01"
-ENABLE_EXTRACTION <- FALSE
+ENABLE_EXTRACTION <- TRUE
 SAMPLE_SIZE <- 30L
 
 
@@ -27,6 +30,7 @@ RAW_ADMIN_DIR     <- here::here("data", "raw", "admin")
 RAW_EPC_DIR       <- here::here("data", "raw", "epc")
 RAW_LR_DIR        <- here::here("data", "raw", "land_registry")
 RAW_LOOKUPS_DIR   <- here::here("data", "raw", "lookups")
+RAW_POSTCODE_DIR  <- here::here("data", "raw", "postcode_level")
 
 # --- 4. CREATE DIRECTORIES ---
 # Ensure all output directories exist

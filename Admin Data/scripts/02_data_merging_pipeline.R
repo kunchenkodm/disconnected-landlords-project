@@ -3,7 +3,11 @@
 # Authors: Thiemo Fetzer, Dmytro Kunchenko
 # Date: July 3, 2025, Last updated August 15, 2025
 
-rm(list=setdiff(ls(), "script"))
+rm(list=setdiff(ls(), c("script", "pipeline.start.time")))
+gc()
+
+# Set seed for reproducibility
+set.seed(03072025)
 
 # Source global setup script for paths and configurations
 source(here::here("scripts", "00_setup.R"))
@@ -203,9 +207,11 @@ EPC_matched_combined[, has_duplicates := .N > 1, by = BUILDING_REFERENCE_NUMBER]
 
 setkey(EPC_matched_combined, BUILDING_REFERENCE_NUMBER)
 
-# Helper variables
+# Outcome variables
 EPC_matched_combined[, bad_EPC := CURRENT_ENERGY_RATING %in% c("D", "E", "F", "G")]
 EPC_matched_combined[, good_EPC := CURRENT_ENERGY_RATING %in% c("A", "B", "C")]
+
+
 
 EPC_matched_combined[is.na(source), source := "Unknown"]
 EPC_matched_combined[is.na(tenure), tenure := "Not in OCOD, CCOD"]
