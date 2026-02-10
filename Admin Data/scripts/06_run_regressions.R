@@ -19,11 +19,10 @@ source(here::here("scripts", "treatment_definitions.R"))
 message("Sourced setup, specifications, and treatment metadata.")
 
 ccod_version <- CCOD_VERSION
-input_dir <- MATCHED_DATA_DIR
+matched_data_dir <- MATCHED_DATA_DIR  # Input directory
 output_dir <- RESULTS_DIR             
 summary_dir <- SUMMARY_TABLES_DIR     
 processed_data_dir <- PROCESSED_DATA_DIR
-
 
 # ADAPTERS: Map external definitions to local variable names
 # This preserves your original loop structure.
@@ -441,4 +440,5 @@ message(sprintf("Rows written: %d ",
                 nrow(master_results) ))
 message(sprintf("Runtime: %.2f %s (%.1f models/sec)",
                 as.numeric(time.taken), units(time.taken),
+
                 models_counter / as.numeric(time.taken, units = "secs")))
