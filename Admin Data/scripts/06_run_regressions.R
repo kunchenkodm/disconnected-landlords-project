@@ -1,7 +1,7 @@
 # Script: 06_run_regressions.R
 # Purpose: Generate CSV summary from regression results.
 # Authors: Dmytro Kunchenko, Thiemo Fetzer
-# Date: July 15, 2025. Last Updated: Febuary 9, 2026.
+# Date: July 15, 2025. Last Updated: Febuary 10, 2026.
 rm(list=setdiff(ls(), c("script", "pipeline.start.time")))
 gc()
 
@@ -19,10 +19,11 @@ source(here::here("scripts", "treatment_definitions.R"))
 message("Sourced setup, specifications, and treatment metadata.")
 
 ccod_version <- CCOD_VERSION
-matched_data_dir <- MATCHED_DATA_DIR  # Input directory
+matched_data_dir <- MATCHED_DATA_DIR # Input directory
 output_dir <- RESULTS_DIR             
 summary_dir <- SUMMARY_TABLES_DIR     
 processed_data_dir <- PROCESSED_DATA_DIR
+
 
 # ADAPTERS: Map external definitions to local variable names
 # This preserves your original loop structure.
@@ -427,9 +428,9 @@ for (current_model_name in c("PSM (Matched)", "PSM (Matched) + Subclass FE",
 
 # Combine all results and save to a CSV
 message("\nCombining results...")
-master_results <- rbindlist(c(ols_results_temp, psm_results))
-output_csv_path_master <- file.path(summary_dir, "master_results.csv")
-fwrite(master_results, output_csv_path_master)
+results_table <- rbindlist(c(ols_results_temp, psm_results))
+output_csv_path_master <- file.path(summary_dir, "results_table.csv")
+fwrite(results_table, output_csv_path_master)
 message(paste(" Saved all results to:", output_csv_path_master))
 
 end.time <- Sys.time()
@@ -437,8 +438,7 @@ time.taken <- end.time - start.time
 message(sprintf("\n=== Script Complete ==="))
 message(sprintf("Models attempted: %d", models_counter))
 message(sprintf("Rows written: %d ",
-                nrow(master_results) ))
+                nrow(results_table) ))
 message(sprintf("Runtime: %.2f %s (%.1f models/sec)",
                 as.numeric(time.taken), units(time.taken),
-
                 models_counter / as.numeric(time.taken, units = "secs")))
