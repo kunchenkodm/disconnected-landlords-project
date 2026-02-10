@@ -1,7 +1,9 @@
 # Script: 01_data_sourcing.R
-# Purpose: Source data from Land Registry API or local storage, perform initial cleaning, and save a combined dataset for further processing.
+# Purpose:  Source data from Land Registry API or local storage, 
+            # perform initial cleaning, 
+            # and save a combined dataset for further processing.
 # Authors: Thiemo Fetzer, Dmytro Kunchenko
-# Date: July 3, 2025
+# Date: July 3, 2025, Last updated Febuary 9, 2026
 
 rm(list=setdiff(ls(), c("script", "pipeline.start.time")))
 gc() 
@@ -12,7 +14,7 @@ library(httr)
 library(jsonlite)
 library(data.table)
 
-#### SETUP: INPUTS REQUIRED ####
+# SETUP: INPUTS REQUIRED  --------------------------------------------------
 # Configuration section for user customization (using global variables from 00_setup.R)
 api_key <- API_KEY
 ccod_version <- CCOD_VERSION
@@ -29,8 +31,8 @@ ocod_url <- paste0("https://use-land-property-data.service.gov.uk/api/v1/dataset
 ccod_file <- file.path(admin_path, paste0(ccod_version, ".csv"))
 ocod_file <- file.path(admin_path, paste0(ocod_version, ".csv"))
 
-#### CREATE *cod dataset ####
 
+# Create *COD Datasets and Merge ------------------------------------------
 ### Program to Fetch Land Registry Data #
 fetch_cod_data <- function(api_url, api_key, dest_file) {
   if (file.exists(dest_file)) {

@@ -1,7 +1,7 @@
 # Script: 05_create_matched_pairs.R
 # Purpose: Implement matching logic to create sets of matched pairs based on two treatment definitions (For-Profit vs. Non-Profit and Abroad vs. Domestic) with exact matching by local_authority.
 # Authors: Thiemo Fetzer, Dmytro Kunchenko
-# Date: July 3, 2025. Last Updated August 15, 2025
+# Date: July 3, 2025. Last Updated Febuary 9, 2026.
 
 rm(list=setdiff(ls(), c("script", "pipeline.start.time")))
 gc()
@@ -11,19 +11,23 @@ set.seed(20230703)
 # DIAGNOSTICS: RUNTIME
 start.time <- Sys.time()
 
-# Source global setup script for paths and configurations
+# Source global setup, specifications, and treatment definitions
 source(here::here("scripts", "00_setup.R"))
+source(here::here("scripts", "model_specifications.R"))
+source(here::here("scripts", "treatment_definitions.R"))
+message("Sourced setup, model specifications, and treatment definitions.")
+
 
 ### Requirements ###
 library(data.table)
 library(MatchIt)
 
-#### SETUP: INPUTS REQUIRED ####
+# SETUP: INPUTS REQUIRED  --------------------------------------------------
 # Configuration section using global variables from 00_setup.R
 ccod_version <- CCOD_VERSION
 input_dir <- PROCESSED_DATA_DIR
-output_dir <- MATCHED_DATA_DIR # Save matched pairs to output/matched_data
-
+output_dir <- MATCHED_DATA_DIR 
+  
 # Input file from feature refinement script
 input_file <- file.path(input_dir, paste0("epc_matched_refined_", ccod_version, ".RData"))
 
@@ -34,64 +38,14 @@ if (!file.exists(input_file)) {
 message("Loading EPC matched refined dataset from ", input_file)
 load(input_file)
 
-##### TREATMENT DEFINITIONS #####
-message("Defining treatment variables...")
-source(here::here("scripts", "treatment_definitions.R"))
-EPC_matched_combined <- define_treatments(EPC_matched_combined) 
 
-#### MATCHING PROTOCOL ####
+# Matching Protocol -------------------------------------------------------
+# Apply treatment definitions
+EPC_matched_combined <- define_treatments(EPC_matched_combined)
+
 message("Starting matching process for treatment definitions...")
 
-# Define matching core filters
-matching_core_filters <- list(
-  base = quote(rep(TRUE, .N)),
-  council_tax = quote(!is.na(tax_band)),
-  ppd = quote(!is.na(ppd_price_sqm)),
-  ppd_counciltax = quote(!is.na(tax_band) & !is.na(ppd_price_sqm))
-)
-
-# Define specification configurations
-spec_configs <- list(
-  list(
-    name = "Baseline",
-    continuous_vars = c("number_habitable_rooms", "total_floor_area", "lodgement_year"),
-    exact_vars = c("property_type", "main_fuel", "construction_age_band", "built_form", "local_authority")
-  ),
-  list(
-    name = "Council Tax", 
-    continuous_vars = c("number_habitable_rooms", "total_floor_area", "lodgement_year"),
-    exact_vars = c("property_type", "main_fuel", "tax_band", "construction_age_band", "built_form", "local_authority")
-  ),
-  list(
-    name = "Council Tax + Price Paid",
-    continuous_vars = c("number_habitable_rooms", "total_floor_area", "lodgement_year", "ppd_price_sqm"),
-    exact_vars = c("property_type", "main_fuel", "tax_band", "ppd_year_transfer", "construction_age_band", "built_form", "local_authority")
-  )
-)
-
 # Mapping of treatment variables to descriptive output identifiers
-treatment_map <- c(
-  treat_for_profit = "for_profit_vs_private_rental",
-  treat_uk_for_profit = "uk_for_profit_vs_private_rental",
-  treat_foreign_for_profit = "foreign_for_profit_vs_private_rental",
-  treat_tax_haven_for_profit = "tax_haven_for_profit_vs_private_rental",
-  treat_non_profit = "non_profit_vs_private_rental",
-  treat_uk_non_profit = "uk_non_profit_vs_private_rental",
-  treat_foreign_non_profit = "foreign_non_profit_vs_private_rental",
-  treat_tax_haven_non_profit = "tax_haven_non_profit_vs_private_rental",
-  treat_public_sector = "public_sector_vs_private_rental",
-  treat_tax_haven = "tax_haven_vs_private_rental",
-  treat_british_haven = "british_haven_vs_private_rental",
-  treat_european_haven = "european_haven_vs_private_rental",
-  treat_caribbean_haven = "caribbean_haven_vs_private_rental",
-  treat_other_haven = "other_haven_vs_private_rental"
-)
-
-spec_core_pairs <- list(
-  Baseline = c("base", "council_tax", "ppd", "ppd_counciltax"),
-  `Council Tax` = c("council_tax", "ppd_counciltax"),
-  `Council Tax + Price Paid` = c("ppd_counciltax")
-)
 
 
 
@@ -155,11 +109,14 @@ perform_matching <- function(treatment_var, treatment_name, matching_core, core_
     }
     
     # Check minimum sample sizes
-    min_treated <- if ("ppd_price_sqm" %in% spec_config$continuous_vars) 5 else 
-      if ("tax_band" %in% spec_config$exact_vars) 5 else 10
-    min_control <- if ("ppd_price_sqm" %in% spec_config$continuous_vars) 25 else
-      if ("tax_band" %in% spec_config$exact_vars) 25 else 50
+    # Determine thresholds based on data sparsity (Price/Tax data is sparser)
+    is_sparse <- ("ppd_price_sqm" %in% spec_config$continuous_vars) || ("tax_band" %in% spec_config$exact_vars)
     
+    min_treated <- if (is_sparse) MATCHING_MIN_TREATED_LOW else MATCHING_MIN_TREATED_HIGH
+    min_control <- if (is_sparse) MATCHING_MIN_CONTROL_LOW else MATCHING_MIN_CONTROL_HIGH
+    
+    n_treated <- nrow(dat_spec[get(treatment_var) == 1])
+    n_control <- nrow(dat_spec[get(treatment_var) == 0])    
     n_treated <- nrow(dat_spec[get(treatment_var) == 1])
     n_control <- nrow(dat_spec[get(treatment_var) == 0])
     
@@ -173,6 +130,10 @@ perform_matching <- function(treatment_var, treatment_name, matching_core, core_
       exact_vars_no_la <- setdiff(spec_config$exact_vars, "local_authority")
       
       tryCatch({
+        # NOTE ON CALIPERS:
+        # Computationally, "Match First, Filter Later" is equivalent to matching with a caliper
+        # when using Nearest Neighbor matching. To improve performance, we match all eligible
+        # units here and apply the caliper cutoffs (PS<=0.1, PS<=0.2) in the regression stage.
         if (length(exact_vars_no_la) > 0) {
           exact_formula <- paste(exact_vars_no_la, collapse = " + ")
           m <- matchit(
@@ -282,24 +243,27 @@ perform_matching <- function(treatment_var, treatment_name, matching_core, core_
   return(matched_results)
 }
 
+
+# Main Matching Loop ------------------------------------------------------
 # Run matching for all treatments and all matching cores
 for (matching_core in names(matching_core_filters)) {
   matching_core_filter <- matching_core_filters[[matching_core]]
   core_data <- EPC_matched_combined[eval(matching_core_filter)]
   message("Matching for matching core: ", matching_core, " (", nrow(core_data), " rows)")
   
-  for (treat_var in names(treatment_map)) {
-    treatment_name <- treatment_map[[treat_var]]
-    
+  for (config in treatment_metadata) {
+    treat_var <- config$var
+    treatment_name <- config$file_id
+
     for (spec_config in spec_configs) {
       spec_name <- spec_config$name
       allowed_cores <- spec_core_pairs[[spec_name]]
       if (!(matching_core %in% allowed_cores)) next
+      
       perform_matching(treat_var, treatment_name, matching_core, core_data, spec_config)
     }
   }
 }
-
 message("Matching process completed for all treatment definitions.")
 
 # DIAGNOSTICS: RUNTIME

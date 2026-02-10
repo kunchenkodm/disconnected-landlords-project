@@ -1,59 +1,72 @@
 # Script: 06_run_regressions.R
 # Purpose: Generate CSV summary from regression results.
 # Authors: Dmytro Kunchenko, Thiemo Fetzer
-# Date: July 15, 2025. Last Updated: October 8, 2025.
-
+# Date: July 15, 2025. Last Updated: Febuary 9, 2026.
 rm(list=setdiff(ls(), c("script", "pipeline.start.time")))
 gc()
 
+# Setup & Dependencies ----------------------------------------------------
+
 start.time <- Sys.time()
-source(here::here("scripts", "00_setup.R"))
+
 library(data.table)
 library(fixest)
+library(here)
+
+source(here::here("scripts", "00_setup.R"))
+source(here::here("scripts", "model_specifications.R"))
+source(here::here("scripts", "treatment_definitions.R"))
+message("Sourced setup, specifications, and treatment metadata.")
 
 ccod_version <- CCOD_VERSION
+input_dir <- MATCHED_DATA_DIR
+output_dir <- RESULTS_DIR             
+summary_dir <- SUMMARY_TABLES_DIR     
 processed_data_dir <- PROCESSED_DATA_DIR
-matched_data_dir <- MATCHED_DATA_DIR
-summary_dir <- file.path(getwd(), "output", "summary_tables")
-if (!dir.exists(summary_dir)) dir.create(summary_dir, recursive = TRUE)
 
-# Define core filters
-matching_core_filters <- list(
-  base = quote(rep(TRUE, .N)),
-  council_tax = quote(!is.na(tax_band)),
-  ppd = quote(!is.na(ppd_price_sqm)),
-  ppd_counciltax = quote(!is.na(tax_band) & !is.na(ppd_price_sqm))
+
+# ADAPTERS: Map external definitions to local variable names
+# This preserves your original loop structure.
+analysis_configs <- treatment_metadata
+regression_core_filters <- matching_core_filters
+
+# Define which regression cores are valid given the matching core
+valid_core_pairs <- list(
+  base          = c("base", "council_tax", "ppd", "ppd_counciltax"),
+  council_tax   = c("council_tax", "ppd_counciltax"),
+  ppd           = c("ppd", "ppd_counciltax"),
+  ppd_counciltax = c("ppd_counciltax")
 )
 
-regression_core_filters <- list(
-  base = quote(rep(TRUE, .N)),
-  council_tax = quote(!is.na(tax_band)),
-  ppd = quote(!is.na(ppd_price_sqm)),
-  ppd_counciltax = quote(!is.na(tax_band) & !is.na(ppd_price_sqm))
-)
+# Load Covariate Data -----------------------------------------------------
+message("Loading full covariate data...")
+input_file <- file.path(processed_data_dir, paste0("epc_matched_refined_", ccod_version, ".RData"))
+load(input_file)
 
-# Define specification configurations
-spec_configs <- list(
-  list(
-    name = "Baseline",
-    continuous_vars = c("number_habitable_rooms", "total_floor_area", "lodgement_year"),
-    exact_vars = c("property_type", "main_fuel", "construction_age_band", "built_form", "local_authority")
-  ),
-  list(
-    name = "Council Tax", 
-    continuous_vars = c("number_habitable_rooms", "total_floor_area", "lodgement_year"),
-    exact_vars = c("property_type", "main_fuel", "tax_band", "construction_age_band", "built_form", "local_authority")
-  ),
-  list(
-    name = "Council Tax + Price Paid",
-    continuous_vars = c("number_habitable_rooms", "total_floor_area", "lodgement_year", "ppd_price_sqm"),
-    exact_vars = c("property_type", "main_fuel", "tax_band", "ppd_year_transfer", "construction_age_band", "built_form", "local_authority")
-  )
+# Re-apply treatment definitions
+EPC_matched_combined <- define_treatments(EPC_matched_combined)
+EPC_matched_combined[, energy_cons_curr_per_floor_area :=
+                       fifelse(total_floor_area == 0, NA_real_, energy_consumption_current / total_floor_area)]
+setkey(EPC_matched_combined, uprn)
+
+
+## Define Outcome Variables -----------------------------------------------
+outcome_variables <- c(
+  "bad_epc", "energy_consumption_current", "energy_consumption_current_property",
+  "el_mean_consumption_k_wh", "gas_mean_consumption_k_wh", "energy_consumption_gap",
+  "energy_consumption_gap_property", "energy_efficiency_potential_gap",
+  "energy_efficiency_bad_epc_gap", "energy_efficiency_worse_epc_gap",
+  "borderline_good_epc", "borderline_better_epc"
 )
 
 
 
 
+# Helper Functions --------------------------------------------------------
+# 
+# Merges the full covariate dataset (`full_data`) onto a list of matched 
+# data tables (`matched_list`) using the `uprn` identifier.
+# Returns a list of expanded datasets ready for analysis.
 expand_matched_data <- function(matched_list, full_data) {
   lapply(matched_list, function(matched_dt) {
     if (is.null(matched_dt) || nrow(matched_dt) == 0) return(NULL)
@@ -61,59 +74,61 @@ expand_matched_data <- function(matched_list, full_data) {
   })
 }
 
+# Dynamically constructs the R formula object for the regression based on the 
+# model type (e.g., OLS vs. PSM), incorporating the outcome, treatment, 
+# controls, and fixed effects (additive, interactive, or subclass-based).
 build_formula <- function(outcome, treatment_var, continuous_vars, exact_vars, model_type) {
   continuous_vars <- continuous_vars[continuous_vars != ""]
   exact_vars <- exact_vars[exact_vars != ""]
   rhs <- paste(c(treatment_var, continuous_vars), collapse = " + ")
+  fe <- paste(exact_vars, collapse = " + ")
+  fe_interact <- paste(exact_vars, collapse = "^")
   if (model_type == "OLS Additive FE") {
-    fe <- paste(exact_vars, collapse = " + ")
     if (fe != "")
       return(as.formula(paste(outcome, "~", rhs, "|", fe)))
     else
       return(as.formula(paste(outcome, "~", rhs)))
   } else if (model_type == "OLS Interactive FE") {
-    fe_interact <- paste(exact_vars, collapse = "^")
     if (fe_interact != "")
       return(as.formula(paste(outcome, "~", rhs, "|", fe_interact)))
     else
       return(as.formula(paste(outcome, "~", rhs)))
   } else if (model_type == "PSM (Matched)") {
-    return(as.formula(paste(outcome, "~", rhs)))
+    return(as.formula(paste(outcome, "~", rhs, "|", fe)))
   } else if (model_type == "PSM (Matched) + Subclass FE") {
     return(as.formula(paste(outcome, "~", rhs, "| subclass")))
   } else if (model_type == "PSM (Matched) PS<=0.2") {
-    return(as.formula(paste(outcome, "~", rhs)))
+    return(as.formula(paste(outcome, "~", rhs, "|", fe)))
   } else if (model_type == "PSM (Matched) PS<=0.2 + Subclass FE") {
     return(as.formula(paste(outcome, "~", rhs, "| subclass")))
   } else if (model_type == "PSM (Matched) PS<=0.1") {
-    return(as.formula(paste(outcome, "~", rhs)))
+    return(as.formula(paste(outcome, "~", rhs, "|", fe)))
   } else if (model_type == "PSM (Matched) PS<=0.1 + Subclass FE") {
     return(as.formula(paste(outcome, "~", rhs, "| subclass")))
   }
   stop("Unknown model type: ", model_type)
 }
 
+# Retrieves the specific data filtering logic (as a quoted expression) for a 
+# given matching core name from the global `matching_core_filters` list.
 get_matching_core_filter <- function(matching_core) {
-  switch(matching_core,
-         base = quote(rep(TRUE, .N)),
-         council_tax = quote(!is.na(tax_band)),
-         ppd = quote(!is.na(ppd_price_sqm)),
-         ppd_counciltax = quote(!is.na(tax_band) & !is.na(ppd_price_sqm)),
-         stop("Unknown matching core: ", matching_core)
-  )
+  if (matching_core %in% names(matching_core_filters)) {
+    return(matching_core_filters[[matching_core]])
+  }
+  stop("Unknown matching core: ", matching_core)
 }
 
+# Retrieves the specific data filtering logic for a given regression core name 
+# from the global `regression_core_filters` list.
 get_regression_core_filter <- function(regression_core) {
-  switch(regression_core,
-         base = quote(rep(TRUE, .N)),
-         council_tax = quote(!is.na(tax_band)),
-         ppd = quote(!is.na(ppd_price_sqm)),
-         ppd_counciltax = quote(!is.na(tax_band) & !is.na(ppd_price_sqm)),
-         stop("Unknown regression core: ", regression_core)
-  )
+  if (regression_core %in% names(regression_core_filters)) {
+    return(regression_core_filters[[regression_core]])
+  }
+  stop("Unknown regression core: ", regression_core)
 }
 
-# Function to count treated and control observations in regressions
+# Calculates the number of valid treated and control observations (complete cases only) 
+# that will be used in a specific regression model.
 get_simple_counts <- function(data, treat_var, outcome, continuous_vars, exact_vars) {
   # Create a copy to work with
   dt <- data
@@ -133,68 +148,9 @@ get_simple_counts <- function(data, treat_var, outcome, continuous_vars, exact_v
   list(treated = as.integer(treated), control = as.integer(control))
 }
 
-
-message("Loading data...")
-input_file <- file.path(processed_data_dir, paste0("epc_matched_refined_", CCOD_VERSION, ".RData"))
-load(input_file)
-source(here::here("scripts", "treatment_definitions.R"))
-EPC_matched_combined <- define_treatments(EPC_matched_combined)
-EPC_matched_combined[, energy_cons_curr_per_floor_area :=
-                       fifelse(total_floor_area == 0, NA_real_, energy_consumption_current / total_floor_area)]
-setkey(EPC_matched_combined, uprn)
-
-outcome_variables <- c(
-  "bad_epc", "energy_consumption_current", "energy_consumption_current_property",
-  "el_mean_consumption_k_wh", "gas_mean_consumption_k_wh", "energy_consumption_gap",
-  "energy_consumption_gap_property", "energy_efficiency_potential_gap",
-  "energy_efficiency_bad_epc_gap", "energy_efficiency_worse_epc_gap",
-  "borderline_good_epc", "borderline_better_epc"
-)
-
-analysis_configs <- list(
-  list(var = "treat_for_profit", file_id = "for_profit_vs_private_rental", title = "Effect of For-Profit Ownership"),
-  list(var = "treat_uk_for_profit", file_id = "uk_for_profit_vs_private_rental", title = "Effect of UK For-Profit Ownership"),
-  list(var = "treat_foreign_for_profit", file_id = "foreign_for_profit_vs_private_rental", title = "Effect of Foreign For-Profit Ownership"),
-  list(var = "treat_tax_haven_for_profit", file_id = "tax_haven_for_profit_vs_private_rental", title = "Effect of Tax Haven For-Profit Ownership"),
-  list(var = "treat_non_profit", file_id = "non_profit_vs_private_rental", title = "Effect of Non-Profit Ownership"),
-  list(var = "treat_uk_non_profit", file_id = "uk_non_profit_vs_private_rental", title = "Effect of UK Non-Profit Ownership"),
-  list(var = "treat_foreign_non_profit", file_id = "foreign_non_profit_vs_private_rental", title = "Effect of Foreign Non-Profit Ownership"),
-  list(var = "treat_tax_haven_non_profit", file_id = "tax_haven_non_profit_vs_private_rental", title = "Effect of Tax Haven Non-Profit Ownership"),
-  list(var = "treat_public_sector", file_id = "public_sector_vs_private_rental", title = "Effect of Public Sector Ownership"),
-  list(var = "treat_tax_haven", file_id = "tax_haven_vs_private_rental", title = "Effect of Tax Haven Ownership"),
-  list(var = "treat_british_haven", file_id = "british_haven_vs_private_rental", title = "Effect of British Haven Ownership"),
-  list(var = "treat_european_haven", file_id = "european_haven_vs_private_rental", title = "Effect of European Haven Ownership"),
-  list(var = "treat_caribbean_haven", file_id = "caribbean_haven_vs_private_rental", title = "Effect of Caribbean Haven Ownership"),
-  list(var = "treat_other_haven", file_id = "other_haven_vs_private_rental", title = "Effect of Other Haven Ownership")
-)
-model_types <- c("OLS Additive FE", "OLS Interactive FE", 
-                 "PSM (Matched)", "PSM (Matched) + Subclass FE",
-                 "PSM (Matched) PS<=0.2", "PSM (Matched) PS<=0.2 + Subclass FE")
-
-
-# Define which regression cores are valid given the matching core
-valid_core_pairs <- list(
-  base          = c("base", "council_tax", "ppd", "ppd_counciltax"),
-  council_tax    = c("council_tax", "ppd_counciltax"),
-  ppd           = c("ppd", "ppd_counciltax"),
-  ppd_counciltax = c("ppd_counciltax")
-)
-
-spec_core_pairs <- list(
-  Baseline = c("base", "council_tax", "ppd", "ppd_counciltax"),
-  `Council Tax` = c("council_tax", "ppd_counciltax"),
-  `Council Tax + Price Paid` = c("ppd_counciltax")
-)
-
-# Store results
-ols_results_temp <- vector("list")
-psm_results <- vector("list")
-result_counter <- 0
-models_counter <- 0
-last_update_time <- Sys.time()
-update_interval <- 5
-
-# Helper functions
+# Executes the OLS regression loop for a specific model type (e.g., "OLS Additive FE"). 
+# It iterates through all specifications, regression cores, treatments, and outcomes, 
+# running the models and collecting results.
 run_ols_models_single_core <- function(current_model_name) {
   ols_results <- vector("list")
   local_result_counter <- 0
@@ -286,24 +242,8 @@ run_ols_models_single_core <- function(current_model_name) {
   return(ols_results[1:local_result_counter])
 }
 
-# replicate_ols_across_matching_cores <- function(ols_results_list) {
-#   if (length(ols_results_list) == 0) return(list())
-#   
-#   ols_base_results <- rbindlist(ols_results_list)
-#   matching_core_names <- names(matching_core_filters)
-#   
-#   replicated_results <- vector("list", length(matching_core_names))
-#   
-#   for (i in seq_along(matching_core_names)) {
-#     matching_core <- matching_core_names[i]
-#     replicated_dt <- copy(ols_base_results)
-#     replicated_dt[, matching_core := matching_core]
-#     replicated_results[[i]] <- replicated_dt
-#   }
-#   
-#   return(replicated_results)
-# }
-
+# Helper function that loads the specific matched data file for a given configuration, 
+# expands it with full covariates, and applies the necessary regression core filters.
 load_and_filter_matched_data <- function(config, matching_core, regression_core, spec_config) {
   matched_file_path <- file.path(
     matched_data_dir,
@@ -315,7 +255,7 @@ load_and_filter_matched_data <- function(config, matching_core, regression_core,
   }
   
   load(matched_file_path)
-
+  
   matched_expanded <- expand_matched_data(matched_results, EPC_matched_combined)
   matched_data_for_spec <- matched_expanded[[spec_config$name]]
   
@@ -334,12 +274,14 @@ load_and_filter_matched_data <- function(config, matching_core, regression_core,
   return(matched_data_for_spec)
 }
 
-
+# Executes the Propensity Score Matching (PSM) regression loop. 
+# It iterates through valid combinations of matching and regression cores, 
+# applies caliper filters (e.g., `PS<=0.1`) if required, and runs the models.
 run_psm_models_full_combinations <- function(current_model_name) {
   psm_results <- vector("list")
   local_result_counter <- 0
   
-
+  
   for (spec_config in spec_configs) {
     spec_name <- spec_config$name
     allowed_cores <- spec_core_pairs[[spec_name]]
@@ -457,12 +399,20 @@ run_psm_models_full_combinations <- function(current_model_name) {
   return(psm_results[1:local_result_counter])
 }
 
-# Process OLS models (once per regression core, then replicate)
+# Process Models ----------------------------------------------------------
+# Create objects to store results
+ols_results_temp <- vector("list")
+psm_results <- vector("list")
+result_counter <- 0
+models_counter <- 0
+last_update_time <- Sys.time()
+update_interval <- 5
+
+# Process OLS models
 for (current_model_name in c("OLS Additive FE", "OLS Interactive FE")) {
   message(sprintf("\n--- Processing %s models ---", current_model_name))
   
   ols_results_for_model <- run_ols_models_single_core(current_model_name)
-  # ols_results_replicated <- replicate_ols_across_matching_cores(ols_results_for_model)
   ols_results_temp <- append(ols_results_temp, ols_results_for_model)
 }
 
@@ -476,7 +426,7 @@ for (current_model_name in c("PSM (Matched)", "PSM (Matched) + Subclass FE",
   psm_results <- append(psm_results, psm_results_for_model)
 }
 
-# Combine all results
+# Combine all results and save to a CSV
 message("\nCombining results...")
 master_results <- rbindlist(c(ols_results_temp, psm_results))
 output_csv_path_master <- file.path(summary_dir, "master_results.csv")
