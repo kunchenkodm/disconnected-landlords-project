@@ -28,6 +28,11 @@ spec_configs <- list(
     exact_vars = c("lodgement_year", "property_type", "main_fuel", "tax_band", "construction_age_band", "built_form", "local_authority")
   ),
   list(
+    name = "Price Paid",
+    continuous_vars = c("number_habitable_rooms", "total_floor_area", "ppd_price_sqm"),
+    exact_vars = c("lodgement_year", "property_type", "main_fuel", "ppd_year_transfer", "construction_age_band", "built_form", "local_authority")
+  ),
+  list(
     name = "Council Tax + Price Paid",
     continuous_vars = c("number_habitable_rooms", "total_floor_area", "ppd_price_sqm"),
     exact_vars = c("lodgement_year", "property_type", "main_fuel", "tax_band", "ppd_year_transfer", "construction_age_band", "built_form", "local_authority")
@@ -39,5 +44,6 @@ spec_configs <- list(
 spec_core_pairs <- list(
   Baseline = c("base", "council_tax", "ppd", "ppd_counciltax"),
   `Council Tax` = c("council_tax", "ppd_counciltax"),
+  `Price Paid` = c("ppd", "ppd_counciltax"),
   `Council Tax + Price Paid` = c("ppd_counciltax")
 )
