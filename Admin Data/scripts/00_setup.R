@@ -18,9 +18,9 @@ OCOD_VERSION <- "OCOD_FULL_2025_01"
 
 # Parameters: Analysis ----------------------------------------------------
 # Enable extaction from EPC archives
-ENABLE_EXTRACTION <- TRUE
+ENABLE_EXTRACTION <- FALSE # Manually unzip everything
 # Pilot sample size as defined in PAP Section 2.3 (Random subset of LAs)
-LA_SAMPLE_SIZE <- 30L
+LA_SAMPLE_SIZE <- 350L
 
 ENERGY_CONSUMPTION_REFERENCE_YEAR <- "2020"
 
