@@ -1,7 +1,10 @@
 # Script: 02_data_merging_pipeline.R
-# Purpose: Load the combined admin dataset, perform UPRN and EPC matching, clean and process data, and save the final matched dataset.
+# Purpose:  Load the combined admin dataset, 
+#           extract a random sample of local authorities from the EPC dataset
+#           perform UPRN and EPC matching, clean and process data, 
+#           and save the final matched dataset.
 # Authors: Thiemo Fetzer, Dmytro Kunchenko
-# Date: July 3, 2025, Last updated August 15, 2025
+# Date: July 3, 2025, Last updated Febuary 9, 2026
 
 rm(list=setdiff(ls(), c("script", "pipeline.start.time")))
 gc()
@@ -15,7 +18,7 @@ source(here::here("scripts", "00_setup.R"))
 library(data.table)
 library(janitor)
 
-#### SETUP: INPUTS REQUIRED ####
+# SETUP: INPUTS REQUIRED  --------------------------------------------------
 # Configuration section for user customization (using global variables from 00_setup.R)
 ccod_version <- CCOD_VERSION
 ocod_version <- OCOD_VERSION
@@ -36,7 +39,8 @@ if (!file.exists(input_file)) {
 message("Loading combined dataset from ", input_file)
 load(input_file)
 
-#### UPRN LOOKUP ####
+
+# Lookup UPRN of Land Registry Records ------------------------------------
 # Load the geovation Title Number-UPRN lookup dataset and set title_number as data.table key
 message("Loading UPRN dataset...")
 UPRN_dt <- fread(UPRN_dt_path)
@@ -56,11 +60,13 @@ combined_expanded <- UPRN_dt[combined, nomatch = 0]
 # Clear some memory
 rm(combined, UPRN_dt)
 tables()
-# Convert UPRN to character [for some reason the only way to get it to work] and set is as key for the data.table
+# Convert UPRN to character for merging and set is as key for the data.table
 combined_expanded$UPRN <- as.character(combined_expanded$UPRN)
 setkey(combined_expanded, UPRN)
 
-#### EXTRACT CERTIFICATES FROM ARCHIVE (RANDOM SAMPLE VERSION) ####
+# Extract EPC Certificates from their archives, create dataset ------------
+# We do LA sample randomisation here as folders of the EPC dataset
+# correspond exactly to local authorities in England and Wales
 extractRandomFolders <- function(zip_file, 
                                  output_dir, 
                                  folder_prefix = "domestic-", 
@@ -70,6 +76,8 @@ extractRandomFolders <- function(zip_file,
     message("Extraction is disabled (enable_extraction is FALSE).")
     return(invisible(NULL))
   }
+
+
   
   # Check if the zip file exists
   if (!file.exists(zip_file)) {
@@ -115,8 +123,10 @@ extractRandomFolders <- function(zip_file,
 }
 
 # To extract, make sure to set enable_extraction to TRUE, select an appropriate sample of LADs. 
-extractRandomFolders(EPC_archive, EPC_path, sample_size = SAMPLE_SIZE, enable_extraction = ENABLE_EXTRACTION)
-#### EPC MATCHING ####
+extractRandomFolders(EPC_archive, EPC_path, sample_size = LA_SAMPLE_SIZE, enable_extraction = ENABLE_EXTRACTION)
+
+
+# Merge EPC and administrative datasets -----------------------------------
 # Function to convert and join all EPC datasets in a folder using the combined admin dataset and regional sub-datasets of EPC
 convert_epc_datasets <- function(EPC_path, admin_dataset) {
   # Check if admin_dataset is a data.table
@@ -173,7 +183,7 @@ if(file.exists(EPC_matched_all_dir)) {
 }
 # write.csv(EPC_matched_all, file = file.path(EPC_DATA_DIR, "epc_matched-random_sample.csv"))
 
-#### Cross-sectional datasets split by freehold and leasehold ####
+# Create a cross-sectional datasets for leaseholds and freeholds
 # Splits the dataset into the freehold and leasehold parts.
 setkey(EPC_matched_all, tenure)
 EPC_matched_lease <- EPC_matched_all["Leasehold"]
@@ -207,11 +217,13 @@ EPC_matched_combined[, has_duplicates := .N > 1, by = BUILDING_REFERENCE_NUMBER]
 
 setkey(EPC_matched_combined, BUILDING_REFERENCE_NUMBER)
 
-# Outcome variables
+
+
+
+# Creation of key variables -----------------------------------------------
+## Outcome variables  -----------------------------------------------------
 EPC_matched_combined[, bad_EPC := CURRENT_ENERGY_RATING %in% c("D", "E", "F", "G")]
 EPC_matched_combined[, good_EPC := CURRENT_ENERGY_RATING %in% c("A", "B", "C")]
-
-
 
 EPC_matched_combined[is.na(source), source := "Unknown"]
 EPC_matched_combined[is.na(tenure), tenure := "Not in OCOD, CCOD"]
@@ -219,7 +231,7 @@ EPC_matched_combined[is.na(tenure), tenure := "Not in OCOD, CCOD"]
 # Concatenation
 EPC_matched_combined[, concatenation := paste0(PROPERTY_TYPE,TENURE)]
 
-# Coarse proprietorship
+## Coarse Proprietorship  -------------------------------------------------
 public_sector <- c("County Council", "Local Authority")
 for_profit    <- c("Limited Company or Public Limited Company",
                    "Limited Liability Partnership",
@@ -249,6 +261,7 @@ EPC_matched_combined[, coarse_proprietorship := fcase(
   default = NA
 )]
 
+## Tax Haven List (IMF)  -------------------------------------------------
 tax_havens <- c(
     "ANGUILLA", "ANTIGUA AND BARBUDA", "BAHAMAS", "BAHRAIN", "BARBADOS",
     "BELIZE", "BERMUDA", "BRITISH VIRGIN ISLANDS", "CAYMAN ISLANDS", "CYPRUS",
@@ -259,7 +272,7 @@ tax_havens <- c(
     "TURKS AND CAICOS ISLANDS"
   )
 
-
+### Experimental: Disaggregated tax havens ---------------------------------
 # British Tax Havens
 # Many of these are British Overseas Territories or Crown Dependencies.
 british_havens <- c(
@@ -342,13 +355,16 @@ EPC_matched_combined[, country_incorporated_other_haven :=
                        )
 ]
 
+## Geography and Time  -------------------------------------------------
 
 EPC_matched_combined[, postcode_area := sub(" .*", "", POSTCODE)]
 EPC_matched_combined[, postcode_sector := sub("^([^ ]+ [A-Z0-9]).*", "\\1", POSTCODE)]
 
 EPC_matched_combined[, lodgement_year := year(LODGEMENT_DATE)]
 
-# Save the final combined dataset
+# Saving the dataset ------------------------------------------------------
 output_file <- file.path(output_dir, paste0("epc_matched_combined_", ccod_version, ".RData"))
 save(EPC_matched_combined, file = output_file)
 message("Final combined dataset saved to ", output_file)
+
+

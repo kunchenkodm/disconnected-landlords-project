@@ -1,7 +1,7 @@
 # Script: 04_feature_refinement.R
 # Purpose: Refine the EPC_matched_enhanced dataset by adding necessary features for matching and analysis, and removing unused columns to keep the dataset lean.
 # Authors: Thiemo Fetzer, Dmytro Kunchenko
-# Date: July 3, 2025
+# Date: July 3, 2025. Last updated Febuary 9, 2026.
 
 rm(list=setdiff(ls(), c("script", "pipeline.start.time")))
 gc()
@@ -13,7 +13,7 @@ source(here::here("scripts", "00_setup.R"))
 library(data.table)
 library(janitor)
 
-#### SETUP: INPUTS REQUIRED ####
+# SETUP: INPUTS REQUIRED  --------------------------------------------------
 # Configuration section using global variables from 00_setup.R
 ccod_version <- CCOD_VERSION
 input_dir <- PROCESSED_DATA_DIR
@@ -29,7 +29,8 @@ if (!file.exists(input_file)) {
 message("Loading EPC matched enhanced dataset from ", input_file)
 load(input_file)
 
-#### FEATURE CREATION ####
+
+# Feature Creation --------------------------------------------------------
 # Create derived features necessary for matching and analysis
 message("Creating derived features for matching and analysis...")
 
@@ -72,11 +73,13 @@ EPC_matched_combined[, energy_efficiency_worse_epc_gap := fcase(
 )]
 
 # Generate variable for having a borderline good EPC
-# sd = 11.83, 0.5 sd caliper
+# Logic follows PAP Section 3.2.2: Use the smaller of global SD or local (pooled) SD.
+
+# 1. Global Caliper
 global_sd <- sd(EPC_matched_combined$current_energy_efficiency, na.rm = TRUE)
 global_half_sd <- 0.5 * global_sd   # caliper width
 
-# Flag: borderline around cutoff at 69
+# Flag: borderline good (just above C threshold of 69) using global SD
 EPC_matched_combined[, borderline_good_epc := fcase(
   current_energy_efficiency > 69 & 
     current_energy_efficiency <= 69 + global_half_sd, 1,
@@ -86,50 +89,14 @@ EPC_matched_combined[, borderline_good_epc := fcase(
 )]
 
 
-# # Generate variable for having a borderline better EPC (0.5 band SD of lower + higher EPC above borderline)
-# # Compute within-band SDs of the gap variable
-# band_sds <- EPC_matched_combined[, .(
-#   sd_gap = sd(energy_efficiency_worse_epc_gap, na.rm = TRUE)
-# ), by = current_energy_rating]
-# 
-# # EPC cutoffs table
-# epc_cutoffs <- data.table(
-#   current_energy_rating = c("A", "B", "C", "D", "E", "F", "G"),
-#   lower_cutoff = c(92, 81, 69, 55, 39, 21, 0),
-#   upper_cutoff = c(100, 91, 80, 68, 54, 38, 20)
-# )
-# 
-# # Merge SDs + cutoffs
-# epc_info <- merge(epc_cutoffs, band_sds, by = "current_energy_rating", all.x = TRUE)
-# 
-# # Compute half-SDs (capped at 5 for stability)
-# epc_info[, half_sd := pmin(0.5 * sd_gap, 5)]
-# 
-# # Merge into main dataset
-# EPC_matched_combined <- merge(
-#   EPC_matched_combined,
-#   epc_info,
-#   by = "current_energy_rating",
-#   all.x = TRUE
-# )
-# 
-# # Band-specific borderline flag
-# EPC_matched_combined[, borderline_better_epc := fcase(
-#   current_energy_efficiency > lower_cutoff & 
-#     current_energy_efficiency <= lower_cutoff + half_sd, 1,
-#   
-#   is.na(current_energy_efficiency), NA_real_,
-#   default = 0
-# )]
-# EPC_matched_combined[, c("lower_cutoff", "half_sd") := NULL]
-# rm(global_sd, global_half_sd, band_sds, epc_cutoffs, epc_info)
-
+# 2. Local (Pooled) Caliper for "Borderline Better"
+# Calculate SD of the gap within each band
 band_sds <- EPC_matched_combined[, .(
   sd_gap = sd(energy_efficiency_worse_epc_gap, na.rm = TRUE),
   n = .N
 ), by = current_energy_rating]
 
-# EPC cutoffs
+# EPC cutoffs definition
 epc_cutoffs <- data.table(
   current_energy_rating = c("A", "B", "C", "D", "E", "F", "G"),
   lower_cutoff = c(92, 81, 69, 55, 39, 21, 0),
@@ -145,21 +112,20 @@ pooled_sd <- function(sd1, n1, sd2, n2) {
   sqrt(((n1 - 1) * sd1^2 + (n2 - 1) * sd2^2) / (n1 + n2 - 2))
 }
 
-# create a column with pooled SD of current band + worse band
-setorder(epc_info, -lower_cutoff)  # ensure A → G order
+# Calculate pooled SD of current band + worse band (the "bordering bands")
+setorder(epc_info, -lower_cutoff)  # ensure descending order (A -> G)
 epc_info[, pooled_sd := fifelse(
   current_energy_rating != "G",
+  # Pool current band with the next row (which is the band below it)
   pooled_sd(sd_gap, n, shift(sd_gap, type = "lead"), shift(n, type = "lead")),
   NA_real_
 )]
 
-# Half SD caliper (capped at the global half sd)
+# Define bandwidth: Minimum of (0.5 * Pooled SD) and (0.5 * Global SD)
 epc_info[, half_sd := pmin(0.5 * pooled_sd, global_half_sd)]
 
-# Print diagnostics
-print(epc_info[, .(current_energy_rating, pooled_sd, half_sd)])
 
-# Merge into main dataset
+# Merge bandwidths back to main data
 EPC_matched_combined <- merge(
   EPC_matched_combined,
   epc_info[, .(current_energy_rating, lower_cutoff, half_sd)],
@@ -168,6 +134,7 @@ EPC_matched_combined <- merge(
 )
 
 # Create borderline dummy
+# Checks if property is just above its band's lower cutoff within the specific bandwidth
 EPC_matched_combined[, borderline_better_epc := fcase(
   current_energy_efficiency > lower_cutoff &
     current_energy_efficiency <= lower_cutoff + half_sd, 1,
@@ -182,16 +149,8 @@ rm(band_sds, epc_cutoffs, epc_info, pooled_sd)
 
 
 
-
-
-# Ensure matching variables are formatted correctly
-# These variables are used in matching scripts like '03 create matched pairs.R'
-# No additional transformation needed for most as they are already in the dataset
-message("Ensuring matching variables are available: number_habitable_rooms, total_floor_area, etc.")
-
-#### FEATURE REMOVAL ####
+# Feature Removal ---------------------------------------------------------
 # Remove columns not used in analysis or matching to reduce dataset size and improve efficiency
-# Rationale: Keep only variables used in 'analysis.R', '05 analysis.R', and matching scripts
 # Unused columns include descriptive text fields, certain counts, and variables not appearing in models
 message("Removing unused columns to streamline the dataset...")
 
@@ -213,7 +172,7 @@ if (length(cols_to_remove) > 0) {
   message("No columns identified for removal.")
 }
 
-#### SAVE REFINED DATASET ####
+# Save the enhanced dataset -----------------------------------------------
 # Save the final refined dataset
 output_file <- file.path(output_dir, paste0("epc_matched_refined_", ccod_version, ".RData"))
 save(EPC_matched_combined, file = output_file)

@@ -1,7 +1,7 @@
 # Script: 07_create_plots.R 
-# Purpose: Create diagnostic and visualisation plots
+# Purpose: Create diagnostic and visualisation plots (currently unused)
 # Authors: Dmytro Kunchenko
-# Date: October 8, 2025. Last Updated: October 8, 2025.
+# Date: October 8, 2025. Last Updated: Febuary 10, 2026.
 rm(list=setdiff(ls(), c("script", "pipeline.start.time")))
 gc()
 

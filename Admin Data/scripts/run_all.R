@@ -1,6 +1,6 @@
-# Master script to run entire analysis pipeline
+# Main script to run entire analysis pipeline
 # Author: Dmytro Kunchenko
-# Date: August 15, 2025, Last Updated November 14, 2025.
+# Date: August 15, 2025, Last Updated Last Updated: Febuary 9, 2026.
 
 rm(list=ls())
 pipeline.start.time <- Sys.time()
@@ -17,7 +17,9 @@ scripts <- c(
   "04_feature_refinement.R",
   "05_create_matched_pairs.R",
   "06_run_regressions.R",
-  "07_create_plots.R"
+  "07_create_plots.R",
+  "08_validation_exercices.R"
+  
 )
 
 # Main Loop

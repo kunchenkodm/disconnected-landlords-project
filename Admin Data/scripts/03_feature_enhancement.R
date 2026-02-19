@@ -1,7 +1,8 @@
 # Script: 03_feature_enhancement.R
-# Purpose: Enhance the EPC_matched_combined dataset by cleaning variable names and merging with PPD and VOA datasets.
+# Purpose:  Enhance the EPC_matched_combined dataset by cleaning variable names 
+#           and merging with PPD and VOA datasets.
 # Authors: Thiemo Fetzer, Dmytro Kunchenko
-# Date: July 3, 2025. Last updated August 7, 2025.
+# Date: July 3, 2025. Last updated Febuary 9, 2026.
 
 rm(list=setdiff(ls(), c("script", "pipeline.start.time")))
 gc()
@@ -12,7 +13,7 @@ source(here::here("scripts", "00_setup.R"))
 library(data.table)
 library(janitor)
 
-#### SETUP: INPUTS REQUIRED ####
+# SETUP: INPUTS REQUIRED  --------------------------------------------------
 # Configuration section using global variables from 00_setup.R
 ccod_version <- CCOD_VERSION
 input_dir <- PROCESSED_DATA_DIR
@@ -35,18 +36,19 @@ if (!file.exists(input_file)) {
 message("Loading EPC matched combined dataset from ", input_file)
 load(input_file)
 
-#### CLEAN VARIABLE NAMES ####
+
+# Clean Variable Names ----------------------------------------------------
 # Use janitor::make_clean_names to standardize variable names
 message("Cleaning variable names in EPC_matched_combined...")
 EPC_matched_combined <- as.data.table(EPC_matched_combined)
 EPC_matched_combined <- clean_names(EPC_matched_combined)
 
-# Again same thing with character-baseed UPRNS. 
+# Ensure UPRN key is character type for merge consistency
 EPC_matched_combined$uprn <- as.character(EPC_matched_combined$uprn)
 
 
 
-#### LOAD AND MERGE PPD DATASET ####
+# Load and Merge PPD dataset ----------------------------------------------
 # Load PPD dataset
 
 if (!file.exists(ppd_file)) {
@@ -84,7 +86,8 @@ EPC_matched_combined[, ppd_price_sqm := price / total_floor_area]
 # Clear some memory
 rm(ppd_uprn, ppd_dedup)
 
-#### LOAD AND MERGE VOA DATASET ####
+
+# Load and Merge VOA (Council Tax) dataset --------------------------------
 # Load VOA dataset
 voa_file <- file.path(RAW_DATA_DIR, "voa_uprn.rdata")
 
@@ -115,7 +118,9 @@ EPC_matched_combined <- merge(EPC_matched_combined, voa_dedup, all.x = TRUE, by 
 # Clear some memory
 rm(voa_uprn, voa_dedup)
 
-#### LOAD AND MERGE LA-Region lookup DATASET ####
+
+
+# Additional Geography Lookups --------------------------------------------
 # Load LA-Region lookup dataset
 
 if (!file.exists(la_reg_file)) {
@@ -129,8 +134,8 @@ la_region$local_authority <- la_region$LAD18CD
 EPC_matched_combined <- merge(EPC_matched_combined, la_region, all.x = TRUE, by = "local_authority")
 
 
-
-#### LOAD AND MERGE POSTCODE-LEVEL ENERGY CONSUMPTION DATASET ####
+# Load and Merge Postcode-level Energy Consumption ------------------------
+## Electricity ------------------------------------------------------------
 # Load Electricity dataset
 if (!file.exists(electricity_file)) {
   stop("Postcode level electricity dataset does not exist: ", electricity_file)
@@ -141,8 +146,10 @@ load(electricity_file)
 setDT(el_postcode)
 setnames(el_postcode, "postcode", "postcode_2")
 
-# "De-duplicate" the dataset by focusing on 2020 energy consumption. Could potentially convert to wide format w/ variables for consumption in 2020, 2017, etc.
-el_postcode <- el_postcode[year == "2020"]
+# Change base year in the 00_setup.R script
+# Extension: Could potentially convert to wide format w/ variables
+# for consumption in 2020, 2017, etc.
+el_postcode <- el_postcode[year == ENERGY_CONSUMPTION_REFERENCE_YEAR]
 el_postcode <- el_postcode[,year := NULL]
 
 setkey(EPC_matched_combined, postcode_2)
@@ -153,9 +160,9 @@ rm(el_postcode)
 
 
 
-
-#### LOAD AND MERGE POSTCODE-LEVEL ENERGY CONSUMPTION DATASET ####
+## Gas --------------------------------------------------------------------
 # Load Gas dataset
+
 if (!file.exists(gas_file)) {
   stop("Postcode level gas dataset does not exist: ", gas_file)
 }
@@ -165,8 +172,11 @@ load(gas_file)
 setDT(gas_postcode)
 setnames(gas_postcode, "postcode", "postcode_2")
 
-# "De-duplicate" the dataset by focusing on 2020 energy consumption. Could potentially convert to wide format w/ variables for consumption in 2020, 2017, etc.
-gas_postcode <- gas_postcode[year == "2020"]
+# "De-duplicate" the dataset by focusing on 2020 energy consumption. 
+# Change base year in the 00_setup.R script
+# Extension: Could potentially convert to wide format w/ variables
+# for consumption in 2020, 2017, etc.
+gas_postcode <- gas_postcode[year == ENERGY_CONSUMPTION_REFERENCE_YEAR]
 gas_postcode <- gas_postcode[,year := NULL]
 
 setkey(EPC_matched_combined, postcode_2)
@@ -177,8 +187,7 @@ rm(gas_postcode)
 
 
 
-
-#### SAVE ENHANCED DATASET ####
+# Save the enhanced dataset -----------------------------------------------
 # Set key to UPRN
 setkey(EPC_matched_combined, uprn)
 
