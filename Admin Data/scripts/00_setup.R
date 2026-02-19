@@ -20,7 +20,9 @@ OCOD_VERSION <- "OCOD_FULL_2025_01"
 # Enable extaction from EPC archives
 ENABLE_EXTRACTION <- FALSE # Manually unzip everything
 # Pilot sample size as defined in PAP Section 2.3 (Random subset of LAs)
-LA_SAMPLE_SIZE <- 350L
+LA_SAMPLE_SIZE <- 30L
+# Set TRUE to process all ~400 LAs (England & Wales); FALSE uses the pilot sample of LA_SAMPLE_SIZE LAs.
+FULL_SAMPLE <- FALSE
 
 ENERGY_CONSUMPTION_REFERENCE_YEAR <- "2020"
 
@@ -45,6 +47,9 @@ RAW_POSTCODE_DIR   <- here::here("data", "raw", "postcode_level")
 
 # Intermediate Data
 PROCESSED_DATA_DIR <- here::here("data", "processed")
+# Temporary per-LA RDS files written here during chunked EPC processing
+
+EPC_TEMP_DIR       <- here::here("data", "processed", "epc_la_temp")
 
 # Output Structure
 OUTPUT_DIR         <- here::here("output")
@@ -65,6 +70,8 @@ dir.create(RAW_POSTCODE_DIR, showWarnings = FALSE, recursive = TRUE)
 
 # Create Intermediate Directories
 dir.create(PROCESSED_DATA_DIR, showWarnings = FALSE, recursive = TRUE)
+dir.create(EPC_TEMP_DIR,       showWarnings = FALSE, recursive = TRUE)
+
 
 # Create Output Directories
 dir.create(OUTPUT_DIR, showWarnings = FALSE, recursive = TRUE)
