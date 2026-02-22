@@ -1,7 +1,9 @@
-# Script: 07_create_plots.R 
-# Purpose: Create diagnostic and visualisation plots (currently unused)
+# Script: 07_create_plots.R
+# Purpose: Create diagnostic and visualisation plots.
+#          Streams per-LA Parquet files to accumulate histogram data
+#          without loading the full dataset into memory.
 # Authors: Dmytro Kunchenko
-# Date: October 8, 2025. Last Updated: Febuary 10, 2026.
+# Date: October 8, 2025. Last Updated: Febuary 20, 2026.
 rm(list=setdiff(ls(), c("script", "pipeline.start.time")))
 gc()
 
@@ -13,77 +15,81 @@ source(here::here("scripts", "00_setup.R"))
 
 ### Requirements ###
 library(data.table)
-library(fixest)
 library(ggplot2)
+library(arrow)
 
 #### SETUP: INPUTS REQUIRED ####
-ccod_version <- CCOD_VERSION
-processed_data_dir <- PROCESSED_DATA_DIR
-matched_data_dir <- MATCHED_DATA_DIR
-summary_dir <- file.path(getwd(), "output", "summary_tables")
-output_dir <- file.path(getwd(), "output", "figures")
+la_refined_dir <- EPC_LA_REFINED_DIR
+output_dir <- FIGURES_DIR
 
-if (!dir.exists(summary_dir)) {
-  dir.create(summary_dir, recursive = TRUE)
+if (!dir.exists(output_dir)) {
+  dir.create(output_dir, recursive = TRUE)
 }
 
-# -----------------------------------------------------------------------------
-# Helper function to expand matched data
-# -----------------------------------------------------------------------------
-expand_matched_data <- function(matched_list, full_data) {
-  lapply(matched_list, function(matched_dt) {
-    if (!is.null(matched_dt) && nrow(matched_dt) > 0) {
-      full_data[matched_dt[!is.na(uprn)], on = 'uprn', nomatch = 0]
-    } else { NULL }
-  })
+
+# Stream per-LA parquets to collect histogram data -------------------------
+la_files <- list.files(la_refined_dir, pattern = "\\.parquet$", full.names = TRUE)
+
+if (length(la_files) == 0L) {
+  stop("No per-LA Parquet files found in: ", la_refined_dir)
 }
 
-# -----------------------------------------------------------------------------
-# Load and prepare data
-# -----------------------------------------------------------------------------
-input_file <- file.path(processed_data_dir, paste0("epc_matched_refined_", CCOD_VERSION, ".RData"))
-load(input_file)
-source(here::here("scripts", "treatment_definitions.R"))
-EPC_matched_combined <- define_treatments(EPC_matched_combined)
-EPC_matched_combined[, energy_cons_curr_per_floor_area := ifelse(total_floor_area == 0, NA_real_, energy_consumption_current / total_floor_area)]
+message("Streaming per-LA Parquet files for density plot...")
+
+# Accumulators: histogram bins (0-110), sufficient stats for Gaussian overlay
+bins <- rep(0L, 111L)  # bins indexed 1..111 represent values 0..110
+global_n <- 0L
+global_sum <- 0
+global_sum_sq <- 0
+
+for (f in la_files) {
+  dt <- as.data.table(arrow::read_parquet(f, col_select = "current_energy_efficiency"))
+  vals <- dt$current_energy_efficiency[!is.na(dt$current_energy_efficiency)]
+
+  global_n <- global_n + length(vals)
+  global_sum <- global_sum + sum(vals)
+  global_sum_sq <- global_sum_sq + sum(vals^2)
+
+  # Accumulate histogram counts (integer bins, binwidth = 1)
+  idx <- pmax(1L, pmin(111L, as.integer(floor(vals)) + 1L))
+  tab <- tabulate(idx, nbins = 111L)
+  bins <- bins + tab
+
+  rm(dt, vals)
+  gc()
+}
+
+# Compute Gaussian parameters
+mu <- global_sum / global_n
+sigma <- sqrt((global_sum_sq - global_n * mu^2) / (global_n - 1))
+message(sprintf("Histogram data: n=%d, mean=%.2f, sd=%.2f", global_n, mu, sigma))
 
 
-# -----------------------------------------------------------------------------
-# Kernel Density Plot
-# -----------------------------------------------------------------------------
+# Build density plot from accumulated histogram ----------------------------
+hist_dt <- data.table(
+  x = 0:110,
+  count = bins,
+  density = bins / (global_n * 1)  # binwidth = 1
+)
+
 epc_cutoff <- 69
-density_data <- EPC_matched_combined[current_energy_efficiency <= epc_cutoff]
-# Or adjust for your selected variable and cutoff direction
-# Example density plot of energy efficiency
-# Compute mean and SD for Gaussian
-
-mu <- mean(EPC_matched_combined$current_energy_efficiency, na.rm = TRUE)
-sigma <- sd(EPC_matched_combined$current_energy_efficiency, na.rm = TRUE)
-
 
 bands <- data.frame(
   cut = c(1, 21, 39, 55, 69, 81, 92),
   lab = c(
-    "Band G: 1–20",
-    "Band F: 21–38",
-    "Band E: 39–54",
-    "Band D: 55–68",
-    "Band C: 69–80",
-    "Band B: 81–91",
+    "Band G: 1-20",
+    "Band F: 21-38",
+    "Band E: 39-54",
+    "Band D: 55-68",
+    "Band C: 69-80",
+    "Band B: 81-91",
     "Band A: 92+"
   ),
   x = c(11, 30, 47, 62, 75, 86, 96)
 )
 
-density_plot <- ggplot(EPC_matched_combined, aes(current_energy_efficiency)) +
-  geom_histogram(
-    aes(y = after_stat(density)),
-    binwidth = 1,
-    fill = "skyblue",
-    color = "black",
-    boundary = 0,
-    closed = "right"
-  ) +
+density_plot <- ggplot(hist_dt, aes(x = x, y = density)) +
+  geom_bar(stat = "identity", fill = "skyblue", color = "black", width = 1) +
   geom_function(
     fun = function(x) dnorm(x, mean = mu, sd = sigma),
     color = "darkgreen",
@@ -116,8 +122,6 @@ density_plot <- ggplot(EPC_matched_combined, aes(current_energy_efficiency)) +
   ) +
   theme_minimal()
 
-density_plot
 density_output_file <- file.path(output_dir, "energy_efficiency_density_plot.png")
 ggsave(filename = density_output_file, plot = density_plot, width = 15, height = 10, dpi = 300)
-
-
+message("Saved density plot to: ", density_output_file)

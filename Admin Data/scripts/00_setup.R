@@ -48,8 +48,12 @@ RAW_POSTCODE_DIR   <- here::here("data", "raw", "postcode_level")
 # Intermediate Data
 PROCESSED_DATA_DIR <- here::here("data", "processed")
 # Temporary per-LA RDS files written here during chunked EPC processing
-
 EPC_TEMP_DIR       <- here::here("data", "processed", "epc_la_temp")
+
+# Per-LA pipeline directories (one file per local authority at each stage)
+EPC_LA_MERGED_DIR   <- here::here("data", "processed", "epc_la_merged")
+EPC_LA_ENHANCED_DIR <- here::here("data", "processed", "epc_la_enhanced")
+EPC_LA_REFINED_DIR  <- here::here("data", "processed", "epc_la_refined")
 
 # Output Structure
 OUTPUT_DIR         <- here::here("output")
@@ -71,6 +75,9 @@ dir.create(RAW_POSTCODE_DIR, showWarnings = FALSE, recursive = TRUE)
 # Create Intermediate Directories
 dir.create(PROCESSED_DATA_DIR, showWarnings = FALSE, recursive = TRUE)
 dir.create(EPC_TEMP_DIR,       showWarnings = FALSE, recursive = TRUE)
+dir.create(EPC_LA_MERGED_DIR,   showWarnings = FALSE, recursive = TRUE)
+dir.create(EPC_LA_ENHANCED_DIR, showWarnings = FALSE, recursive = TRUE)
+dir.create(EPC_LA_REFINED_DIR,  showWarnings = FALSE, recursive = TRUE)
 
 
 # Create Output Directories

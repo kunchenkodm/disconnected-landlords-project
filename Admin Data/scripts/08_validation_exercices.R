@@ -1,7 +1,9 @@
 # Script: 08_validation_exercices.R
-# Purpose: Run LSOA level property share validations
+# Purpose: Run LSOA level property share validations.
+#          Streams per-LA Parquet files to accumulate LSOA-level aggregates
+#          without loading the full dataset into memory.
 # Author(s): Dmytro Kunchenko
-# Date: December 13, 2025. Last Updated: Last Updated: Febuary 9, 2026.
+# Date: December 13, 2025. Last Updated: Febuary 20, 2026.
 rm(list=setdiff(ls(), c("script", "pipeline.start.time")))
 gc()
 
@@ -11,15 +13,14 @@ start.time <- Sys.time()
 source(here::here("scripts", "00_setup.R"))
 
 library(data.table)
-library(MatchIt)
 library(ggplot2)
 library(xtable)
+library(arrow)
 
 ccod_version <- CCOD_VERSION
-processsed_dir <- PROCESSED_DATA_DIR
+la_refined_dir <- EPC_LA_REFINED_DIR
 raw_dir <- RAW_DATA_DIR
 
-input_file <- file.path(processsed_dir, paste0("epc_matched_refined_", ccod_version, ".RData"))
 census_tenure_file <- file.path(raw_dir, "/census/TS054-2021-1-filtered-2025-12-18T13_41_32Z.csv")
 lookup_file <- file.path(RAW_LOOKUPS_DIR, "PCD_OA21_LSOA21_MSOA21_LAD_AUG24_UK_LU.csv")
 
@@ -29,13 +30,7 @@ if (!dir.exists(tables_dir)) {
   message("Created tables directory: ", tables_dir)
 }
 
-
-
-# Load Datasets
-if (!file.exists(input_file)) stop("Input file does not exist: ", input_file)
-message("Loading EPC data...")
-load(input_file)
-
+# Load Lookup and Census Datasets -----------------------------------------
 if (!file.exists(census_tenure_file)) stop("Census file does not exist: ", census_tenure_file)
 message("Loading Census data...")
 census_tenure <- fread(census_tenure_file)
@@ -44,51 +39,83 @@ if (!file.exists(lookup_file)) stop("Lookup file does not exist: ", lookup_file)
 message("Loading Lookup data...")
 postcode_lookup <- fread(lookup_file)
 
-# Apply treatments
+# Treatment definitions (needed per-LA)
 source(here::here("scripts", "treatment_definitions.R"))
-EPC_matched_combined <- define_treatments(EPC_matched_combined)
-
-# Prepare Geography -------------------------------------------------------
-message("Linking Geographies...")
-epc_validation <- EPC_matched_combined[, .(
-  postcode_2, tenure_2, 
-  treat_for_profit, treat_non_profit, treat_public_sector
-)]
-
-# Join with Geography
-epc_validation <- merge(
-  epc_validation,
-  postcode_lookup[, .(pcds, oa21cd, lsoa21cd)],
-  by.x = "postcode_2",
-  by.y = "pcds",
-  all.x = TRUE
-)
-
-# Filter for valid LSOAs
-epc_validation_lsoa <- epc_validation[!is.na(lsoa21cd)]
-
-# Aggregate EPC data ------------------------------------------------------
-message("Aggregating EPC Data...")
 
 
+# Stream per-LA Parquets and accumulate LSOA aggregates --------------------
+message("Streaming per-LA Parquet files for LSOA aggregation...")
 
-epc_agg <- epc_validation_lsoa[, .(
-  total_epc = .N,
-  # Specific Groups
-  count_treat_fp   = sum(treat_for_profit == 1, na.rm = TRUE),
-  count_control    = sum(treat_for_profit == 0, na.rm = TRUE),
-  count_treat_np   = sum(treat_non_profit == 1, na.rm = TRUE),
-  count_treat_pub  = sum(treat_public_sector == 1, na.rm = TRUE),
-  
-  # Combined Private Sector (Treat + Control)
-  count_combined_private = sum(!is.na(treat_for_profit), na.rm = TRUE)
+la_files <- list.files(la_refined_dir, pattern = "\\.parquet$", full.names = TRUE)
+if (length(la_files) == 0L) stop("No per-LA Parquet files found in: ", la_refined_dir)
+
+epc_agg_accum <- data.table()
+
+for (i in seq_along(la_files)) {
+  if (i == 1L || i %% 50L == 0L) {
+    elapsed <- as.numeric(difftime(Sys.time(), start.time, units = "secs"))
+    message(sprintf("[%d/%d] Processing validation (%.0f s)", i, length(la_files), elapsed))
+  }
+
+  dt <- as.data.table(arrow::read_parquet(la_files[i]))
+  dt <- define_treatments(dt)
+
+  # Select needed columns
+  la_val <- dt[, .(postcode_2, tenure_2, treat_for_profit, treat_non_profit, treat_public_sector)]
+
+  # Join with geography
+  la_val <- merge(
+    la_val,
+    postcode_lookup[, .(pcds, lsoa21cd)],
+    by.x = "postcode_2",
+    by.y = "pcds",
+    all.x = TRUE
+  )
+
+  # Filter for valid LSOAs
+  la_val <- la_val[!is.na(lsoa21cd)]
+
+  if (nrow(la_val) == 0) {
+    rm(dt, la_val)
+    gc()
+    next
+  }
+
+  # Aggregate per LSOA
+  la_agg <- la_val[, .(
+    total_epc = .N,
+    count_treat_fp   = sum(treat_for_profit == 1, na.rm = TRUE),
+    count_control    = sum(treat_for_profit == 0, na.rm = TRUE),
+    count_treat_np   = sum(treat_non_profit == 1, na.rm = TRUE),
+    count_treat_pub  = sum(treat_public_sector == 1, na.rm = TRUE),
+    count_combined_private = sum(!is.na(treat_for_profit), na.rm = TRUE)
+  ), by = lsoa21cd]
+
+  epc_agg_accum <- rbindlist(list(epc_agg_accum, la_agg), use.names = TRUE)
+
+  rm(dt, la_val, la_agg)
+  gc()
+}
+
+# Final aggregation: sum across LAs for the same LSOA
+# (an LSOA may have properties from different EPC LA folders)
+message("Final LSOA aggregation...")
+epc_agg <- epc_agg_accum[, .(
+  total_epc = sum(total_epc),
+  count_treat_fp = sum(count_treat_fp),
+  count_control = sum(count_control),
+  count_treat_np = sum(count_treat_np),
+  count_treat_pub = sum(count_treat_pub),
+  count_combined_private = sum(count_combined_private)
 ), by = lsoa21cd]
+
+rm(epc_agg_accum)
 
 # Calculate Proportions
 epc_agg[, `:=`(
   prop_treat_fp        = count_treat_fp / total_epc,
   prop_control         = count_control / total_epc,
-  prop_combined_priv   = count_combined_private / total_epc, 
+  prop_combined_priv   = count_combined_private / total_epc,
   prop_treat_np        = count_treat_np / total_epc,
   prop_treat_pub       = count_treat_pub / total_epc
 )]
@@ -120,7 +147,7 @@ census_agg <- census_tenure[, .(
   count_census_4  = sum(Observation[is_cat4]),
   count_census_5  = sum(Observation[is_cat5]),
   count_census_6  = sum(Observation[is_cat6]),
-  
+
   # Combined Census Private (5 + 6)
   count_census_56 = sum(Observation[is_cat5 | is_cat6])
 ), by = c(lsoa_col_name)]
@@ -140,8 +167,6 @@ census_agg[, `:=`(
 # Merge and Calculate Measures of Mismatch --------------------------------
 message("Merging Datasets and Calculating Mismatch Variables...")
 
-
-
 # Check common IDs
 common_ids <- intersect(epc_agg$lsoa21cd, census_agg$lsoa21cd)
 if(length(common_ids) == 0) stop("Merge failed: No common LSOA codes found.")
@@ -157,12 +182,12 @@ validation_set[, diff_priv_total := prop_combined_priv - prop_census_56]
 # 2. For Profit
 validation_set[, diff_fp_vs_5 := prop_treat_fp - prop_census_5]
 validation_set[, diff_fp_vs_6 := prop_treat_fp - prop_census_6]
-validation_set[, diff_fp_vs_56 := prop_treat_fp - prop_census_56] # Added
+validation_set[, diff_fp_vs_56 := prop_treat_fp - prop_census_56]
 
 # 3. Control
 validation_set[, diff_ctrl_vs_5 := prop_control - prop_census_5]
 validation_set[, diff_ctrl_vs_6 := prop_control - prop_census_6]
-validation_set[, diff_ctrl_vs_56 := prop_control - prop_census_56] # Added
+validation_set[, diff_ctrl_vs_56 := prop_control - prop_census_56]
 
 # 4. Non-Profit
 validation_set[, diff_np_vs_4 := prop_treat_np - prop_census_4]
@@ -175,8 +200,6 @@ message("Merge successful. Rows: ", nrow(validation_set))
 # Visualisation -----------------------------------------------------------
 ##### CORRELATION TABLE #####
 message("Calculating Correlations...")
-
-
 
 tests <- list(
   list(grp="Total Private (Treat+Ctrl)", cens="Combined Priv (5+6)", epc_col="prop_combined_priv", cen_col="prop_census_56"),
@@ -223,17 +246,17 @@ get_stats_row <- function(desc, col_name) {
 mismatch_table <- rbind(
   # Total
   get_stats_row("Total Private vs Combined Private (5+6)", "diff_priv_total"),
-  
+
   # For Profit
   get_stats_row("For-Profit vs Census 5 (Priv Landlord)",  "diff_fp_vs_5"),
   get_stats_row("For-Profit vs Census 6 (Other Private)",  "diff_fp_vs_6"),
   get_stats_row("For-Profit vs Combined Private (5+6)",    "diff_fp_vs_56"),
-  
+
   # Control
   get_stats_row("Control vs Census 5 (Priv Landlord)",     "diff_ctrl_vs_5"),
   get_stats_row("Control vs Census 6 (Other Private)",     "diff_ctrl_vs_6"),
   get_stats_row("Control vs Combined Private (5+6)",       "diff_ctrl_vs_56"),
-  
+
   # Non-Profit & Public
   get_stats_row("Non-Profit vs Census 4 (Social Other)",   "diff_np_vs_4"),
   get_stats_row("Public Sector vs Census 3 (Social Council)", "diff_pub_vs_3")
@@ -260,41 +283,40 @@ plot_validation <- function(data, x_col, y_col, title, color, filename) {
     theme_bw() +
     labs(
       title = paste0(title, "\nR = ", round(c_val, 3)),
-      x = paste0("Census: ", x_col), 
+      x = paste0("Census: ", x_col),
       y = paste0("EPC: ", y_col)
     )
-  
+
   # Output file path
   out_path <- file.path(validation_fig_dir, filename)
-  
+
   # Save the plot
   ggsave(out_path, plot = p, width = 8, height = 6, dpi = 300, bg = "white")
   message("Saved figure: ", filename)
 }
 
 # 1. TOTAL PRIVATE
-plot_validation(validation_set, "prop_census_56", "prop_combined_priv", 
-                "Total Private vs Census 5+6", "black", 
+plot_validation(validation_set, "prop_census_56", "prop_combined_priv",
+                "Total Private vs Census 5+6", "black",
                 "01_total_private_vs_census_56.png")
 
 # 2. INDIVIDUAL COMPONENTS
-plot_validation(validation_set, "prop_census_5", "prop_treat_fp", 
-                "For-Profit vs Census 5 (Priv Landlord)", "blue", 
+plot_validation(validation_set, "prop_census_5", "prop_treat_fp",
+                "For-Profit vs Census 5 (Priv Landlord)", "blue",
                 "02_for_profit_vs_census_5.png")
 
-plot_validation(validation_set, "prop_census_5", "prop_control", 
-                "Control vs Census 5 (Priv Landlord)", "darkgreen", 
+plot_validation(validation_set, "prop_census_5", "prop_control",
+                "Control vs Census 5 (Priv Landlord)", "darkgreen",
                 "03_control_vs_census_5.png")
 
 # 3. NON-PRIVATE
-plot_validation(validation_set, "prop_census_4", "prop_treat_np", 
-                "Non-Profit vs Census 4 (Social Other)", "orange", 
+plot_validation(validation_set, "prop_census_4", "prop_treat_np",
+                "Non-Profit vs Census 4 (Social Other)", "orange",
                 "04_non_profit_vs_census_4.png")
 
-plot_validation(validation_set, "prop_census_3", "prop_treat_pub", 
-                "Public Sector vs Census 3 (Social Council)", "brown", 
+plot_validation(validation_set, "prop_census_3", "prop_treat_pub",
+                "Public Sector vs Census 3 (Social Council)", "brown",
                 "05_public_sector_vs_census_3.png")
-
 
 
 ##### EXPORT TABLES TO LATEX (TABULAR ONLY) #####
@@ -316,9 +338,9 @@ print(
   latex_mismatch,
   file = file.path(tables_dir, "validation_mismatch.tex"),
   include.rownames = FALSE,
-  floating = FALSE,      # <--- This ensures only the tabular environment is created
+  floating = FALSE,
   booktabs = TRUE,
-  sanitize.text.function = function(x) x # Preserves math symbols
+  sanitize.text.function = function(x) x
 )
 message("Saved Mismatch Table to: ", file.path(tables_dir, "validation_mismatch.tex"))
 
@@ -340,14 +362,10 @@ print(
   latex_cor,
   file = file.path(tables_dir, "validation_correlations.tex"),
   include.rownames = FALSE,
-  floating = FALSE,      
+  floating = FALSE,
   booktabs = TRUE
 )
 message("Saved Correlation Table to: ", file.path(tables_dir, "validation_correlations.tex"))
 
-# 
-# message("Validation complete. Script finished in: ", round(difftime(Sys.time(), start.time, units="mins"), 2), " mins.")message("Validation complete. Script finished in: ", round(difftime(Sys.time(), start.time, units="mins"), 2), " mins.")
-# 
-# 
-
-
+message("Validation complete. Script finished in: ",
+        round(difftime(Sys.time(), start.time, units="mins"), 2), " mins.")

@@ -24,7 +24,7 @@ scripts <- c(
 
 # Main Loop
 for (script in scripts) {
-  script_path <- file.path("scripts", script)
+  script_path <- here::here("scripts", script)
   if (file.exists(script_path)) {
     message(sprintf("Running: %s", script))
     tryCatch({
