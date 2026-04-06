@@ -1,0 +1,89 @@
+\begin{table}[htbp]
+\centering
+\caption{Within-Corporate Comparison: Treatment Effects Relative to UK For-Profit Companies}
+\label{tab:within_corporate}
+\small
+\begin{tabular}{l ccc}
+\toprule
+ & Public Sector & Non-Profit & Foreign For-Profit \\
+ & (1) & (2) & (3) \\
+\midrule
+\multicolumn{4}{l}{\textbf{Panel A: OLS Interactive FE}} \\
+\midrule
+Energy Efficiency (SAP) & $2.372^{***}$ & $2.208^{***}$ & $0.2978^{***}$ \\
+ & (0.1863) & (0.1105) & (0.0734) \\
+Energy Use (kWh/m$^2$) & $-20.88^{***}$ & $-15.79^{***}$ & $-4.488^{***}$ \\
+ & (1.625) & (1.175) & (0.6954) \\
+Pr(EPC D or worse) & $-0.1093^{***}$ & $-0.0984^{***}$ & $-0.0108^{***}$ \\
+ & (0.0090) & (0.0057) & (0.0031) \\
+Efficiency Gap (kWh/m$^2$) & $18.15^{***}$ & $12.83^{***}$ & $2.787^{***}$ \\
+ & (1.152) & (0.8514) & (0.4356) \\
+Potential Gap (SAP pts) & $-2.251^{***}$ & $-1.902^{***}$ & $-0.1575^{**}$ \\
+ & (0.1377) & (0.0871) & (0.0681) \\
+Pr(Borderline Good EPC) & $0.0781^{***}$ & $0.0627^{***}$ & $0.0007$ \\
+ & (0.0061) & (0.0048) & (0.0023) \\
+Pr(Borderline Better EPC) & $-0.0067^{***}$ & $-0.0077^{***}$ & $0.0015$ \\
+ & (0.0009) & (0.0007) & (0.0013) \\
+Electricity (kWh) & $-182.9^{***}$ & $-109.0^{***}$ & $48.27$ \\
+ & (15.40) & (11.44) & (33.61) \\
+Gas (kWh) & $-971.1^{***}$ & $-882.7^{***}$ & $-224.9^{**}$ \\
+ & (63.14) & (47.63) & (89.28) \\
+\midrule
+Observations & \multicolumn{3}{c}{4,043,229} \\
+Clusters (LA) & \multicolumn{3}{c}{346} \\
+\midrule
+\multicolumn{4}{l}{\textbf{Panel B: OLS Additive FE}} \\
+\midrule
+Energy Efficiency (SAP) & $2.828^{***}$ & $2.254^{***}$ & $0.1945^{*}$ \\
+ & (0.1921) & (0.1035) & (0.1099) \\
+Energy Use (kWh/m$^2$) & $-27.61^{***}$ & $-16.28^{***}$ & $-6.181^{***}$ \\
+ & (1.781) & (1.141) & (1.326) \\
+Pr(EPC D or worse) & $-0.1359^{***}$ & $-0.1075^{***}$ & $-0.0102^{***}$ \\
+ & (0.0088) & (0.0054) & (0.0036) \\
+Efficiency Gap (kWh/m$^2$) & $21.44^{***}$ & $12.78^{***}$ & $3.868^{***}$ \\
+ & (1.073) & (0.7541) & (0.7017) \\
+Potential Gap (SAP pts) & $-2.685^{***}$ & $-2.040^{***}$ & $-0.1820^{*}$ \\
+ & (0.1326) & (0.0822) & (0.1060) \\
+Pr(Borderline Good EPC) & $0.0958^{***}$ & $0.0687^{***}$ & $-0.0046$ \\
+ & (0.0061) & (0.0041) & (0.0037) \\
+Pr(Borderline Better EPC) & $-0.0100^{***}$ & $-0.0094^{***}$ & $0.0035^{**}$ \\
+ & (0.0008) & (0.0006) & (0.0015) \\
+Electricity (kWh) & $-190.8^{***}$ & $-107.3^{***}$ & $108.7^{**}$ \\
+ & (16.65) & (13.30) & (43.86) \\
+Gas (kWh) & $-1221.4^{***}$ & $-1022.2^{***}$ & $-142.8$ \\
+ & (74.34) & (53.98) & (131.7) \\
+\midrule
+Observations & \multicolumn{3}{c}{4,423,610} \\
+Clusters (LA) & \multicolumn{3}{c}{346} \\
+\midrule
+\multicolumn{4}{l}{\textbf{Panel C: PSM (Matched)}} \\
+\midrule
+Energy Efficiency (SAP) & $2.145^{***}$ & $2.043^{***}$ & $0.2632^{***}$ \\
+ & (0.1773) & (0.1019) & (0.0824) \\
+Energy Use (kWh/m$^2$) & $-17.84^{***}$ & $-13.46^{***}$ & $-3.825^{***}$ \\
+ & (1.478) & (1.088) & (0.8581) \\
+Pr(EPC D or worse) & $-0.0952^{***}$ & $-0.0864^{***}$ & $-0.0121^{***}$ \\
+ & (0.0084) & (0.0051) & (0.0037) \\
+Efficiency Gap (kWh/m$^2$) & $16.27^{***}$ & $11.63^{***}$ & $2.609^{***}$ \\
+ & (1.164) & (0.8169) & (0.5134) \\
+Potential Gap (SAP pts) & $-2.062^{***}$ & $-1.823^{***}$ & $-0.1767^{**}$ \\
+ & (0.1437) & (0.0862) & (0.0788) \\
+Pr(Borderline Good EPC) & $0.0665^{***}$ & $0.0526^{***}$ & $0.0030$ \\
+ & (0.0057) & (0.0044) & (0.0030) \\
+Pr(Borderline Better EPC) & $-0.0057^{***}$ & $-0.0072^{***}$ & $0.0022$ \\
+ & (0.0011) & (0.0008) & (0.0017) \\
+Electricity (kWh) & $-180.5^{***}$ & $-89.71^{***}$ & $53.58$ \\
+ & (14.65) & (10.76) & (36.47) \\
+Gas (kWh) & $-921.6^{***}$ & $-749.5^{***}$ & $-68.16$ \\
+ & (57.33) & (43.16) & (136.7) \\
+\midrule
+Observations & \multicolumn{3}{c}{1,132,912} \\
+Clusters (LA) & \multicolumn{3}{c}{337} \\
+\bottomrule
+\end{tabular}
+\begin{minipage}{\textwidth}
+\vspace{0.3em}
+\footnotesize
+\textit{Notes:} Each column reports the coefficient from a separate regression where the treatment group is compared against UK-incorporated for-profit companies (the control group). Panel~A uses OLS with interactive (locality$\times$year$\times$property type$\times$fuel$\times$age$\times$built form) fixed effects. Panel~B uses OLS with additive fixed effects. Panel~C uses propensity score matching (nearest-neighbour, exact on year/property type/fuel/age/built form/LA). Standard errors clustered at the local authority level in parentheses. Baseline specification with base data core. Geography: LA. $^{*}$~$p<0.10$, $^{**}$~$p<0.05$, $^{***}$~$p<0.01$.
+\end{minipage}
+\end{table}

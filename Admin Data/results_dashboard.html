@@ -6,7 +6,7 @@
   <title>Results Dashboard — Disconnected Landlords</title>
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-  <script src="output/dashboard_data.js" onerror="console.log('No pre-loaded data')"></script>
+  <!-- Data is loaded via CSV upload; WC mode auto-detected from treatment_short_id / control_definition columns -->
   <style>
     :root {
       --bg:#0a0f1a; --panel:#0f172a; --panel2:#1e293b; --border:#334155;
@@ -1022,14 +1022,7 @@ mermaid.initialize({startOnLoad:false,theme:'dark'});
 
 initSignToggles();
 
-if(window.PIPELINE_DATA&&window.PIPELINE_COLS){
-  const cols=window.PIPELINE_COLS;
-  const rows=window.PIPELINE_DATA.map(a=>{const o={};for(let i=0;i<cols.length;i++)o[cols[i]]=a[i];return o});
-  loadCSV(rows);
-  $('#status').textContent=`Pre-loaded ${DATA.length} rows (LA)`;
-} else {
-  $('#status').textContent='Upload a results CSV to begin';
-}
+$('#status').textContent='Upload a results CSV to begin';
 </script>
 </body>
 </html>
