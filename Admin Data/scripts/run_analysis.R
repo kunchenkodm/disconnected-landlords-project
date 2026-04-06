@@ -23,6 +23,7 @@ RUN_REGRESSIONS <- as.logical(Sys.getenv("RUN_REGRESSIONS", unset = "TRUE"))
 RUN_BALANCE     <- as.logical(Sys.getenv("RUN_BALANCE",     unset = "TRUE"))
 RUN_ENRICHMENT  <- as.logical(Sys.getenv("RUN_ENRICHMENT",  unset = "TRUE"))
 RUN_SYNTHESIS   <- as.logical(Sys.getenv("RUN_SYNTHESIS",   unset = "TRUE"))
+RUN_WITHIN_CORPORATE <- as.logical(Sys.getenv("RUN_WITHIN_CORPORATE", unset = "FALSE"))
 
 # Overwrite control ---------------------------------------------------------
 # FALSE (default): skip already-completed steps (crash-resume mode).
@@ -37,10 +38,13 @@ run_id <- format(Sys.time(), "run_%Y%m%d_%H%M%S")
 Sys.setenv(PIPELINE_RUN_ID = run_id)
 message(sprintf("Pipeline run ID: %s", run_id))
 
+if (RUN_WITHIN_CORPORATE) Sys.setenv(WITHIN_CORPORATE_OVERRIDE = "TRUE")
+
 on.exit({
   Sys.unsetenv("MATCHING_GEOGRAPHY_OVERRIDE")
   Sys.unsetenv("MATCHING_N_WORKERS_OVERRIDE")
   Sys.unsetenv("PIPELINE_RUN_ID")
+  Sys.unsetenv("WITHIN_CORPORATE_OVERRIDE")
 }, add = TRUE)
 
 # Geography queue.
@@ -58,8 +62,8 @@ fwrite(data.table(
   duration_s = numeric(0)
 ), pipeline_log_path)
 
-message(sprintf("RUN_MATCHING: %s | RUN_REGRESSIONS: %s | RUN_BALANCE: %s | RUN_ENRICHMENT: %s | RUN_SYNTHESIS: %s",
-                RUN_MATCHING, RUN_REGRESSIONS, RUN_BALANCE, RUN_ENRICHMENT, RUN_SYNTHESIS))
+message(sprintf("RUN_MATCHING: %s | RUN_REGRESSIONS: %s | RUN_BALANCE: %s | RUN_ENRICHMENT: %s | RUN_SYNTHESIS: %s | WITHIN_CORPORATE: %s",
+                RUN_MATCHING, RUN_REGRESSIONS, RUN_BALANCE, RUN_ENRICHMENT, RUN_SYNTHESIS, RUN_WITHIN_CORPORATE))
 message(sprintf("OVERWRITE_MATCHING: %s | OVERWRITE_REGRESSIONS: %s",
                 OVERWRITE_MATCHING, OVERWRITE_REGRESSIONS))
 
@@ -112,12 +116,13 @@ clear_matching_outputs <- function(level) {
 }
 
 clear_regression_outputs <- function(level) {
+  wc_sfx <- if (RUN_WITHIN_CORPORATE) "_wc" else ""
   files <- c(
-    file.path(SUMMARY_TABLES_DIR, paste0("results_table_",       level, ".csv")),
-    file.path(SUMMARY_TABLES_DIR, paste0("regression_errors_",   level, ".csv")),
-    file.path(SUMMARY_TABLES_DIR, paste0("run_manifest_06_",     level, ".json")),
-    file.path(SUMMARY_TABLES_DIR, paste0("results_enriched_",    level, ".csv")),
-    file.path(SUMMARY_TABLES_DIR, paste0("narrative_summary_",   level, ".csv"))
+    file.path(SUMMARY_TABLES_DIR, paste0("results_table_",       level, wc_sfx, ".csv")),
+    file.path(SUMMARY_TABLES_DIR, paste0("regression_errors_",   level, wc_sfx, ".csv")),
+    file.path(SUMMARY_TABLES_DIR, paste0("run_manifest_06_",     level, wc_sfx, ".json")),
+    file.path(SUMMARY_TABLES_DIR, paste0("results_enriched_",    level, wc_sfx, ".csv")),
+    file.path(SUMMARY_TABLES_DIR, paste0("narrative_summary_",   level, wc_sfx, ".csv"))
   )
   for (f in files) {
     if (file.exists(f)) { file.remove(f); message(sprintf("  [OVERWRITE] Removed %s", basename(f))) }

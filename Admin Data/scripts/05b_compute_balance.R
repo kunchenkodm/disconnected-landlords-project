@@ -23,6 +23,12 @@ source(here::here("scripts", "00_setup.R"))
 source(here::here("scripts", "model_specifications.R"))
 source(here::here("scripts", "treatment_definitions.R"))
 
+if (WITHIN_CORPORATE) {
+  message(">>> WITHIN_CORPORATE mode: using within-corporate treatment metadata.")
+  define_treatments  <- define_within_corporate_treatments
+  treatment_metadata <- within_corporate_metadata
+}
+
 message("===================================================================")
 message("  05b_compute_balance.R - Post-hoc Balance Diagnostics")
 message(sprintf("  Geography: %s", MATCHING_GEOGRAPHY))

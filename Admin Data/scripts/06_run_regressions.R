@@ -67,8 +67,9 @@ if (!dir.exists(matched_data_dir)) {
 }
 
 # Write run manifest (once per geography level; skipped on crash-resume).
+wc_suffix <- if (WITHIN_CORPORATE) "_wc" else ""
 manifest_path <- file.path(SUMMARY_TABLES_DIR,
-                           paste0("run_manifest_06_", MATCHING_GEOGRAPHY, ".json"))
+                           paste0("run_manifest_06_", MATCHING_GEOGRAPHY, wc_suffix, ".json"))
 if (!file.exists(manifest_path)) {
   jsonlite::write_json(
     list(
@@ -91,6 +92,13 @@ if (!file.exists(manifest_path)) {
 # Adapters ----------------------------------------------------------------
 analysis_configs        <- treatment_metadata
 regression_core_filters <- matching_core_filters
+
+if (WITHIN_CORPORATE) {
+  message(">>> WITHIN_CORPORATE mode: UK For-Profit as control, 3 treatments.")
+  define_treatments <- define_within_corporate_treatments
+  analysis_configs  <- within_corporate_metadata
+}
+active_control_label <- if (WITHIN_CORPORATE) within_corporate_control_label else standard_control_label
 
 # Define which regression cores are valid given the matching core
 valid_core_pairs <- list(
@@ -329,6 +337,9 @@ get_hypothesis_tag <- function(treatment_short_id, outcome) {
   if (outcome %in% c("borderline_good_epc", "borderline_better_epc")) return("H3")
   if (treatment_short_id == "frfp")                                    return("H1a")
   if (treatment_short_id %in% c("np", "uknp", "frnp", "thnp"))        return("H1b")
+  # Within-corporate treatments
+  if (treatment_short_id == "wcff")                                    return("H1a_wc")
+  if (treatment_short_id %in% c("wcnp", "wcps"))                      return("H1b_wc")
   "H1"
 }
 
@@ -337,7 +348,7 @@ FEW_CLUSTERS_THRESHOLD <- 20L
 
 # Error log ---------------------------------------------------------------
 error_log_path <- file.path(summary_dir,
-                            paste0("regression_errors_", MATCHING_GEOGRAPHY, ".csv"))
+                            paste0("regression_errors_", MATCHING_GEOGRAPHY, wc_suffix, ".csv"))
 error_log_schema <- data.table(
   run_id        = character(0),
   model         = character(0),
@@ -352,7 +363,7 @@ error_log_schema <- data.table(
 if (!file.exists(error_log_path)) fwrite(error_log_schema, error_log_path)
 
 # Output CSV Setup (with crash-resume support) ----------------------------
-output_csv_path <- file.path(summary_dir, paste0("results_table_", MATCHING_GEOGRAPHY, ".csv"))
+output_csv_path <- file.path(summary_dir, paste0("results_table_", MATCHING_GEOGRAPHY, wc_suffix, ".csv"))
 
 results_schema <- data.table(
   coef               = numeric(0),
@@ -392,7 +403,8 @@ results_schema <- data.table(
   hypothesis_tag       = character(0),
   run_id               = character(0),
   status               = character(0),
-  error_message        = character(0)
+  error_message        = character(0),
+  control_definition   = character(0)
 )
 
 # Crash-resume: two tiers -------------------------------------------------
@@ -539,7 +551,7 @@ other_geos <- setdiff(c("LA", "ITL2", "ITL3"), MATCHING_GEOGRAPHY)
 ols_model_names <- c("OLS Additive FE", "OLS Interactive FE")
 
 for (other_geo in other_geos) {
-  other_csv <- file.path(summary_dir, paste0("results_table_", other_geo, ".csv"))
+  other_csv <- file.path(summary_dir, paste0("results_table_", other_geo, wc_suffix, ".csv"))
   if (!file.exists(other_csv)) next
 
   other_dt <- tryCatch(fread(other_csv), error = function(e) NULL)
@@ -685,7 +697,8 @@ extract_one_model <- function(model, config, current_outcome, current_model_name
         outcome_n_valid      = as.integer(outcome_n_valid),
         hypothesis_tag = hyp_tag,
         run_id = run_id, status = "treatment_dropped",
-        error_message = "treatment variable absent from coefficient table"
+        error_message = "treatment variable absent from coefficient table",
+        control_definition = active_control_label
       ),
       archive = NULL
     )
@@ -740,7 +753,8 @@ extract_one_model <- function(model, config, current_outcome, current_model_name
         hypothesis_tag       = hyp_tag,
         run_id               = run_id,
         status               = "ok",
-        error_message        = NA_character_
+        error_message        = NA_character_,
+        control_definition   = active_control_label
       ),
       archive = extract_archive_row(
         outcome            = current_outcome,
@@ -834,7 +848,8 @@ make_error_row <- function(current_outcome, config, current_model_name, spec_nam
     psm_n_matched_post_caliper = as.integer(psm_n_matched_post_cal),
     outcome_n_valid      = as.integer(outcome_n_valid),
     hypothesis_tag = hyp_tag,
-    run_id = run_id, status = "error", error_message = error_msg
+    run_id = run_id, status = "error", error_message = error_msg,
+    control_definition = active_control_label
   )
 }
 

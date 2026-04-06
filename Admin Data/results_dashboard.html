@@ -114,7 +114,7 @@
       <details>
         <summary>Treatment Groups</summary>
         <div style="margin-top:8px">
-          <p style="font-size:11px;color:var(--muted);margin:0 0 6px"><b>Control:</b> Privately rented properties with unknown ownership (not in CCOD/OCOD).</p>
+          <p id="controlLabel" style="font-size:11px;color:var(--muted);margin:0 0 6px"><b>Control:</b> Privately rented properties with unknown ownership (not in CCOD/OCOD).</p>
           <div style="overflow-x:auto"><table style="font-size:11px;width:100%;border-collapse:collapse;white-space:nowrap">
             <thead><tr style="border-bottom:1px solid var(--border)">
               <th style="text-align:left;padding:3px 6px;color:var(--muted)">Treatment</th>
@@ -370,6 +370,49 @@ const TREE_EDGES = [
   ['th','bh'],['th','eh'],['th','ch'],['th','oh']
 ];
 
+// Within-corporate comparison mode (control = UK for-profit)
+const WC_TREAT_INFO = {
+  wcps:{label:'Public sector',lv:1}, wcnp:{label:'Non-profit',lv:1},
+  wcff:{label:'Foreign for-profit',lv:1}
+};
+const WC_TREAT_ORDER = ['wcps','wcnp','wcff'];
+const WC_TREAT_TITLE_TO_SHORT = {
+  'Public Sector vs UK For-Profit':'wcps',
+  'Non-Profit vs UK For-Profit':'wcnp',
+  'Foreign For-Profit vs UK For-Profit':'wcff'
+};
+const WC_TREE_EDGES = [['ROOT','wcps'],['ROOT','wcnp'],['ROOT','wcff']];
+
+// Active mode — set dynamically on CSV load
+let activeTreatInfo = TREAT_INFO;
+let activeTreatOrder = TREAT_ORDER;
+let activeTitleToShort = TREAT_TITLE_TO_SHORT;
+let activeTreeEdges = TREE_EDGES;
+let activeControlLabel = 'Privately rented, unknown ownership (not in CCOD/OCOD)';
+
+function detectAndSetMode(rows) {
+  const hasWC = rows.some(r => {
+    const sid = r.treatment_short_id || (r.treatment && (TREAT_TITLE_TO_SHORT[String(r.treatment).trim()] || WC_TREAT_TITLE_TO_SHORT[String(r.treatment).trim()]));
+    return sid && sid.startsWith('wc');
+  });
+  if (hasWC) {
+    activeTreatInfo = WC_TREAT_INFO;
+    activeTreatOrder = WC_TREAT_ORDER;
+    activeTitleToShort = WC_TREAT_TITLE_TO_SHORT;
+    activeTreeEdges = WC_TREE_EDGES;
+  } else {
+    activeTreatInfo = TREAT_INFO;
+    activeTreatOrder = TREAT_ORDER;
+    activeTitleToShort = TREAT_TITLE_TO_SHORT;
+    activeTreeEdges = TREE_EDGES;
+  }
+  // Read control_definition from data if present
+  const cd = rows.find(r => r.control_definition && String(r.control_definition).trim())?.control_definition;
+  activeControlLabel = cd ? String(cd).trim() : (hasWC ? 'UK for-profit companies (UK-incorporated, for-profit proprietorship)' : 'Privately rented, unknown ownership (not in CCOD/OCOD)');
+  const el = document.getElementById('controlLabel');
+  if (el) el.innerHTML = '<b>Control:</b> ' + activeControlLabel;
+}
+
 // ================================================================
 // State
 // ================================================================
@@ -398,7 +441,7 @@ const MODEL_SHORT={'OLS Additive FE':'OLS Add','OLS Interactive FE':'OLS Int','P
 // ================================================================
 function normalizeRow(row){
   const o={};for(const k in row)o[k.trim()]=row[k];
-  if(!o.treatment_short_id&&o.treatment)o.treatment_short_id=TREAT_TITLE_TO_SHORT[String(o.treatment).trim()]||o.treatment;
+  if(!o.treatment_short_id&&o.treatment)o.treatment_short_id=TREAT_TITLE_TO_SHORT[String(o.treatment).trim()]||WC_TREAT_TITLE_TO_SHORT[String(o.treatment).trim()]||o.treatment;
   for(const f of['outcome','model','spec','status'])if(f in o)o[f]=String(o[f]??'').trim();
   // Default status to 'ok' if missing (pre-filtered data from dashboard_data.js)
   if(!o.status||o.status==='')o.status='ok';
@@ -497,7 +540,7 @@ function renderTree(){
   const outcome=$('#treeOutcome').value;if(!outcome||!DATA.length)return;
   const sliceMap=buildSliceMap(getSliceRows());
   const coefs={},pvals={},ses={};
-  for(const tid of TREAT_ORDER){const r=sliceMap.get(tid)?.get(outcome);coefs[tid]=r?r.coef:null;pvals[tid]=r?r.p_value:null;ses[tid]=r?r.se:null}
+  for(const tid of activeTreatOrder){const r=sliceMap.get(tid)?.get(outcome);coefs[tid]=r?r.coef:null;pvals[tid]=r?r.p_value:null;ses[tid]=r?r.se:null}
   const allVals=Object.values(coefs).filter(Number.isFinite).map(Math.abs);
   const mx=allVals.length?Math.max(...allVals):1;
   const pap=$('#papColor')?.checked;
@@ -510,11 +553,11 @@ function renderTree(){
     if(b>.6)return'dr';if(b>.3)return'r';if(b>.05)return'lr';
     if(b<-.6)return'dg';if(b<-.3)return'g';if(b<-.05)return'lg';return'n'}
   const fmt=v=>(v==null||!Number.isFinite(v))?'N/A':((v>=0?'+':'')+v.toFixed(3));
-  let src='flowchart TB\n  ROOT["Control: privately rented,<br/>owner = Unknown"]\n\n';
+  let src='flowchart TB\n  ROOT["Control: '+activeControlLabel.replace(/"/g,'&quot;')+'"]\n\n';
   const fmtSe=v=>(v==null||!Number.isFinite(v))?'':' ('+v.toFixed(3)+')';
   const showTreeSE=$('#showSE')?.checked;
-  for(const tid of TREAT_ORDER){const sePart=showTreeSE?`<br/>${fmtSe(ses[tid])}`:'';src+=`  ${tid}["${TREAT_INFO[tid].label}<br/>${fmt(coefs[tid])}${stars(pvals[tid])}${sePart}"]\n`}
-  src+='\n';for(const[f,t]of TREE_EDGES)src+=`  ${f} --> ${t}\n`;
+  for(const tid of activeTreatOrder){const info=activeTreatInfo[tid];if(!info)continue;const sePart=showTreeSE?`<br/>${fmtSe(ses[tid])}`:'';src+=`  ${tid}["${info.label}<br/>${fmt(coefs[tid])}${stars(pvals[tid])}${sePart}"]\n`}
+  src+='\n';for(const[f,t]of activeTreeEdges)src+=`  ${f} --> ${t}\n`;
   src+='\n  classDef root fill:#1e293b,stroke:#334155,color:#e5e7eb,rx:6,ry:6;\n';
   src+='  classDef dg fill:#14532d,stroke:#166534,color:#dcfce7,rx:6,ry:6;\n';
   src+='  classDef g fill:#166534,stroke:#22c55e,color:#dcfce7,rx:6,ry:6;\n';
@@ -528,7 +571,7 @@ function renderTree(){
   src+='  classDef b3 fill:#1e40af,stroke:#2563eb,color:#eff6ff,rx:6,ry:6;\n';
   src+='  classDef na fill:#1e293b,stroke:#334155,color:#64748b,rx:6,ry:6;\n\n';
   src+='  class ROOT root;\n';
-  for(const tid of TREAT_ORDER)src+=`  class ${tid} ${cls(coefs[tid])};\n`;
+  for(const tid of activeTreatOrder)src+=`  class ${tid} ${cls(coefs[tid])};\n`;
   $('#mermaidSrc').textContent=src;
   // Update tree legend
   $('#treeLegend').innerHTML=pap
@@ -564,7 +607,7 @@ function renderHeatmap(){
   for(const cb of $$('.hm-grp'))cb.addEventListener('change',renderHeatmap);
 
   // Headline outcomes (always shown, outside groups)
-  const hasData=o=>{for(const t of TREAT_ORDER)if(sliceMap.get(t)?.has(o))return true;return false};
+  const hasData=o=>{for(const t of activeTreatOrder)if(sliceMap.get(t)?.has(o))return true;return false};
   const headlinePresent=HEADLINE_OUTCOMES.filter(hasData);
 
   // Visible group outcomes = enabled groups, filtered to those with data
@@ -580,7 +623,7 @@ function renderHeatmap(){
   // Compute ranks per outcome (1=strongest absolute effect)
   const ranks={};
   for(const o of present){
-    const entries=TREAT_ORDER.map(t=>{const r=sliceMap.get(t)?.get(o);if(!r)return{t,val:NaN};const v=cf==='coef'?r.coef:(r[cf]!=null?r[cf]:NaN);return{t,val:Number.isFinite(v)?Math.abs(v):NaN}}).filter(e=>Number.isFinite(e.val));
+    const entries=activeTreatOrder.map(t=>{const r=sliceMap.get(t)?.get(o);if(!r)return{t,val:NaN};const v=cf==='coef'?r.coef:(r[cf]!=null?r[cf]:NaN);return{t,val:Number.isFinite(v)?Math.abs(v):NaN}}).filter(e=>Number.isFinite(e.val));
     entries.sort((a,b)=>b.val-a.val);
     ranks[o]={};entries.forEach((e,i)=>ranks[o][e.t]=i+1);
   }
@@ -589,12 +632,12 @@ function renderHeatmap(){
   const colMax={};
   for(const o of present){
     let mx=0;
-    for(const t of TREAT_ORDER){const r=sliceMap.get(t)?.get(o);if(r){const v=cf==='coef'?r.coef:(r[cf]!=null?r[cf]:NaN);if(Number.isFinite(v))mx=Math.max(mx,Math.abs(v))}}
+    for(const t of activeTreatOrder){const r=sliceMap.get(t)?.get(o);if(r){const v=cf==='coef'?r.coef:(r[cf]!=null?r[cf]:NaN);if(Number.isFinite(v))mx=Math.max(mx,Math.abs(v))}}
     colMax[o]=mx||1;
   }
 
   // Sort order
-  let order=[...TREAT_ORDER];
+  let order=[...activeTreatOrder];
   if(sortCol&&present.includes(sortCol)){
     order.sort((a,b)=>{
       const ra=sliceMap.get(a)?.get(sortCol),rb=sliceMap.get(b)?.get(sortCol);
@@ -648,7 +691,7 @@ function renderHeatmap(){
     const borderL=groupStarts.has(o)?'border-left:3px solid var(--border);':'';
     const borderR=headlineSet.has(o)?'border-right:3px solid var(--border);':'';
     const means=[],sds=[];
-    for(const t of TREAT_ORDER){const r=sliceMap.get(t)?.get(o);if(r){if(Number.isFinite(r.outcome_mean))means.push(r.outcome_mean);if(Number.isFinite(r.outcome_sd))sds.push(r.outcome_sd)}}
+    for(const t of activeTreatOrder){const r=sliceMap.get(t)?.get(o);if(r){if(Number.isFinite(r.outcome_mean))means.push(r.outcome_mean);if(Number.isFinite(r.outcome_sd))sds.push(r.outcome_sd)}}
     const avg=means.length?means.reduce((a,b)=>a+b,0)/means.length:NaN;
     const avgSd=sds.length?sds.reduce((a,b)=>a+b,0)/sds.length:NaN;
     const mStr=Number.isFinite(avg)?(Math.abs(avg)<1?avg.toFixed(2):avg.toFixed(1)):'';
@@ -659,7 +702,7 @@ function renderHeatmap(){
   html+='</tr>';
 
   for(const t of order){
-    const info=TREAT_INFO[t];if(!info)continue;
+    const info=activeTreatInfo[t];if(!info)continue;
     const isChild=info.lv===2;
     html+=`<tr><td${isChild?' class="indent"':''}><strong>${info.label}</strong><span class="treat-label">(${t})</span></td>`;
     for(const o of present){
@@ -810,7 +853,7 @@ function renderRobustness(){
 
   // Per-treatment colour scaling (across ALL rows for consistent colour)
   const colMax={};
-  for(const t of TREAT_ORDER){let mx=0;for(const s of specRows){const r=s.treats.get(t);if(r){const v=Math.abs(r.coef);if(v>mx)mx=v}}colMax[t]=mx||1}
+  for(const t of activeTreatOrder){let mx=0;for(const s of specRows){const r=s.treats.get(t);if(r){const v=Math.abs(r.coef);if(v>mx)mx=v}}colMax[t]=mx||1}
 
   // Row renderer — active rows get full colour, inactive rows are dimmed
   function dataRow(s,pin){
@@ -821,7 +864,7 @@ function renderRobustness(){
     let h=`<tr${sty?' style="'+sty+'"':''}>`;
     h+=`<td style="font-size:10px;white-space:nowrap">${MODEL_SHORT[s.model]||s.model}</td>`;
     h+=`<td style="font-size:11px">${s.spec}</td><td style="font-size:11px;color:var(--dim)">${s.mc==='(none)'?'':s.mc}</td><td style="font-size:11px;color:var(--dim)">${s.rc}</td>`;
-    for(const t of TREAT_ORDER){
+    for(const t of activeTreatOrder){
       const d=s.treats.get(t);
       if(!d||!Number.isFinite(d.coef)){h+='<td style="background:#111827;color:#475569">&mdash;</td>';continue}
       const bg=act?coefToColor(d.coef,colMax[t],outcome):'#1e293b',tc=act?textCol(d.coef,colMax[t]):'var(--dim)',st=stars(d.p_value);
@@ -833,7 +876,7 @@ function renderRobustness(){
 
   // Summary statistics per treatment (ACTIVE rows only)
   const stats={};
-  for(const t of TREAT_ORDER){
+  for(const t of activeTreatOrder){
     const cs=activeRows.map(s=>s.treats.get(t)?.coef).filter(Number.isFinite);
     const ps=activeRows.map(s=>s.treats.get(t)?.p_value).filter(Number.isFinite);
     stats[t]={n:cs.length,med:quantile(cs,.5),q1:quantile(cs,.25),q3:quantile(cs,.75),
@@ -843,14 +886,14 @@ function renderRobustness(){
   const showRange=activeRows.length>=2;
 
   // Table header (shared)
-  const hdr='<tr><th style="min-width:80px">Model</th><th>Spec</th><th>MC</th><th>RC</th>'+TREAT_ORDER.map(t=>`<th title="${t}">${TREAT_INFO[t]?.label||t}</th>`).join('')+'</tr>';
+  const hdr='<tr><th style="min-width:80px">Model</th><th>Spec</th><th>MC</th><th>RC</th>'+activeTreatOrder.map(t=>`<th title="${t}">${activeTreatInfo[t]?.label||t}</th>`).join('')+'</tr>';
 
   // === Summary panel (always visible) ===
   let sumHtml=`<table class="hm"><thead>`+hdr+'</thead><tbody>';
   if(selRow)sumHtml+=dataRow(selRow,true);
   if(showRange){
     let med='',iqr='',rng='',pos='',neg='',sig='';
-    for(const t of TREAT_ORDER){
+    for(const t of activeTreatOrder){
       const s=stats[t],e='<td style="color:var(--dim);font-size:10px">&mdash;</td>';
       if(!s.n){med+=e;iqr+=e;rng+=e;pos+=e;neg+=e;sig+=e;continue}
       if(Number.isFinite(s.med)){const bg=coefToColor(s.med,colMax[t],outcome),tc=textCol(s.med,colMax[t]);med+=`<td style="background:${bg};color:${tc};font-size:10px">${fmtC(s.med)}</td>`}else med+=e;
@@ -875,7 +918,7 @@ function renderRobustness(){
   let tblHtml=`<table class="hm"><thead>`+hdr+'</thead><tbody>';
   let prevRc='';
   for(const s of visRows){
-    if(s.rc!==prevRc){prevRc=s.rc;tblHtml+=`<tr><td colspan="${nInfoCols+TREAT_ORDER.length}" style="font-size:11px;font-weight:600;color:var(--accent2);padding:6px 6px 2px;background:var(--bg)">Sample: regression_core = ${s.rc}</td></tr>`}
+    if(s.rc!==prevRc){prevRc=s.rc;tblHtml+=`<tr><td colspan="${nInfoCols+activeTreatOrder.length}" style="font-size:11px;font-weight:600;color:var(--accent2);padding:6px 6px 2px;background:var(--bg)">Sample: regression_core = ${s.rc}</td></tr>`}
     tblHtml+=dataRow(s,false);
   }
   tblHtml+='</tbody></table>';
@@ -929,6 +972,7 @@ function render(){
 // Data loading
 // ================================================================
 function loadCSV(rows){
+  detectAndSetMode(rows);
   DATA=rows.map(normalizeRow).filter(r=>r.outcome&&r.coef!==''&&r.coef!=null);
   populateSelectors();
   // Stabilise selectors (4 passes like mermaid chart)

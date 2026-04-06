@@ -24,7 +24,9 @@ library(data.table)
 library(here)
 
 source(here::here("scripts", "00_setup.R"))
+source(here::here("scripts", "treatment_definitions.R"))
 
+wc_suffix <- if (WITHIN_CORPORATE) "_wc" else ""
 SYNTHESIS_DIR <- here::here("output", "synthesis")
 dir.create(SYNTHESIS_DIR, showWarnings = FALSE, recursive = TRUE)
 
@@ -34,7 +36,7 @@ geo_levels <- c("LA", "ITL2", "ITL3")
 message("=== Phase 1: Data Ingestion ===")
 
 enriched <- rbindlist(lapply(geo_levels, function(g) {
-  path <- file.path(SUMMARY_TABLES_DIR, paste0("results_enriched_", g, ".csv"))
+  path <- file.path(SUMMARY_TABLES_DIR, paste0("results_enriched_", g, wc_suffix, ".csv"))
   if (!file.exists(path)) { message("  Missing: ", path); return(NULL) }
   dt <- fread(path, na.strings = c("NA", ""))
   dt[, geography := g]
@@ -43,7 +45,7 @@ enriched <- rbindlist(lapply(geo_levels, function(g) {
 }), fill = TRUE)
 
 narratives <- rbindlist(lapply(geo_levels, function(g) {
-  path <- file.path(SUMMARY_TABLES_DIR, paste0("narrative_summary_", g, ".csv"))
+  path <- file.path(SUMMARY_TABLES_DIR, paste0("narrative_summary_", g, wc_suffix, ".csv"))
   if (!file.exists(path)) return(NULL)
   dt <- fread(path, na.strings = c("NA", ""))
   dt[, geography := g]
@@ -74,6 +76,16 @@ message("  Total enriched rows: ", nrow(enriched))
 message("  Total matching log rows: ", nrow(match_logs))
 message("  Total balance rows: ", nrow(balance))
 
+# Detect control group label from data (written by 06_run_regressions.R)
+control_label <- if ("control_definition" %in% names(enriched)) {
+  cd <- enriched[!is.na(control_definition) & nzchar(control_definition), control_definition][1]
+  if (!is.na(cd)) cd else standard_control_label
+} else {
+  standard_control_label
+}
+is_wc_mode <- WITHIN_CORPORATE
+message(sprintf("  Control group: %s", control_label))
+
 # --- Helper functions ---
 modal_sign <- function(coefs) {
   s <- sign(coefs[!is.na(coefs)])
@@ -85,10 +97,14 @@ modal_sign <- function(coefs) {
 ols_models <- c("OLS Additive FE", "OLS Interactive FE")
 
 # Treatment ordering for output
-treat_order <- c("fp", "ukfp", "frfp", "thfp",
-                 "np", "uknp", "frnp", "thnp",
-                 "ps",
-                 "th", "bh", "eh", "ch", "oh")
+treat_order <- if (is_wc_mode) {
+  c("wcps", "wcnp", "wcff")
+} else {
+  c("fp", "ukfp", "frfp", "thfp",
+    "np", "uknp", "frnp", "thnp",
+    "ps",
+    "th", "bh", "eh", "ch", "oh")
+}
 
 # --- Phase 2: Treatment Effect Taxonomy ---
 message("=== Phase 2: Treatment Effect Taxonomy ===")
@@ -163,7 +179,7 @@ tax[, geo_idx := match(geography, geo_levels)]
 setorder(tax, treat_idx, geo_idx, outcome_family, outcome)
 tax[, c("treat_idx", "geo_idx") := NULL]
 
-fwrite(tax, file.path(SYNTHESIS_DIR, "treatment_effect_taxonomy.csv"))
+fwrite(tax, file.path(SYNTHESIS_DIR, paste0("treatment_effect_taxonomy", wc_suffix, ".csv")))
 message("  Taxonomy: ", nrow(tax), " rows, ", ncol(tax), " cols")
 
 # --- Phase 2b: Headline Subclass FE Taxonomy ---
@@ -222,13 +238,13 @@ tax_headline[, geo_idx := match(geography, geo_levels)]
 setorder(tax_headline, treat_idx, geo_idx, outcome_family, outcome)
 tax_headline[, c("treat_idx", "geo_idx") := NULL]
 
-fwrite(tax_headline, file.path(SYNTHESIS_DIR, "headline_subclass_fe_taxonomy.csv"))
+fwrite(tax_headline, file.path(SYNTHESIS_DIR, paste0("headline_subclass_fe_taxonomy", wc_suffix, ".csv")))
 message("  Headline taxonomy: ", nrow(tax_headline), " rows")
 
 # --- Phase 3: Read Geography Recommendation (from 09a) ---
 message("=== Phase 3: Geography Recommendation (from 09a) ===")
 
-geo_rec_path <- file.path(SYNTHESIS_DIR, "geography_recommendation.csv")
+geo_rec_path <- file.path(SYNTHESIS_DIR, paste0("geography_recommendation", wc_suffix, ".csv"))
 if (file.exists(geo_rec_path)) {
   geo_rec <- fread(geo_rec_path)
   winner <- geo_rec[which.max(recommendation_score), geography]
@@ -309,7 +325,7 @@ spec_curve[, geo_idx := match(geography, geo_levels)]
 setorder(spec_curve, treat_idx, geo_idx, outcome_family, outcome)
 spec_curve[, c("treat_idx", "geo_idx") := NULL]
 
-fwrite(spec_curve, file.path(SYNTHESIS_DIR, "specification_curve_summary.csv"))
+fwrite(spec_curve, file.path(SYNTHESIS_DIR, paste0("specification_curve_summary", wc_suffix, ".csv")))
 message("  Specification curve summary: ", nrow(spec_curve), " rows")
 
 # --- Phase 5: Cross-Geography Sign Consistency Matrix ---
@@ -376,7 +392,7 @@ sign_mat[, treat_idx := match(treatment_short_id, treat_order)]
 setorder(sign_mat, treat_idx, outcome_family, outcome)
 sign_mat[, treat_idx := NULL]
 
-fwrite(sign_mat, file.path(SYNTHESIS_DIR, "sign_consistency_matrix.csv"))
+fwrite(sign_mat, file.path(SYNTHESIS_DIR, paste0("sign_consistency_matrix", wc_suffix, ".csv")))
 message("  Sign consistency matrix: ", nrow(sign_mat), " rows")
 
 # --- Phase 6: HTML Synthesis Report ---
@@ -498,11 +514,11 @@ h("<h3>Hypotheses</h3>")
 h("<div class='pap-box'>")
 h("<p><strong>H1 (Average energy efficiency differences):</strong> ",
   "For at least one non-baseline ownership type <em>k</em>, properties owned by category <em>k</em> exhibit ",
-  "systematically different energy performance relative to UK private individuals (the control group).</p>")
+  "systematically different energy performance relative to the control group (", control_label, ").</p>")
 h("<p style='margin-left:20px;'><strong>H1a:</strong> Foreign for-profit ownership, especially via tax havens, ",
-  "is associated with <em>higher</em> normalised energy consumption (worse efficiency) than UK private individuals.</p>")
-h("<p style='margin-left:20px;'><strong>H1b:</strong> UK non-profits and foreign non-profits may exhibit ",
-  "<em>better</em> energy performance (lower consumption) than UK private individuals.</p>")
+  "is associated with <em>higher</em> normalised energy consumption (worse efficiency) than the control group.</p>")
+h("<p style='margin-left:20px;'><strong>H1b:</strong> Non-profits and public sector may exhibit ",
+  "<em>better</em> energy performance (lower consumption) than the control group.</p>")
 h("<p><strong>H2 (Bad EPC prevalence):</strong> The probability of holding a &ldquo;bad EPC&rdquo; ",
   "(below regulatory threshold) differs by ownership type.</p>")
 h("<p><strong>H3 (Bunching around EPC cutoffs):</strong> Certain ownership types exhibit excess mass just above ",
@@ -517,26 +533,37 @@ h("</div>")
 # -- Treatment groups --
 h("<h3>Treatment Groups</h3>")
 h("<div class='pap-box'>")
-h("<p><strong>Control group (T<sub>p</sub>=0):</strong> Privately rented properties owned by private individuals ",
-  "(identified via EPC tenure field, not appearing in CCOD/OCOD land registry data).</p>")
+h("<p><strong>Control group (T<sub>p</sub>=0):</strong> ", control_label, ".</p>")
 h("<table style='width:auto; font-size:12px;'>")
 h("<tr><th>Short ID</th><th>Legal Form</th><th>Jurisdiction</th><th>PAP Code</th><th>Description</th></tr>")
-pap_treat <- data.table(
-  sid = c("fp","ukfp","frfp","thfp","np","uknp","frnp","thnp","ps","th","bh","eh","ch","oh"),
-  lf  = c("For-Profit","For-Profit","For-Profit","For-Profit",
-          "Non-Profit","Non-Profit","Non-Profit","Non-Profit",
-          "Public Sector","Any","Any","Any","Any","Any"),
-  jur = c("Any","UK","Foreign","Tax Haven","Any","UK","Foreign","Tax Haven",
-          "UK","Tax Haven","British Haven","European Haven","Caribbean Haven","Other Haven"),
-  pap = c("T=1,3","T=1","T=3","T=3+Haven","T=2,4","T=2","T=4","T=4+Haven",
-          "T=5","Haven","BritHaven","EuroHaven","CaribHaven","OtherHaven"),
-  desc = c("All for-profit companies","UK-incorporated for-profit","Foreign-incorporated for-profit",
-           "Tax-haven for-profit","All non-profit/community orgs","UK non-profit",
-           "Foreign non-profit","Tax-haven non-profit","Local authorities & councils",
-           "All tax-haven entities","British Overseas Territories havens",
-           "European havens (Jersey, Guernsey, IoM, etc.)",
-           "Caribbean havens (BVI, Cayman, etc.)","Other havens (HK, Singapore, etc.)")
-)
+if (is_wc_mode) {
+  pap_treat <- data.table(
+    sid  = c("wcps", "wcnp", "wcff"),
+    lf   = c("Public Sector", "Non-Profit", "For-Profit"),
+    jur  = c("UK", "Any", "Foreign"),
+    pap  = c("T=5", "T=2,4", "T=3"),
+    desc = c("Local authorities & councils",
+             "All non-profit/community organisations",
+             "Foreign-incorporated for-profit companies")
+  )
+} else {
+  pap_treat <- data.table(
+    sid = c("fp","ukfp","frfp","thfp","np","uknp","frnp","thnp","ps","th","bh","eh","ch","oh"),
+    lf  = c("For-Profit","For-Profit","For-Profit","For-Profit",
+            "Non-Profit","Non-Profit","Non-Profit","Non-Profit",
+            "Public Sector","Any","Any","Any","Any","Any"),
+    jur = c("Any","UK","Foreign","Tax Haven","Any","UK","Foreign","Tax Haven",
+            "UK","Tax Haven","British Haven","European Haven","Caribbean Haven","Other Haven"),
+    pap = c("T=1,3","T=1","T=3","T=3+Haven","T=2,4","T=2","T=4","T=4+Haven",
+            "T=5","Haven","BritHaven","EuroHaven","CaribHaven","OtherHaven"),
+    desc = c("All for-profit companies","UK-incorporated for-profit","Foreign-incorporated for-profit",
+             "Tax-haven for-profit","All non-profit/community orgs","UK non-profit",
+             "Foreign non-profit","Tax-haven non-profit","Local authorities & councils",
+             "All tax-haven entities","British Overseas Territories havens",
+             "European havens (Jersey, Guernsey, IoM, etc.)",
+             "Caribbean havens (BVI, Cayman, etc.)","Other havens (HK, Singapore, etc.)")
+  )
+}
 for (i in seq_len(nrow(pap_treat))) {
   r <- pap_treat[i]
   h("<tr><td><code>", r$sid, "</code></td><td>", r$lf, "</td><td>", r$jur, "</td><td>", r$pap, "</td><td>", r$desc, "</td></tr>")
@@ -582,8 +609,8 @@ for (od in out_defs) {
     "</td><td>", od[[4]], "</td><td>", od[[5]], "</td></tr>")
 }
 h("</table>")
-h("<p style='font-size:11px; color:#718096;'>Expected signs are for for-profit/tax-haven treatments relative to the private-individual control. ",
-  "Non-profit and public sector are generally expected to show the opposite sign.</p>")
+h("<p style='font-size:11px; color:#718096;'>Expected signs are relative to the control group (",
+  control_label, "). Sign interpretation depends on the treatment-control contrast.</p>")
 h("</div>")
 
 # ===== HYPOTHESIS CONCLUSIONS (bullet points) =====
@@ -592,23 +619,43 @@ h("<p class='section-note'>Summary conclusions based on the recommended geograph
   "Each hypothesis is assessed using the headline PSM + Subclass FE estimator across all relevant treatment-outcome cells.</p>")
 
 # Build hypothesis conclusion data
-hp_map <- list(
-  H1  = list(label = "H1: Average energy efficiency differences by ownership type",
-             treats_pos = c("fp","ukfp","frfp","thfp"),
-             treats_neg = c("np","uknp","frnp","thnp","ps")),
-  H1a = list(label = "H1a: Foreign/tax-haven for-profit shows worse efficiency",
-             treats_pos = c("frfp","thfp"),
-             treats_neg = character(0)),
-  H1b = list(label = "H1b: Non-profits and public sector show better efficiency",
-             treats_pos = character(0),
-             treats_neg = c("np","uknp","frnp","thnp","ps")),
-  H2  = list(label = "H2: Bad EPC prevalence differs by ownership type",
-             treats_pos = c("fp","ukfp","frfp","thfp","th"),
-             treats_neg = c("np","uknp","ps")),
-  H3  = list(label = "H3: Bunching around EPC cutoffs (strategic manipulation)",
-             treats_pos = c("fp","ukfp","frfp","thfp","th"),
-             treats_neg = character(0))
-)
+if (is_wc_mode) {
+  hp_map <- list(
+    H1  = list(label = "H1: Energy efficiency differences vs UK for-profit",
+               treats_pos = c("wcff"),
+               treats_neg = c("wcnp","wcps")),
+    H1a_wc = list(label = "H1a: Foreign for-profit shows worse efficiency than UK for-profit",
+               treats_pos = c("wcff"),
+               treats_neg = character(0)),
+    H1b_wc = list(label = "H1b: Non-profits and public sector show better efficiency than UK for-profit",
+               treats_pos = character(0),
+               treats_neg = c("wcnp","wcps")),
+    H2  = list(label = "H2: Bad EPC prevalence differs vs UK for-profit",
+               treats_pos = c("wcff"),
+               treats_neg = c("wcnp","wcps")),
+    H3  = list(label = "H3: Bunching around EPC cutoffs vs UK for-profit",
+               treats_pos = c("wcff"),
+               treats_neg = character(0))
+  )
+} else {
+  hp_map <- list(
+    H1  = list(label = "H1: Average energy efficiency differences by ownership type",
+               treats_pos = c("fp","ukfp","frfp","thfp"),
+               treats_neg = c("np","uknp","frnp","thnp","ps")),
+    H1a = list(label = "H1a: Foreign/tax-haven for-profit shows worse efficiency",
+               treats_pos = c("frfp","thfp"),
+               treats_neg = character(0)),
+    H1b = list(label = "H1b: Non-profits and public sector show better efficiency",
+               treats_pos = character(0),
+               treats_neg = c("np","uknp","frnp","thnp","ps")),
+    H2  = list(label = "H2: Bad EPC prevalence differs by ownership type",
+               treats_pos = c("fp","ukfp","frfp","thfp","th"),
+               treats_neg = c("np","uknp","ps")),
+    H3  = list(label = "H3: Bunching around EPC cutoffs (strategic manipulation)",
+               treats_pos = c("fp","ukfp","frfp","thfp","th"),
+               treats_neg = character(0))
+  )
+}
 
 # Use headline taxonomy on the winner geography for verdicts
 hl_winner <- tax_headline[geography == winner]
@@ -1264,7 +1311,7 @@ h("<hr><p class='section-note'>End of synthesis report. Generated by 09_results_
 h("</body></html>")
 
 # Write HTML
-writeLines(html, file.path(SYNTHESIS_DIR, "synthesis_report.html"))
+writeLines(html, file.path(SYNTHESIS_DIR, paste0("synthesis_report", wc_suffix, ".html")))
 message("  HTML report written: ", length(html), " lines")
 
 # --- Verification ---
@@ -1272,9 +1319,11 @@ message("\n=== Verification ===")
 
 # 1. Dimensions
 message("Output file dimensions:")
-out_files <- c("treatment_effect_taxonomy.csv", "geography_recommendation.csv",
-               "geography_diagnostic_detail.csv", "specification_curve_summary.csv",
-               "sign_consistency_matrix.csv")
+out_files <- c(paste0("treatment_effect_taxonomy", wc_suffix, ".csv"),
+               paste0("geography_recommendation", wc_suffix, ".csv"),
+               paste0("geography_diagnostic_detail", wc_suffix, ".csv"),
+               paste0("specification_curve_summary", wc_suffix, ".csv"),
+               paste0("sign_consistency_matrix", wc_suffix, ".csv"))
 for (f in out_files) {
   fp <- file.path(SYNTHESIS_DIR, f)
   if (file.exists(fp)) {

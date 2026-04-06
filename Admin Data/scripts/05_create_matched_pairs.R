@@ -26,6 +26,12 @@ source(here::here("scripts", "model_specifications.R"))
 source(here::here("scripts", "treatment_definitions.R"))
 message("Sourced setup, model specifications, and treatment definitions.")
 
+if (WITHIN_CORPORATE) {
+  message(">>> WITHIN_CORPORATE mode: UK For-Profit as control, 3 treatments.")
+  define_treatments  <- define_within_corporate_treatments
+  treatment_metadata <- within_corporate_metadata
+}
+
 
 # Requirements ------------------------------------------------------------
 library(data.table)

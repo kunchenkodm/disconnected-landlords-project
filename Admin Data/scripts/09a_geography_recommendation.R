@@ -21,6 +21,8 @@ library(here)
 
 source(here::here("scripts", "00_setup.R"))
 
+wc_suffix <- if (WITHIN_CORPORATE) "_wc" else ""
+
 message("===================================================================")
 message("  09a_geography_recommendation.R")
 message(sprintf("  Started: %s", format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
@@ -35,7 +37,7 @@ geo_levels <- c("LA", "ITL2", "ITL3")
 message("=== Loading data ===")
 
 enriched <- rbindlist(lapply(geo_levels, function(g) {
-  path <- file.path(SUMMARY_TABLES_DIR, paste0("results_enriched_", g, ".csv"))
+  path <- file.path(SUMMARY_TABLES_DIR, paste0("results_enriched_", g, wc_suffix, ".csv"))
   if (!file.exists(path)) { message("  Missing: ", path); return(NULL) }
   dt <- fread(path, na.strings = c("NA", ""))
   dt[, geography := g]
@@ -245,7 +247,7 @@ geo_rec[, recommendation_score := fifelse(has_balance,
 
 
 # --- Write outputs ---
-fwrite(geo_rec, file.path(SYNTHESIS_DIR, "geography_recommendation.csv"))
+fwrite(geo_rec, file.path(SYNTHESIS_DIR, paste0("geography_recommendation", wc_suffix, ".csv")))
 message("  Geography recommendation written: ", nrow(geo_rec), " rows")
 
 
@@ -270,7 +272,7 @@ geo_detail[, treat_idx := match(treatment_short_id, treat_order)]
 setorder(geo_detail, treat_idx, geography)
 geo_detail[, treat_idx := NULL]
 
-fwrite(geo_detail, file.path(SYNTHESIS_DIR, "geography_diagnostic_detail.csv"))
+fwrite(geo_detail, file.path(SYNTHESIS_DIR, paste0("geography_diagnostic_detail", wc_suffix, ".csv")))
 message("  Geography diagnostic detail written: ", nrow(geo_detail), " rows")
 
 

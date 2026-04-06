@@ -107,6 +107,32 @@ define_treatments <- function(dt) {
   invisible(dt)
 }
 
+# Within-corporate comparison: UK for-profit as control -----------------------
+define_within_corporate_treatments <- function(dt) {
+  # Control group: UK-incorporated for-profit companies
+  wc_control <- quote(
+    !is.na(coarse_proprietorship) &
+      grepl("For-Profit", coarse_proprietorship, ignore.case = TRUE) &
+      !is.na(country_incorporated_1) &
+      country_incorporated_1 == "UNITED KINGDOM"
+  )
+
+  dt[, wc_treat_public_sector := fcase(
+    !is.na(coarse_proprietorship) & grepl("Public Sector", coarse_proprietorship, ignore.case = TRUE), 1L,
+    eval(wc_control), 0L, default = NA_integer_
+  )]
+  dt[, wc_treat_non_profit := fcase(
+    !is.na(coarse_proprietorship) & grepl("Non-Profit/Community Organisations", coarse_proprietorship, ignore.case = TRUE), 1L,
+    eval(wc_control), 0L, default = NA_integer_
+  )]
+  dt[, wc_treat_foreign_for_profit := fcase(
+    !is.na(coarse_proprietorship) & grepl("For-Profit", coarse_proprietorship, ignore.case = TRUE) &
+      !is.na(country_incorporated_1) & country_incorporated_1 != "UNITED KINGDOM", 1L,
+    eval(wc_control), 0L, default = NA_integer_
+  )]
+  invisible(dt)
+}
+
 # Master list of treatments, file identifiers, short IDs, and titles used across matching and regressions.
 treatment_metadata <- list(
   list(var = "treat_for_profit",           file_id = "for_profit_vs_private_rental",           short_id = "fp",   title = "Effect of For-Profit Ownership"),
@@ -124,3 +150,14 @@ treatment_metadata <- list(
   list(var = "treat_caribbean_haven",      file_id = "caribbean_haven_vs_private_rental",      short_id = "ch",   title = "Effect of Caribbean Haven Ownership"),
   list(var = "treat_other_haven",          file_id = "other_haven_vs_private_rental",          short_id = "oh",   title = "Effect of Other Haven Ownership")
 )
+
+# Within-corporate metadata (3 treatments, UK for-profit as control)
+within_corporate_metadata <- list(
+  list(var = "wc_treat_public_sector",      file_id = "wc_public_sector_vs_uk_fp",      short_id = "wcps", title = "Public Sector vs UK For-Profit"),
+  list(var = "wc_treat_non_profit",         file_id = "wc_non_profit_vs_uk_fp",         short_id = "wcnp", title = "Non-Profit vs UK For-Profit"),
+  list(var = "wc_treat_foreign_for_profit", file_id = "wc_foreign_for_profit_vs_uk_fp", short_id = "wcff", title = "Foreign For-Profit vs UK For-Profit")
+)
+
+# Control group labels (written to results CSV, read by dashboard and synthesis)
+standard_control_label          <- "Privately rented, unknown ownership (not in CCOD/OCOD)"
+within_corporate_control_label  <- "UK for-profit companies (UK-incorporated, for-profit proprietorship)"
