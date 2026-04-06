@@ -1,0 +1,26 @@
+\begin{table}[htbp]
+\centering
+\caption{Bad EPC Prevalence by Ownership Type}
+\label{tab:h2_bad_epc}
+\begin{tabular}{lrrrr}
+\toprule
+Treatment & Coef (pp) & Std.\ coef & $p$-value & $N$ \\
+\midrule
+Public sector & -16.3*** & -0.332 & $<$0.001 & 965,606 \\
+Non-profit & -14.6*** & -0.292 & $<$0.001 & 1,599,851 \\
+Tax haven (all) & -6.0*** & -0.121 & $<$0.001 & 122,017 \\
+Foreign for-profit & -6.0*** & -0.120 & $<$0.001 & 121,371 \\
+For-profit (all) & -3.2*** & -0.067 & $<$0.001 & 2,764,756 \\
+\bottomrule
+\end{tabular}
+\begin{minipage}{0.9\textwidth}
+\vspace{4pt}
+\footnotesize
+\textit{Notes:} PSM with subclass FE, LA geography, Baseline spec, base core.
+Outcome: \texttt{bad\_epc} (= 1 if EPC band $\leq$ D, i.e.\ SAP score $\leq$ 68).
+Coefficients in percentage points (coef $\times$ 100).
+Negative = treated properties are \textit{less} likely to have a bad EPC.
+$^{***}p<0.001$; $^{**}p<0.01$; $^{*}p<0.05$.
+Source: \texttt{results\_enriched\_LA.csv}.
+\end{minipage}
+\end{table}

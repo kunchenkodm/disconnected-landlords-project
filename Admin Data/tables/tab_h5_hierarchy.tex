@@ -1,0 +1,30 @@
+\begin{table}[htbp]
+\centering
+\caption{Treatment Group Hierarchy: Standardised EPC Differentials}
+\label{tab:h5_hierarchy}
+\begin{tabular}{llrrr}
+\toprule
+Tier & Treatment & Std.\ coef & $N$ & Survives Spec D? \\
+\midrule
+Public/Non-profit & Public sector & 0.352 & 965,606 & Yes \\
+ & Non-profit & 0.314 & 1,599,851 & Yes \\
+ & UK non-profit & 0.316 & 1,591,740 & Yes \\
+\addlinespace
+Foreign/Tax haven & Tax haven (all) & 0.131 & 122,017 & No \\
+ & Foreign for-profit & 0.134 & 121,371 & No \\
+ & Tax haven for-profit & 0.137 & 117,040 & No \\
+\addlinespace
+Domestic for-profit & For-profit (all) & 0.036 & 2,764,756 & No \\
+ & UK for-profit & 0.035 & 2,718,010 & No \\
+\bottomrule
+\end{tabular}
+\begin{minipage}{0.9\textwidth}
+\vspace{4pt}
+\footnotesize
+\textit{Notes:} PSM with subclass FE, LA geography, Baseline spec, base core.
+Outcome: \texttt{current\_energy\_efficiency}.
+``Survives Spec D'' = coefficient significant at $p < 0.05$ in the
+Council Tax + Price Paid specification on the ppd\_counciltax core.
+Source: \texttt{results\_enriched\_LA.csv}.
+\end{minipage}
+\end{table}

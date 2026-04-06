@@ -22,17 +22,20 @@ ENABLE_EXTRACTION <- FALSE # Manually unzip everything
 # Pilot sample size as defined in PAP Section 2.3 (Random subset of LAs)
 LA_SAMPLE_SIZE <- 30L
 # Set TRUE to process all ~400 LAs (England & Wales); FALSE uses the pilot sample of LA_SAMPLE_SIZE LAs.
-FULL_SAMPLE <- FALSE
+FULL_SAMPLE <- TRUE
 
 ENERGY_CONSUMPTION_REFERENCE_YEAR <- "2020"
 
-# Matching Thresholds (Minimum obs required per LA to attempt matching)
-# "Low" threshold used when data is sparse (e.g. Price Paid Data present)
-# "High" threshold used for admin-only data
-MATCHING_MIN_TREATED_LOW  <- 5L
-MATCHING_MIN_TREATED_HIGH <- 10L
-MATCHING_MIN_CONTROL_LOW  <- 25L
-MATCHING_MIN_CONTROL_HIGH <- 50L
+# Parameters: Matching ----------------------------------------------------
+MATCHING_MIN_TREATED_LOW  <- 5L   # Min treated obs (sparse cores)
+MATCHING_MIN_TREATED_HIGH <- 10L  # Min treated obs (admin-only cores)
+MATCHING_MIN_CONTROL_LOW  <- 25L  # Min control obs (sparse cores)
+MATCHING_MIN_CONTROL_HIGH <- 50L  # Min control obs (admin-only cores)
+MATCHING_GEOGRAPHY <- Sys.getenv("MATCHING_GEOGRAPHY_OVERRIDE", unset = "LA")  # "LA", "ITL1", "ITL2", or "ITL3"
+MATCHING_N_WORKERS <- local({
+  ov <- suppressWarnings(as.integer(Sys.getenv("MATCHING_N_WORKERS_OVERRIDE", unset = "")))
+  if (!is.na(ov) && ov > 0L) ov else 1L
+})
 
 # Directory Paths ---------------------------------------------------------
 # Define all paths relative to the project root using here()
@@ -50,9 +53,7 @@ PROCESSED_DATA_DIR <- here::here("data", "processed")
 # Temporary per-LA RDS files written here during chunked EPC processing
 EPC_TEMP_DIR       <- here::here("data", "processed", "epc_la_temp")
 
-# Per-LA pipeline directories (one file per local authority at each stage)
-EPC_LA_MERGED_DIR   <- here::here("data", "processed", "epc_la_merged")
-EPC_LA_ENHANCED_DIR <- here::here("data", "processed", "epc_la_enhanced")
+# Per-LA pipeline directory (one .parquet file per local authority)
 EPC_LA_REFINED_DIR  <- here::here("data", "processed", "epc_la_refined")
 
 # Output Structure
@@ -75,8 +76,6 @@ dir.create(RAW_POSTCODE_DIR, showWarnings = FALSE, recursive = TRUE)
 # Create Intermediate Directories
 dir.create(PROCESSED_DATA_DIR, showWarnings = FALSE, recursive = TRUE)
 dir.create(EPC_TEMP_DIR,       showWarnings = FALSE, recursive = TRUE)
-dir.create(EPC_LA_MERGED_DIR,   showWarnings = FALSE, recursive = TRUE)
-dir.create(EPC_LA_ENHANCED_DIR, showWarnings = FALSE, recursive = TRUE)
 dir.create(EPC_LA_REFINED_DIR,  showWarnings = FALSE, recursive = TRUE)
 
 
@@ -87,5 +86,8 @@ dir.create(RESULTS_DIR, showWarnings = FALSE, recursive = TRUE)
 dir.create(SUMMARY_TABLES_DIR, showWarnings = FALSE, recursive = TRUE)
 dir.create(TABLES_DIR, showWarnings = FALSE, recursive = TRUE)
 dir.create(FIGURES_DIR, showWarnings = FALSE, recursive = TRUE)
+
+MODEL_ARCHIVE_DIR <- here::here("output", "model_archive")
+dir.create(MODEL_ARCHIVE_DIR, showWarnings = FALSE, recursive = TRUE)
 
 message("Global setup complete. Project root set to: ", here::here())

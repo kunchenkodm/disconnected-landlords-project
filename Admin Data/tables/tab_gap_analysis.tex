@@ -1,0 +1,30 @@
+\begin{table}[htbp]
+\centering
+\caption{Gap Analysis: Current EPC vs.\ Potential--Current Gap}
+\label{tab:gap_analysis}
+\begin{tabular}{lrrrl}
+\toprule
+Treatment & Current EPC coef & Gap coef & $|$Ratio$|$ & Interpretation \\
+\midrule
+For-profit (all) & +0.42*** & -0.07 & 0.16 & Stock selection \\
+Tax haven (all) & +1.61*** & -0.63*** & 0.39 & Hybrid \\
+Foreign for-profit & +1.64*** & -0.64*** & 0.39 & Hybrid \\
+Non-profit & +3.15*** & -2.26*** & 0.72 & Predominantly operational \\
+Public sector & +3.35*** & -2.57*** & 0.77 & Predominantly operational \\
+\bottomrule
+\end{tabular}
+\begin{minipage}{0.9\textwidth}
+\vspace{4pt}
+\footnotesize
+\textit{Notes:} PSM with subclass FE, LA geography, Baseline spec, base core.
+\textbf{Speculative.} The cross-sectional gap is not a clean test of operational
+investment; panel data would be needed to identify retrofit activity directly.
+Current EPC coef: coefficient on \texttt{current\_energy\_efficiency}.
+Gap coef: coefficient on \texttt{energy\_efficiency\_potential\_gap} (= potential EPC $-$ current EPC).
+Ratio = $|$gap coef $/$ current EPC coef$|$.
+A ratio near 0 means both current and potential rise together (selection);
+a ratio near 1 means the gap shrinks (operational investment).
+$^{***}p<0.001$; $^{**}p<0.01$; $^{*}p<0.05$.
+Source: \texttt{results\_enriched\_LA.csv}.
+\end{minipage}
+\end{table}

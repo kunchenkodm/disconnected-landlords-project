@@ -16,7 +16,7 @@ source(here::here("scripts", "00_setup.R"))
 library(data.table)
 library(arrow)
 
-# SETUP: INPUTS REQUIRED  --------------------------------------------------
+# Inputs ------------------------------------------------------------------
 input_dir <- EPC_LA_ENHANCED_DIR
 output_dir <- EPC_LA_REFINED_DIR
 
@@ -28,9 +28,7 @@ if (n_files == 0L) {
 }
 
 
-# =========================================================================
-# PASS 1: Collect sufficient statistics for global computations
-# =========================================================================
+# Pass 1: Collect Global Statistics ----------------------------------------
 message("Pass 1: Collecting global statistics across all LAs...")
 pass1_start <- proc.time()
 
@@ -137,9 +135,7 @@ elapsed_pass1 <- (proc.time() - pass1_start)[["elapsed"]]
 message(sprintf("Pass 1 complete (%.0f s). Global half-SD = %.4f", elapsed_pass1, global_half_sd))
 
 
-# =========================================================================
-# PASS 2: Create derived features per-LA and write Parquet
-# =========================================================================
+# Pass 2: Derived Features & Parquet ---------------------------------------
 message("Pass 2: Creating derived features and writing Parquet per-LA...")
 pass2_start <- proc.time()
 
@@ -163,7 +159,7 @@ for (i in seq_along(la_files)) {
   dt <- readRDS(la_files[i])
   setDT(dt)
 
-  # --- Per-row feature creation ---
+  ## Per-row feature creation
 
   # Energy Efficiency Dummies: Binary indicators for poor or very poor ratings
   dt[!is.na(roof_energy_eff), roof_energy_eff_dum := as.numeric(roof_energy_eff %in% c("Poor", "Very Poor"))]
@@ -199,7 +195,7 @@ for (i in seq_along(la_files)) {
     default = 0
   )]
 
-  # --- Borderline variables (require global stats from pass 1) ---
+  ## Borderline variables
 
   # borderline_good_epc: just above C threshold (69) using global SD
   dt[, borderline_good_epc := fcase(
@@ -222,7 +218,7 @@ for (i in seq_along(la_files)) {
   # Clean up helper columns
   dt[, c("lower_cutoff", "half_sd") := NULL]
 
-  # --- Remove unused columns ---
+  ## Remove unused columns
   description_cols <- grep("_description", names(dt), value = TRUE)
   unused_specific <- c("fixed_lighting_outlets_count", "low_energy_fixed_light_count")
   cols_to_remove <- intersect(c(description_cols, unused_specific), names(dt))

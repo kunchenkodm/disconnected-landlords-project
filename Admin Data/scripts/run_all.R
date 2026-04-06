@@ -11,15 +11,13 @@ library(here)
 # Source scripts in order
 scripts <- c(
   "00_setup.R",
-  "01_data_sourcing.R", 
-  "02_data_merging_pipeline.R",
-  "03_feature_enhancement.R",
-  "04_feature_refinement.R",
+  "01_data_sourcing.R",
+  "02_compute_global_stats.R",
+  "03_build_analysis_dataset.R",
   "05_create_matched_pairs.R",
   "06_run_regressions.R",
   "07_create_plots.R",
   "08_validation_exercices.R"
-  
 )
 
 # Main Loop

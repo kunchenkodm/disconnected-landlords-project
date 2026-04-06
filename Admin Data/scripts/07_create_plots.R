@@ -7,7 +7,7 @@
 rm(list=setdiff(ls(), c("script", "pipeline.start.time")))
 gc()
 
-# DIAGNOSTICS: RUNTIME
+# Runtime ----------------------------------------------------------------
 start.time <- Sys.time()
 
 # Source global setup script for paths and configurations
@@ -18,7 +18,7 @@ library(data.table)
 library(ggplot2)
 library(arrow)
 
-#### SETUP: INPUTS REQUIRED ####
+# Inputs -----------------------------------------------------------------
 la_refined_dir <- EPC_LA_REFINED_DIR
 output_dir <- FIGURES_DIR
 

@@ -13,8 +13,7 @@ source(here::here("scripts", "00_setup.R"))
 library(data.table)
 library(janitor)
 
-# SETUP: INPUTS REQUIRED  --------------------------------------------------
-# Configuration section using global variables from 00_setup.R
+# Inputs ------------------------------------------------------------------
 ccod_version <- CCOD_VERSION
 input_dir <- EPC_LA_MERGED_DIR
 output_dir <- EPC_LA_ENHANCED_DIR

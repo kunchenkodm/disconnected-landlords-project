@@ -18,8 +18,7 @@ source(here::here("scripts", "00_setup.R"))
 library(data.table)
 library(janitor)
 
-# SETUP: INPUTS REQUIRED  --------------------------------------------------
-# Configuration section for user customization (using global variables from 00_setup.R)
+# Inputs ------------------------------------------------------------------
 ccod_version <- CCOD_VERSION
 ocod_version <- OCOD_VERSION
 

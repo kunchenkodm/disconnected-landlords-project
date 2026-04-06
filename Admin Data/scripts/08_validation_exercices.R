@@ -61,13 +61,13 @@ for (i in seq_along(la_files)) {
   dt <- define_treatments(dt)
 
   # Select needed columns
-  la_val <- dt[, .(postcode_2, tenure_2, treat_for_profit, treat_non_profit, treat_public_sector)]
+  la_val <- dt[, .(epc_postcode, tenure_2, treat_for_profit, treat_non_profit, treat_public_sector)]
 
   # Join with geography
   la_val <- merge(
     la_val,
     postcode_lookup[, .(pcds, lsoa21cd)],
-    by.x = "postcode_2",
+    by.x = "epc_postcode",
     by.y = "pcds",
     all.x = TRUE
   )
@@ -198,7 +198,7 @@ validation_set[, diff_pub_vs_3 := prop_treat_pub - prop_census_3]
 message("Merge successful. Rows: ", nrow(validation_set))
 
 # Visualisation -----------------------------------------------------------
-##### CORRELATION TABLE #####
+# Correlation Table -------------------------------------------------------
 message("Calculating Correlations...")
 
 tests <- list(
@@ -224,7 +224,7 @@ message("=======================================================")
 print(cor_results)
 message("=======================================================\n")
 
-##### MISMATCH STATISTICS TABLE #####
+# Mismatch Statistics -----------------------------------------------------
 message("\n=======================================================")
 message("       MISMATCH STATISTICS (EPC Prop - Census Prop)    ")
 message("=======================================================")
@@ -265,7 +265,7 @@ mismatch_table <- rbind(
 print(mismatch_table)
 message("=======================================================\n")
 
-##### GENERATE PLOTS #####
+# Validation Plots --------------------------------------------------------
 message("Generating Validation Plots...")
 
 # Define and create the validation figures directory
@@ -319,9 +319,9 @@ plot_validation(validation_set, "prop_census_3", "prop_treat_pub",
                 "05_public_sector_vs_census_3.png")
 
 
-##### EXPORT TABLES TO LATEX (TABULAR ONLY) #####
+# Export to LaTeX ---------------------------------------------------------
 
-# --- TABLE 1: MISMATCH STATISTICS ---
+## Mismatch table
 
 # Clean names for LaTeX
 mismatch_export <- copy(mismatch_table)
@@ -345,7 +345,7 @@ print(
 message("Saved Mismatch Table to: ", file.path(tables_dir, "validation_mismatch.tex"))
 
 
-# --- TABLE 2: CORRELATIONS ---
+## Correlation table
 
 # Clean names for LaTeX
 cor_export <- copy(cor_results)

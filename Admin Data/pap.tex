@@ -1,0 +1,1336 @@
+\documentclass[12pt]{article}
+
+%%%%%%%% CALL ALL THE PACKAGES AND CONFIG FOR TEX FROM PREAMBLE.TEX %%%%%%%%
+\input{preamble}
+ 
+%%%%%%%% BEGIN LATEX DOCUMENT %%%%%%%%
+\begin{document}
+
+\onehalfspacing
+% Need to reapply spacing
+\thispagestyle{empty}
+
+%%%%%%%% PAPER TITLE, AUTHORS AND ACKNOWLEDGEMENTS %%%%%%%%
+\title{Disconnected Landlords?}
+\author{
+\begin{tabular}{cc}
+%Thiemo Fetzer & Peter John Lambert \\
+\end{tabular}
+}
+%%%%%%%% PAPER DATE %%%%%%%%
+\date{\today \thanks{We would like to thank.}}
+
+\maketitle
+\thispagestyle{empty}
+\begin{abstract}
+
+\noindent This document is a preanalysis plan and research protocol for the disconnected landlords project. The paper asks to what extent the nature of the ownership structure around real estate is informative about the state of retrofit of a property across England and Wales. A structured pre-analysis plan is presented that tests this hypothesis following a process that is entirely blind to the researcher. We outline in this document the full set of empirical exercises that are carried out, along with the underlying data that is being used.
+\\
+\noindent \textbf{Keywords:} \\
+\noindent \textbf{JEL Codes:} 
+
+\end{abstract}
+
+\setstretch{1.5}
+
+\pagebreak
+\section{Introduction and Objectives}
+
+This pre-analysis plan (PAP) sets out the empirical strategy for the ``Disconnected Landlords'' project. 
+The project examines how legal ownership structures of UK residential properties---with a specific focus on foreign, for-profit, trust, and nonprofit entities versus UK private individuals---relate to property-level energy performance and regulatory compliance, especially around Energy Performance Certificates (EPCs).
+
+We aim to study:
+(i) differences in energy efficiency outcomes across ownership types; 
+(ii) patterns of ``bunching'' near regulatory EPC cutoffs that might indicate strategic or manipulative behavior; and 
+(iii) the robustness of these relationships to design decisions, sample restrictions, and modeling choices.
+
+A central design feature is explicit pre-specification and ``freezing'' of the analytic pipeline on a randomly selected subset of local authorities (pilot set), before scaling the analysis to the full national universe. This is complemented by extensive use of fixed effects, matching, density-based diagnostics near policy thresholds, and a meta-experiment on the use of AI for empirical social research and narrative synthesis.
+
+\section{Data and Sampling Strategy}
+
+\subsection{Data Sources}
+The core unit of observation is a residential property in England and Wales. Table \ref{tab:data_dictionary} presents an overview of variables used in the project.
+\begin{longtable}{@{} p{0.45\textwidth} p{0.15\textwidth} p{0.35\textwidth} @{}}
+\caption{Data Dictionary} \label{tab:data_dictionary} \\
+
+% --- First Page Header ---
+\toprule
+\textbf{Variable} & \textbf{Type} & \textbf{Domain / Unit} \\
+\midrule
+\endfirsthead
+
+% --- Subsequent Page Header ---
+\caption[]{Data Dictionary (Continued)} \\
+\toprule
+\textbf{Variable} & \textbf{Type} & \textbf{Domain / Unit} \\
+\midrule
+\endhead
+
+% --- Footer for all pages except last ---
+\midrule
+\multicolumn{3}{r}{\textit{Continued on next page...}} \\
+\endfoot
+
+% --- Footer for last page ---
+\bottomrule
+\endlastfoot
+
+% ==========================================
+% EPC DATA SECTION
+% ==========================================
+\multicolumn{3}{c}{\cellcolor{gray!10}\textbf{EPC Data} ($\mathcal{X}_{\text{EPC}}$)} \\
+\addlinespace[0.5em]
+
+\texttt{Property ID} & Identifier & -- \\
+\texttt{BUILDING\_REFERENCE\_NUMBER} & Identifier & -- \\
+\texttt{POSTCODE} & Identifier & -- \\
+\addlinespace
+\texttt{CURRENT\_ENERGY\_EFFICIENCY} & Continuous & $\mathbb{Z}^+$ \textbf{OR} $(\text{£}/m^2/\text{year})$ \\
+\texttt{POTENTIAL\_ENERGY\_EFFICIENCY} & Continuous & $\mathbb{Z}^+$ \textbf{OR} $(\text{£}/m^2/\text{year})$ \\
+\texttt{ENERGY\_CONSUMPTION\_CURRENT} & Continuous & kWh/year \\
+\texttt{ENERGY\_CONSUMPTION\_POTENTIAL} & Continuous & kWh/year \\
+\texttt{NUMBER\_HABITABLE\_ROOMS} & Continuous & $\mathbb{Z}^+$ \\
+\texttt{TOTAL\_FLOOR\_AREA} & Continuous & $m^2$ \\
+\addlinespace
+\texttt{CURRENT\_ENERGY\_RATING} & Categorical & $\{A, B, C, D, E, F, G\}$ \\
+\texttt{PROPERTY\_TYPE} & Categorical & $\mathcal{D}_{\text{Property type}}$ \\
+\texttt{MAIN\_FUEL} & Categorical & $\mathcal{D}_{\text{Fuel}}$ \\
+\texttt{CONSTRUCTION\_AGE\_BAND} & Categorical & $\mathcal{D}_{\text{Age Bands}}$ \\
+\texttt{BUILT\_FORM} & Categorical & $\mathcal{D}_{\text{Built form}}$ \\
+\texttt{LOCAL\_AUTHORITY} & Categorical & $\mathcal{L}_{\text{LA}}$ \\
+\texttt{LODGEMENT\_DATE} & Categorical & $\mathcal{T}_{\text{date}}$ \\
+
+\midrule
+% ==========================================
+% ENERGY DATA SECTION
+% ==========================================
+\multicolumn{3}{c}{\cellcolor{gray!10}\textbf{Energy Consumption Data} ($\mathcal{X}_{\text{Energy}}$)} \\
+\addlinespace[0.5em]
+
+\texttt{postcode} & Identifier & -- \\
+\addlinespace
+\texttt{el\_mean\_consumption\_kwh} & Continuous & kWh/year \\
+\texttt{gas\_mean\_consumption\_kwh} & Continuous & kWh/year \\
+\addlinespace
+\texttt{year} & Categorical & $\mathcal{T}_{\text{year}}$ \\
+
+\midrule
+% ==========================================
+% LAND REGISTRY SECTION
+% ==========================================
+\multicolumn{3}{c}{\cellcolor{gray!10}\textbf{Land Registry Ownership} ($\mathcal{X}_{\text{LR}}$)} \\
+\addlinespace[0.5em]
+
+\texttt{TITLE\_NUMBER} & Identifier & -- \\
+\addlinespace
+\texttt{OWNER\_TYPE} & Categorical & $\mathcal{D}_{\text{owner type}}$ \\
+\texttt{INCORPORATION\_COUNTRY} & Categorical & $\mathcal{L}_{\text{country}}$ \\
+\texttt{PROPRIETORSHIP\_CATEGORY} & Categorical & $\mathcal{D}_{\text{proprietorship}}$ \\
+\texttt{TENURE} & Categorical & $\{\text{Freehold, Leasehold}\}$ \\
+
+\midrule
+% ==========================================
+% PRICE PAID DATA SECTION
+% ==========================================
+\multicolumn{3}{c}{\cellcolor{gray!10}\textbf{Price Paid Data} ($\mathcal{X}_{\text{PPD}}$)} \\
+\addlinespace[0.5em]
+
+\texttt{Property ID} & Identifier & -- \\
+\texttt{TRANSACTION\_ID} & Identifier & -- \\
+\addlinespace
+\texttt{price} & Continuous & £ \\
+\texttt{ppd\_price\_sqm} & Continuous & £/$m^2$ \\
+\addlinespace
+\texttt{PPD\_YEAR\_TRANSFER} & Categorical & $\mathcal{T}_{\text{year}}$ \\
+
+\midrule
+% ==========================================
+% TAX DATA SECTION
+% ==========================================
+\multicolumn{3}{c}{\cellcolor{gray!10}\textbf{Council Tax Data} ($\mathcal{X}_{\text{Tax}}$)} \\
+\addlinespace[0.5em]
+
+\texttt{Property ID} & Identifier & -- \\
+\addlinespace
+\texttt{COUNCIL\_TAX\_BAND} & Categorical & $\{A, B, C, D, E, F, G, H\}$ \\
+
+% ==========================================
+% LOOKUP SECTION (COMMENTED OUT)
+% ==========================================
+% \midrule
+% \multicolumn{3}{c}{\cellcolor{gray!10}\textbf{Lookup Keys} ($\mathcal{X}_{\text{Lookup}}$)} \\
+% \addlinespace[0.5em]
+% \texttt{Property ID} & Identifier & -- \\
+% \texttt{TITLE\_NUMBER} & Identifier & -- \\
+
+\end{longtable}
+
+\paragraph{EPC  Data:} $\mathcal{X}_{\text{EPC}}$ \quad The Record level Energy Performance Certificate (EPC) data for England and Wales published by the UK Department for Levelling Up, Housing \& Communities provides energy performance ratings and estimated energy consumption of individual properties. We use the first 2025 release of the data (retrieved 03/02/2025), covering EPCs from 2007 up to and including December 2024. The EPC data can be accessed on \url{https://epc.opendatacommunities.org/}
+%    \textbf{[Specify: exact EPC dataset version: [retrieved 03/02/2025], years covered: up to and including 2024, and variables used (e.g., current rating, potential rating, estimated annual kWh, floor area).]}
+
+\iffalse
+\begin{table}[!htbp]
+\centering
+\caption{Variables in the EPC Dataset ($\mathcal{X}_{\text{EPC}}$)}
+\label{tab:epc_variables}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{@{} p{0.60\textwidth} p{0.35\textwidth} @{}}
+\toprule
+\textbf{Variable} & \textbf{Domain / Unit} \\
+\midrule
+\multicolumn{2}{l}{\textit{Identifiers}} \\
+\midrule
+\texttt{Property ID} & -- \\
+\texttt{BUILDING\_REFERENCE\_NUMBER} & -- \\
+\texttt{POSTCODE} & -- \\
+
+\midrule
+\multicolumn{2}{l}{\textit{Continuous Variables}} \\
+\midrule
+\texttt{CURRENT\_ENERGY\_EFFICIENCY} & $\mathbb{Z}^+$ \textbf{OR} $(\text{£}/m^2/\text{year})$ \\
+\texttt{POTENTIAL\_ENERGY\_EFFICIENCY} & $\mathbb{Z}^+$ \textbf{OR} $(\text{£}/m^2/\text{year})$ \\
+\texttt{ENERGY\_CONSUMPTION\_CURRENT} & kWh/year \\
+\texttt{ENERGY\_CONSUMPTION\_POTENTIAL} & kWh/year \\
+\texttt{NUMBER\_HABITABLE\_ROOMS} & $\mathbb{Z}^+$ \\
+\texttt{TOTAL\_FLOOR\_AREA} & $m^2$ \\
+
+\midrule
+\multicolumn{2}{l}{\textit{Categorical Variables}} \\
+\midrule
+\texttt{CURRENT\_ENERGY\_RATING} & $\{A, B, C, D, E, F, G\}$ \\
+\texttt{PROPERTY\_TYPE} & $\mathcal{P}_{\text{type}}$ \\
+\texttt{MAIN\_FUEL} & $\mathcal{F}_{\text{fuel}}$ \\
+\texttt{CONSTRUCTION\_AGE\_BAND} & $\mathcal{A}_{\text{age}}$ \\
+\texttt{BUILT\_FORM} & $\mathcal{B}_{\text{form}}$ \\
+\texttt{LOCAL\_AUTHORITY} & $\mathcal{C}_{\text{LA}}$ \\
+\texttt{LODGEMENT\_DATE} & $\mathcal{T}_{\text{date}}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{align*}
+\mathcal{X}_{\text{EPC}} = \Big\{
+  &\text{Identifiers:}~
+    \left\{
+      \texttt{Property ID},~
+      \texttt{BUILDING\_REFERENCE\_NUMBER},~
+      \texttt{POSTCODE}
+    \right\}
+  \\[0.8em]
+  &\text{Continuous variables:}~
+    \left\{
+      \begin{array}{ll}
+        \texttt{CURRENT\_ENERGY\_EFFICIENCY} & \in \mathbb{Z}^+ \textbf{OR} (\frac{\text{£}}{m^2}/\text{year}), \\
+        \texttt{POTENTIAL\_ENERGY\_EFFICIENCY} & \in \mathbb{Z}^+ \textbf{OR} (\frac{\text{£}}{m^2}/\text{year}), \\
+        \texttt{ENERGY\_CONSUMPTION\_CURRENT} & \text{(kWh/year)}, \\
+        \texttt{ENERGY\_CONSUMPTION\_POTENTIAL} & \text{(kWh/year)}, \\
+        \texttt{NUMBER\_HABITABLE\_ROOMS} & \in \mathbb{Z}^+, \\
+        \texttt{TOTAL\_FLOOR\_AREA} & \text{(m}^2\text{)}
+      \end{array}
+    \right\}
+  \\[0.8em]
+  &\text{Categorical variables:}~
+    \left\{
+      \begin{array}{ll}
+        \texttt{CURRENT\_ENERGY\_RATING} & \in \{\text{A, B, C, D, E, F, G}\}, \\
+        \texttt{PROPERTY\_TYPE} & \in \mathcal{P}_{\text{type}}, \\
+        \texttt{MAIN\_FUEL} & \in \mathcal{F}_{\text{fuel}}, \\
+        \texttt{CONSTRUCTION\_AGE\_BAND} & \in \mathcal{A}_{\text{age}}, \\
+        \texttt{BUILT\_FORM} & \in \mathcal{B}_{\text{form}}, \\
+        \texttt{LOCAL\_AUTHORITY} & \in \mathcal{C}_{\text{LA}}, \\
+        \texttt{LODGEMENT\_DATE} & \in \mathcal{T}_{\text{date}}
+      \end{array}
+    \right\}
+\Big\}
+\end{align*}
+\fi 
+
+
+\paragraph{Energy Data:} $\mathcal{X}_{\text{Energy}}$ \quad The Department for Energy Security and Net Zero statistics on postcode-level electricity and gas consumption complement the energy consumption estimates from the Energy certificates with realised data. We use the 2023 release of the data. From the total electricity / gas consumption in the postcode and the number of electricity / gas meters respectively we construct a measure of the mean household's consumption. The data can be accessed on \url{https://www.gov.uk/government/publications/postcode-level-domestic-gas-and-electricity-consumption-about-the-data/postcode-level-domestic-electricity-consumption-notes}.
+
+\iffalse
+\begin{table}[!htbp]
+\centering
+\caption{Variables in the Energy Consumption Dataset ($\mathcal{X}_{\text{Energy}}$)}
+\label{tab:energy_variables}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{@{} p{0.60\textwidth} p{0.35\textwidth} @{}}
+\toprule
+\textbf{Variable} & \textbf{Domain / Unit} \\
+\midrule
+\multicolumn{2}{l}{\textbf{Identifiers}} \\
+\midrule
+\texttt{postcode} & -- \\
+
+\midrule
+\multicolumn{2}{l}{\textbf{Continuous variables}} \\
+\midrule
+\texttt{el\_mean\_consumption\_kwh} & kWh/year \\
+\texttt{gas\_mean\_consumption\_kwh} & kWh/year \\
+
+\midrule
+\multicolumn{2}{l}{\textbf{Categorical variables}} \\
+\midrule
+\texttt{year} & $\mathcal{T}_{\text{year}}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{align*}
+\mathcal{X}_{\text{Energy}} = \Big\{
+  &\text{Identifiers:}~
+    \left\{
+      \texttt{postcode}
+    \right\}
+  \\[0.8em]
+  &\text{Continuous variables:}~
+    \left\{
+      \begin{array}{ll}
+        \texttt{el\_mean\_consumption\_kwh} & \text{(kWh/year)}, \\
+        \texttt{gas\_mean\_consumption\_kwh} & \text{(kWh/year)}
+      \end{array}
+    \right\}
+  \\[0.8em]
+  &\text{Categorical variables:}~
+    \left\{
+      \begin{array}{ll}
+        \texttt{year} & \in \mathcal{T}_{\text{year}}
+      \end{array}
+    \right\}
+\Big\}
+\end{align*}
+\fi
+    
+\paragraph{Property Registry / Land Registry:} $\mathcal{X}_{\text{LR}}$ \quad The UK Land Registry provides data legal ownership, transaction prices, and specific property characteristics. We use the following Land Registry products :  
+    \begin{itemize}
+        \item The January 2025 Releases of UK companies that own property in England and Wales [CCOD] and Overseas Companies that own Properties in England and Wales [OCOD] datasets. The datasets allow us to identify corporate owners of individual properties, the type of corporate entity owning the property (e.g. LLC, a charity, a council, etc.) as well as the country of incorporation of those corporate entities). The United Kingdom is assigned as country of incorporation for all records in CCOD. For the OCOD, in case of multiple registration, the country of incorporation of the first company registered as proprietor is kept. This data provides both a cross-sectional view but can also provide a longitudinal view of ownership. We merge the CCOD and OCOD to form the LR dataset. The CCOD dataset can be accessed on \url{https://use-land-property-data.service.gov.uk/datasets/ccod}; the OCOD dataset can be accessed on \url{https://use-land-property-data.service.gov.uk/datasets/ocod}.
+        \item Cross walk of title locations to addresses - the address descriptions of the title records have been cross walked to addresses for physical properties. 
+        \item Price Paid Data $\mathcal{X}_{\text{PPD}}$ -- cross walked data matching price paid at the address level with property addresses. The data can be accessed on \url{https://www.gov.uk/government/collections/price-paid-data}.  
+        \item Council Tax Band Data $\mathcal{X}_{\text{Tax}}$ -- cross walk data matching council tax bands with the addresses of properties. Council tax band registry data was retrieved from  \url{https://www.gov.uk/council-tax-bands}.
+    \end{itemize}  %  \textbf{NB! These last 3 are loose datasets so far | metadata is STILL needed.}\\
+
+\iffalse
+\begin{table}[!htbp]
+\centering
+\caption{Property Transaction, Ownership, and Tax Variables}
+\label{tab:lr_ppd_tax_variables}
+\renewcommand{\arraystretch}{1.1}
+\begin{tabular}{@{} p{0.60\textwidth} p{0.35\textwidth} @{}}
+\toprule
+\textbf{Variable} & \textbf{Domain / Unit} \\
+
+% --- Land Registry Section ---
+\midrule
+\multicolumn{2}{c}{\scshape Land Registry Ownership ($\mathcal{X}_{\text{LR}}$)} \\
+\midrule
+\multicolumn{2}{l}{\textit{Identifiers}} \\
+\texttt{TITLE\_NUMBER} & -- \\
+\addlinespace[0.4em]
+\multicolumn{2}{l}{\textit{Categorical variables}} \\
+\texttt{OWNER\_TYPE} & $\mathcal{O}_{\text{type}}$ \\
+\texttt{INCORPORATION\_COUNTRY} & $\mathcal{I}_{\text{country}}$ \\
+\texttt{PROPRIETORSHIP\_CATEGORY} & $\mathcal{C}_{\text{prop}}$ \\
+\texttt{TENURE} & $\{\text{Freehold, Leasehold}\}$ \\
+
+% --- PPD Section ---
+\midrule
+\multicolumn{2}{c}{\scshape Price Paid Data ($\mathcal{X}_{\text{PPD}}$)} \\
+\midrule
+\multicolumn{2}{l}{\textit{Identifiers}} \\
+\texttt{Property ID}, \texttt{TRANSACTION\_ID} & -- \\
+\addlinespace[0.4em]
+\multicolumn{2}{l}{\textit{Continuous variables}} \\
+\texttt{price} & £ \\
+\texttt{ppd\_price\_sqm} & £/$m^2$ \\
+\addlinespace[0.4em]
+\multicolumn{2}{l}{\textit{Categorical variables}} \\
+\texttt{PPD\_YEAR\_TRANSFER} & $\mathcal{T}_{\text{year}}$ \\
+
+% --- Tax Section ---
+\midrule
+\multicolumn{2}{c}{\scshape Council Tax Data ($\mathcal{X}_{\text{Tax}}$)} \\
+\midrule
+\multicolumn{2}{l}{\textit{Identifiers}} \\
+\texttt{Property ID} & -- \\
+\addlinespace[0.4em]
+\multicolumn{2}{l}{\textit{Categorical variables}} \\
+\texttt{COUNCIL\_TAX\_BAND} & $\{A...H\}$ \\
+
+% --- Lookup Section (Commented Out) ---
+% \midrule
+% \multicolumn{2}{c}{\scshape Lookup Keys ($\mathcal{X}_{\text{Lookup}}$)} \\
+% \midrule
+% \multicolumn{2}{l}{\textit{Identifiers}} \\
+% \texttt{Property ID}, \texttt{TITLE\_NUMBER} & -- \\
+
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{align*}
+\mathcal{X}_{\text{LR}} = \Big\{
+  &\text{Identifiers: }
+    \{\texttt{TITLE\_NUMBER}\},\\
+  &\text{Categorical variables: }
+    \left\{
+      \begin{array}{ll}
+        \texttt{OWNER\_TYPE} & \in \mathcal{O}_{\text{type}}, \\
+        \texttt{INCORPORATION\_COUNTRY} & \in \mathcal{I}_{\text{country}}, \\
+        \texttt{PROPRIETORSHIP\_CATEGORY} & \in \mathcal{C}_{\text{prop}}, \\
+        \texttt{TENURE} & \in \{\text{Freehold, Leasehold}\}
+      \end{array}
+    \right\}
+\Big\}
+\\
+\mathcal{X}_{\text{PPD}}= \Big\{
+  &\text{Identifiers: }
+    \{\texttt{Property ID},\,\texttt{TRANSACTION\_ID}\},\\
+  &\text{Continuous variables: }
+    \left\{
+      \begin{array}{ll}
+        \texttt{price} & \text{(£)}\\
+        \texttt{ppd\_price\_sqm} := \texttt{price} / \texttt{TOTAL\_FLOOR\_AREA} & \text{(£/m}^2\text{)}
+      \end{array}
+    \right\},\\
+  &\text{Categorical variables: }
+    \left\{
+      \begin{array}{ll}
+        \texttt{PPD\_YEAR\_TRANSFER} & \in \mathcal{T}_{\text{year}}
+      \end{array}
+    \right\}
+\Big\} \\
+\mathcal{X}_{\text{Tax}} = \Big\{
+  &\text{Identifiers: }
+    \{\texttt{Property ID}\},\\
+  &\text{Categorical variables: }
+    \left\{
+      \begin{array}{ll}
+        \texttt{COUNCIL\_TAX\_BAND} & \in \{\text{A, B, C, D, E, F, G, H}\}
+      \end{array}
+    \right\}
+\Big\} \\
+\mathcal{X}_{\text{Lookup}} = \Big\{
+  &\text{Identifiers: }
+    \{\texttt{Property ID},\,\texttt{TITLE\_NUMBER}\}
+\Big\}
+\end{align*}
+\fi
+
+\paragraph{International company registries and tax-haven lists for foreign entities.:} 
+\iffalse
+    \begin{itemize}
+        \item UK company registers (e.g., Companies House) for legal form, sector, and for-profit vs. nonprofit status. \textbf{UNUSED: this is baked into the OCOD so far}
+        \item Charity and third-sector databases for identification of charities, trusts, and nonprofits. \textbf{UNUSED}
+    \end{itemize}
+\fi
+    
+        For the tax haven ownership dummy variable we check if any of the proprietor entities listed in the OCOD dataset are incorporated in jurisdictions that are presented in table 2 of the IMF Background Paper on offshore financial centres \autocite{imf2000offshore}
+
+
+    
+\paragraph{Local Authority and Census Data:} 
+    
+Lower layer Super Output Area (LSOA) - level statistics on the tenure type of households from the 2021 England and Wales census are used for validation of shares of properties that are rented privately and socially as well as for benchmarking. The 2021 census data for the tenure can be accessed on \url{https://www.ons.gov.uk/datasets/TS054/editions/2021/versions/4}
+\iffalse % I dislike how this looks - then don't use it. 
+
+    \begin{itemize}
+        \item Owned: Owns outright
+        \item Owned: Owns with a mortgage or loan
+        \item Shared ownership: Shared ownership
+        \item Social rented: Rents from council or Local Authority
+        \item Social rented: Other social rented
+        \item Private rented: Private landlord or letting agency
+        \item Private rented: Other private rented
+        \item Lives rent free
+        \item Does not apply
+    \end{itemize} 
+
+\fi
+ %   \textbf{[Specify: census year(s), geography (LA / MSOA / LSOA), and rental tenure variables used.]} Rental stock currently not unused. LA / OA validation is also possible. 
+  
+\subsection{Unit of Analysis and Time Frame}
+
+The primary analytic unit is a property $p$ within local authority $l$.
+
+\begin{itemize}
+    \item We will focus on the most recent EPC per property to define each property's outcome.
+    \item The main analysis period covers all observations with the most recent EPC as recorded. EPCs are valid for 10 years and may need to be re-issued e.g. when major works have been done. Any property listed as a rental property needs to have a valid EPC. 
+\end{itemize}
+
+\subsection{Pilot Sample and Specification Freezing}
+
+\begin{enumerate}
+    \item We draw a random subset $\mathcal{L}^{\text{pilot}}$ of local authorities from the full set $\mathcal{L}$ for the piloting of this estimation protocol. Specifically, we draw a simple random sample of 30 local authorities from the 346 local authorities in England and Wales as recorded in the EPC dataset ($\mathcal{C}_{\text{LA}}$)
+    \item All design decisions (including outcome definitions, treatment coding, control sets, fixed effects structure, and handling of missing data) will be developed, tested, and finalized using only properties in $\mathcal{L}^{\text{pilot}}$.
+    \item Once finalized, these choices will be ``frozen'' and applied without substantive modification to the full-sample set of local authorities $\mathcal{L}^{\text{full}}$, which includes $\mathcal{L}^{\text{pilot}}$ and all remaining LAs.
+    \item Any deviations from the frozen specifications when moving to the full sample must be pre-registered as amendments and clearly documented as exploratory.
+\end{enumerate}
+
+\subsection{Common Core Sample Principle}
+Within each family  of specifications $\mathcal{F}$, all alternative models (adding/removing a subset of controls) are estimated on the same core sample $\mathcal{S}_\mathcal{F}$ to ensure the comparability of estimates.
+
+Let $\mathcal{V_\mathcal{F}}$ denote the set of all variables in the specification family. For each variable $v \in \mathcal{V}_\mathcal{F}$, let $\mathcal{D}_v$ denote its domain of valid, nonmissing values. The core sample is defined as:
+\begin{equation*} \label{eq:common_core}
+  \mathcal{S}_\mathcal{F} =  \{p: x_{p,v} \in \mathcal{D}_v \quad \forall v \in \mathcal{V}_\mathcal{F}\}
+\end{equation*}
+ 
+We include only properties with complete cases for all specified variables in the chosen core.  Observations where constructed variables are invalid, e.g. infinite, are likewise dropped.
+Let $\mathcal{X}_{k}$ represent the set of variables from data source $k$. Variables used from available data sources are presented in the data dictionary (\autoref{tab:data_dictionary}). The cores are defined as follows:
+\begin{itemize}
+    \item \textbf{Baseline Core ($\mathcal{S}_{B}$):} Contains properties with complete cases in Energy Performance Certificate and Land Registry data.
+    \[ \mathcal{S}_{B} = \{ p : x_{p,v} \in \mathcal{D}_v \quad \forall v \in (\mathcal{X}_{\text{EPC}} \cup \mathcal{X}_{\text{LR}}) \} \]
+
+    \item \textbf{Council Tax Core ($\mathcal{S}_{CT}$):} A subset of the baseline requiring valid council tax data.
+    \[ \mathcal{S}_{CT} = \{ p \in \mathcal{S}_{B} : x_{p,v} \in \mathcal{D}_v \quad \forall v \in \mathcal{X}_{\text{Tax}} \} \]
+
+    \item \textbf{Price Paid Core ($\mathcal{S}_{PP}$):} A subset of the baseline requiring valid transaction price data, restricted to valid price-per-square-meter values.
+    \[ \mathcal{S}_{PP} = \{ p \in \mathcal{S}_{B} : x_{p,v} \in \mathcal{D}_v , \; \text{ppd\_price\_sqm}_p \in \mathbb{R}_+  \quad \forall v \in \mathcal{X}_{\text{PPD}} \} \]
+
+    \item \textbf{Combined Core ($\mathcal{S}_{Comb}$):} The intersection of the Council Tax and Price Paid samples.
+    \[ \mathcal{S}_{Comb} = \{ p \in (\mathcal{S}_{CT} \cap \mathcal{S}_{PP})\} \]
+\end{itemize}
+We thus have nested Core samples, with the baseline being the most inclusive and  subsequent cores adding further requirements: $\mathcal{S}_{Comb} \subseteq \mathcal{S}_{CT} \subseteq \mathcal{S}_{B}$ and $\mathcal{S}_{Comb} \subseteq \mathcal{S}_{PP} \subseteq \mathcal{S}_{B}$.
+
+\subsection{Common Cores (Old)}
+For each family of specifications  we define a ``common core'' sample:
+
+\[
+\mathcal{S}^{\text{core}} = \{ p : \text{property $p$ has non-missing values for all key variables used in the specification family} \}.
+\]
+
+
+We are estimating families of specifications across different dataset cores that are present nested samples. Within each family, all alternative models (adding/removing a subset of controls) are estimated on the same core sample to ensure comparability of estimates.
+ 
+We include only properties with complete cases for all specified variables in the chosen core. Unused variables are dropped. Observations where constructed variables are invalid, e.g. infinite, are likewise dropped. The cores are defined as follow:
+    \begin{itemize}
+        \item The \texttt{Baseline} Core includes complete cases of $\mathcal{X}_{\text{EPC}}$  $\mathcal{X}_{\text{LR}}$
+        \item The \texttt{Council Tax} Core includes complete cases of $\mathcal{X}_{\text{EPC}}$  $\mathcal{X}_{\text{LR}}$ and $\mathcal{X}_{\text{Tax}}$
+        \item The \texttt{Price Paid} Core has complete valid cases of $\mathcal{X}_{\text{EPC}}$  $\mathcal{X}_{\text{LR}}$ and $\mathcal{X}_{\text{PPD}}$
+        \item The \texttt{Council Tax + Price Paid} Core includes complete valid cases of $\mathcal{X}_{\text{EPC}}$  $\mathcal{X}_{\text{LR}}$ and $\mathcal{X} _{\text{Tax}}$ and $\mathcal{X}_{\text{PPD}}$ . Observations with undefined values of \texttt{ppd\_price\_sqm} are excluded. 
+        \end{itemize}
+For example, for the family of models that includes both council tax band and transaction price as controls, we define:
+\[
+\mathcal{S}^{\text{core}}_{\text{price+tax}} = \{ p : \text{price paid, council tax band, outcome, treatment, baseline controls are observed} \}.
+\]
+
+\section{Key Variables}
+\subsection{Ownership Type (Treatments)}
+We categorize properties according to their ownership, along two orthogonal dimensions: \textit{legal form} and \textit{jurisdiction}. The interaction of these dimensions gives a set of treatment groups and a control group as presented in table \ref{tab:treatment_matrix}.
+\begin{table}[h]
+\centering
+\caption{Treatment Matrix}
+\label{tab:treatment_matrix}
+\resizebox{\textwidth}{!}{%
+
+\begin{tabular}{lccc}
+\toprule
+\textbf{Legal Form} & \multicolumn{3}{c}{\textbf{Jurisdiction}} \\ 
+\cmidrule(l){2-4} 
+ & \textbf{United Kingdom} & \textbf{Foreign (Standard)} & \textbf{Foreign (Tax Haven)} \\ 
+\midrule
+
+\textbf{Private Individual} & \multicolumn{3}{c}{\cellcolor{gray!15}\textbf{Baseline ($T_p=0$)}} \\
+\small{(Tenure: Private Rented)} & \multicolumn{3}{c}{\cellcolor{gray!15}\textit{Control Group}} \\ 
+\midrule
+
+\textbf{For-Profit Entity} & \textbf{UK For-Profit} & \textbf{Foreign For-Profit} & \textbf{Tax Haven For-Profit} \\
+\small{(Ltd, PLC, LLP)} & ($T_p=1$) & ($T_p=3$) & ($T_p=3 \cap \text{Haven}$) \\ 
+\midrule
+
+\textbf{Non-Profit Entity} & \textbf{UK Non-Profit} & \textbf{Foreign Non-Profit} & \textbf{Tax Haven Non-Profit} \\
+\small{(Charity, Housing Assoc.)} & ($T_p=2$) & ($T_p=4$) & ($T_p=4 \cap \text{Haven}$) \\ 
+\midrule
+
+\textbf{Public Sector} & \textbf{Public Sector} & --- & --- \\
+\small{(Council, Local Auth.)} & ($T_p=5$) & & \\ 
+
+
+% \midrule \textbf{Trusts/Other} & \multicolumn{3}{c}{$T_p=6$ (Trusts) or $T_p=7$ (Unspecified)} \\ 
+\bottomrule
+\end{tabular}
+}
+\begin{flushleft}
+\footnotesize \textit{Note:} Cells represent the specific treatment indicators used in the regression analysis. The "Tax Haven" category is a subset of Foreign ownership defined by the IMF offshore financial center list.
+\end{flushleft}
+\end{table}
+\subsubsection{The control group: Private Rentals}
+    $T_p = 0$: Properties rented out by  Private Individuals form our baseline control group. \\
+    From the EPC we use the variable \texttt{tenure} to indicate if a property is private rented. If a property also has no associated record in the land registry dataset, we consider it to be one rented out by a private individual. This measure is noisy due to the tenancy status not being updated in real time - for example some properties may be in fact owner-occupied. We validate the accuracy of this measure in the cross section using UK census data, where we observe resident population by tenure at the LSOA level. We compute the share of properties in the EPC data by private rented tenancy type and correlate it with a census measure of the share of households that are renting (see section \ref{sec:validation-tenure}). \\
+
+\subsubsection{The Jurisdiction Dimension}
+The property owning entities' country of incorporation is used to define the jurisdiction taxonomy. Note that we do not distinguish between jurisdictions control properties $[T_p = 0]$, i.e. those owned by private individuals.
+
+
+\begin{enumerate}
+\item If all property-owning entities in the land registry record for a property are registered in the United Kingdom, it is flagged correspondingly. 
+\item If at least one of the property owners is registered abroad, it is assigned to a ``foreign'' treatment group. 
+\item If, in addition, at least one of the property owners is registered in a jurisdiction in the IMF tax haven list \autocite[Table 2]{imf2000offshore}, it is also assigned the to the tax haven treatment group. 
+    
+\iffalse 
+
+We may sub-divide tax haven lists into geo-political tax haven subgroups: British, European or Other (see table \ref{tab:tax_havens}).
+    \[
+    \text{TaxHaven}_p = \mathbb{1}\{\text{owner jurisdiction is on the external tax-haven list}\}.
+    \]
+ 
+"British" denotes tax havens in Crown Dependencies, Overseas Territories, and associated Commonwealth realms. ``European" and ``Caribbean" denote geographic regions. We use the IMF's classification of offshore financial centers (see \cite{imf2000offshore}). These sub-classifications of tax havens can overlap.
+    \begin{table}[ht]
+\centering
+\caption{Tax Haven Jurisdictions}
+\label{tab:tax_havens}
+\footnotesize
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Jurisdiction} & \textbf{British} & \textbf{European} & \textbf{Caribbean} & \textbf{Other} \\
+\midrule
+Andorra & & \checkmark & & \\
+Anguilla & \checkmark & & \checkmark & \\
+Antigua and Barbuda & & & \checkmark & \\
+Aruba & & & \checkmark & \\
+Bahamas & & & \checkmark & \\
+Bahrain & & & & \checkmark \\
+Barbados & & & \checkmark & \\
+Belize & & & \checkmark & \\
+Bermuda & \checkmark & & \checkmark & \\
+British Virgin Islands & \checkmark & & \checkmark & \\
+Cayman Islands & \checkmark & & \checkmark & \\
+Cook Islands & \checkmark & & & \\
+Costa Rica & & & \checkmark & \\
+Cyprus & & \checkmark & & \\
+Gibraltar & \checkmark & \checkmark & & \\
+Guernsey & \checkmark & \checkmark & & \\
+Hong Kong & & & & \checkmark \\
+Ireland & & \checkmark & & \\
+Isle of Man & \checkmark & \checkmark & & \\
+Jersey & \checkmark & \checkmark & & \\
+Lebanon & & & & \checkmark \\
+Liechtenstein & & \checkmark & & \\
+Luxembourg & & \checkmark & & \\
+Macao & & & & \checkmark \\
+Malaysia (Labuan) & & & & \checkmark \\
+Malta & & \checkmark & & \\
+Marshall Islands & & & & \checkmark \\
+Mauritius & & & & \checkmark \\
+Monaco & & \checkmark & & \\
+Montserrat & \checkmark & & \checkmark & \\
+Nauru & & & & \checkmark \\
+Netherlands Antilles & & & \checkmark & \\
+Niue & \checkmark & & & \\
+Panama & & & \checkmark & \\
+Samoa & & & & \checkmark \\
+Seychelles & & & & \checkmark \\
+Singapore & & & & \checkmark \\
+St Kitts and Nevis & & & \checkmark & \\
+St Lucia & & & \checkmark & \\
+St Vincent and Grenadines & & & \checkmark & \\
+Switzerland & & \checkmark & & \\
+Turks and Caicos Islands & \checkmark & & \checkmark & \\
+Vanuatu & \checkmark & & & \\
+\bottomrule
+\end{tabular}
+\end{table} 
+\fi
+%\textbf{SECTION TO BE CONSIDERED FOR DELETION ENDS HERE}
+
+\end{enumerate}
+We may expand the jurisdiction taxonomy, grouping countries of registration by geographic characteristics or legal traditions. We may also create an indicator for properties that are owned by multiple entities with different countries of registration. 
+
+
+\subsubsection{The Legal Form Dimension}
+The legal form dimension is a simplification of the land registry taxonomy of entities into mutually exclusive categories as presented in table \ref{tab:legal_form_dimension}:
+\begin{table}[!htbp]
+\centering
+\caption{Legal form dimension: Land registry entity types grouped into categories.}
+\label{tab:legal_form_dimension}
+\begin{tabular}{@{} p{0.25\textwidth} >{\raggedright\arraybackslash}p{0.70\textwidth} @{}}
+\toprule
+\textbf{Category} & \textbf{Land registry entity types} \\
+\midrule
+
+% Public Sector
+\textbf{Public sector}\newline
+\(\mathcal{O}^{\text{public}}\) & 
+County Council\newline
+Local Authority \\
+\midrule
+% For-profit
+\textbf{For-profit}\newline
+\(\mathcal{O}^{\text{for-profit}}\) & 
+Limited Company or Public Limited Company\newline
+Limited Liability Partnership\newline
+Unlimited Company \\
+\midrule
+% Non-profit
+\textbf{Non-profit}\newline
+\(\mathcal{O}^{\text{non-profit}}\) & 
+% Group 1: Standard Societies
+Co-operative Society (Company)\newline
+Co-operative Society (Corporate Body)\newline
+Community Benefit Society (Company)\newline
+Community Benefit Society (Corporate Body)\newline
+Corporate Body\newline
+Industrial and Provident Society (Company)\newline
+Industrial and Provident Society (Corporate Body)\newline
+Registered Society (Company)\newline
+Registered Society (Corporate Body)
+\par\vspace{0.8em} % Visual separation for the Housing Association block
+% Group 2: Housing Associations
+Housing Association Co-operative Society (Company)\newline
+Housing Association Co-operative Society (Corporate Body)\newline
+Housing Association Community Benefit Society (Company)\newline
+Housing Association Community Benefit Society (Corporate Body)\newline
+Housing Association Registered Society (Company)\newline
+Housing Association Registered Society (Corporate Body)\newline
+Housing Association/Society (Company)\newline
+Housing Association/Society (Corporate Body) \\
+
+\bottomrule
+\end{tabular}
+\end{table}
+\iffalse
+\[
+\begin{array}{@{}l l@{}}
+\textbf{Public sector:} &
+\mathcal{O}^{\text{public}} = \{\text{County Council},\ \text{Local Authority}\} \\[0.4em]
+\textbf{For-profit:} &
+\mathcal{O}^{\text{for-profit}} = \{\text{Limited Company or Public Limited Company},\\
+&\hspace{4.4em}\text{Limited Liability Partnership},\\
+&\hspace{4.4em}\text{Unlimited Company}\} \\[0.8em]
+\textbf{Non-profit:} &
+\mathcal{O}^{\text{non-profit}} = \{\text{Co-operative Society (Company)},\\
+&\hspace{4.4em}\text{Co-operative Society (Corporate Body)},\\
+&\hspace{4.4em}\text{Community Benefit Society (Company)},\\
+&\hspace{4.4em}\text{Community Benefit Society (Corporate Body)},\\
+&\hspace{4.4em}\text{Corporate Body},\\
+&\hspace{4.4em}\text{Housing Association Co-operative Society (Company)},\\
+&\hspace{4.4em}\text{Housing Association Co-operative Society (Corporate Body)},\\
+&\hspace{4.4em}\text{Housing Association Community Benefit Society (Company)},\\
+&\hspace{4.4em}\text{Housing Association Community Benefit Society (Corporate Body)},\\
+&\hspace{4.4em}\text{Housing Association Registered Society (Company)},\\
+&\hspace{4.4em}\text{Housing Association Registered Society (Corporate Body)},\\
+&\hspace{4.4em}\text{Housing Association/Society (Company)},\\
+&\hspace{4.4em}\text{Housing Association/Society (Corporate Body)},\\
+&\hspace{4.4em}\text{Industrial and Provident Society (Company)},\\
+&\hspace{4.4em}\text{Industrial and Provident Society (Corporate Body)},\\
+&\hspace{4.4em}\text{Registered Society (Company)},\\
+&\hspace{4.4em}\text{Registered Society (Corporate Body)}\}
+\end{array}
+\]
+\fi
+\begin{itemize}
+    \item For-Profit: Properties owned by companies registered in the UK land registry with a for-profit legal status (e.g., Ltd, LLP).
+    \item Nonprofit / Third Sector: Properties owned by  charities, nonprofits, or third-sector organizations (as indicated by legal form in the land registry).
+    \item Public Sector: Properties owned by local authorities and councils that are ``socially rented''. Naturally, these entities can only be based in the UK.
+
+%    \item $T_p = 6$: Trusts. \\
+%    Trust structures (UK or foreign) identified by legal form (e.g., ``Trust''), registry flags, or special legal designations. We will further classify by jurisdiction and nonprofit status where available. \textbf{WE ARE NOT DOING THIS CURRENTLY, DO WE WANT THIS IN THE PAP???} \\
+    
+%    \item $T_p = 7$: Other/Unspecified Entity Types. \\
+%    Residual category for legal forms not fitting the above definitions or with insufficient information.\textbf{WE ARE NOT DOING THIS CURRENTLY, DO WE WANT THIS IN THE PAP???}
+
+\end{itemize}
+
+
+\subsection{Outcome Variables}
+
+We define multiple outcome variables, grouped into four families.
+
+Let $Y^{(m)}_p$ denote the $m$-th outcome for property $p$.
+
+\subsubsection{Energy Use and Efficiency}
+\[\text{FloorArea}_p:= \texttt{TOTAL\_FLOOR\_AREA}_p \quad \text{(m}^2\text{)} \]
+\begin{enumerate}
+    \item Absolute estimated energy energy consumption (level) from the EPC providing an estimate of annual energy consumption in kwh based on an estimated number of residents:
+    \[
+    Y^{(1)}_p = \text{AnnualEnergy}_p \quad (\text{kWh/year}).
+    \]
+    
+    \begin{itemize}
+        \item From EPC estimates: \\ \(\texttt{energy\_consumption\_current\_property}:= \texttt{energy\_consumption\_current}\cdot \text{FloorArea}_p\)
+        \item We also work with a noisy proxy measure of household energy consumption derived from the realised postcode level consumption  data: \begin{itemize}
+            \item \texttt{gas\_mean\_consumption\_k\_wh}, 
+            \item \texttt{electricity\_mean\_consumption\_k\_wh}
+        \end{itemize}\
+        
+    \end{itemize}
+
+    \item Normalized energy consumption (per square meter):
+    \[
+    Y^{(2)}_p = \frac{\text{AnnualEnergy}_p}{\text{FloorArea}_p} \quad (\text{kWh/m}^2).
+    \]
+
+    \item The EPC rating is used as a dependent variable 
+    as a discrete indicator (EPC below C or worse):
+    \[
+    Y^{(3)}_p =  \mathbb{1}\{\text{EPCBand}_p \not\in  \{A,B,C\} \}
+    \]
+    \item Additionally we use the EPC score, a continuous variable (generally ranging from 0-100, although net energy exporters can have a score higher than 100). This score is used to generate the letter ratings \autocite[p. 38]{BRE2025SAP10}, and it is related to annual estimated energy costs.     \[
+    Y^{(4)}_p = \text{EPCScore}_p =  \texttt{CURRENT\_ENERGY\_EFFICIENCY}_p \quad (\frac{\text{£}}{\text{m}^2}/\text{year})
+    \]
+
+\end{enumerate}
+
+\subsubsection{Regulatory Compliance / ``Bad EPC'' Indicators}
+The UK housing regulations provide disincentives to rent out properties with a poor EPC rating below D. This implies that there may be incentives to obtain a borderline good rating. We define binary indicators for failing to meet a regulatory threshold $\tau$ (e.g., EPC E or worse, or EPC D or worse).
+
+\begin{enumerate}
+    \item Bad EPC (below threshold):
+    \[
+    Y^{(4)}_p(\tau) = \mathbb{1}\{\text{EPCBand}_p \leq \tau\}.
+    \]
+    For instance, with $\tau = \text{D}$, we have an indicator for properties rated D or worse.
+
+    \item Good EPC (at or above threshold):
+    \[
+    Y^{(5)}_p(\tau) = \mathbb{1}\{\text{EPCBand}_p > \tau\}.
+    \]
+\end{enumerate}
+
+For good and bad EPC we use the full sample empirical standard deviation of the underlying numeric $\text{EPCScore}_p$. For ``Borderline better" and Borderline Worse we use the smaller between the full sample empirical standard deviation of the underlying numeric $\text{EPCScore}_p$ and the empirical standard deviation of the numeric $\text{EPCScore}_p$ within the two bordering bands.  
+
+
+\subsubsection{Validation: Rental-Share Measures} \label{sec:validation-tenure} 
+The indicator for the control group, whether a property is private rented, is a noisy proxy measure of the true rental housing stock that is attributable to private landlords versus commercial landlords or non-profit landlords. In order to highlight that the data nevertheless contains meaningful signal about the legal tenancy type, we construct a validation exercise using granular UK census data.
+
+Specifically, we measure the number of households in an area that are living in owner occupied (with/without mortgage), social rented and private-rented from the UK census and we contrast this with  housing with- and without a mortgage. This measure can be derived from the EPC's themselves (the tenure variable, which we use as main control group identifier); it can also be measured with the OCOD/CCOD data, which we use for the various treatment definitions of legal form. We contrast these two definition with metrics from the UK census that intend to capture the same concept. 
+
+We carry out this validation at the LSOA level, we will construct validation variables:
+
+\[
+R_l^{\text{data, private}} = \frac{\text{Number of privately rented properties in data in LSOA } l}{\text{Total properties in data in LSOA } l},
+\]
+\[
+R_l^{\text{census, private}} = \text{Privately rented share of households from census in LSOA } l.
+\]
+
+
+\[
+R_l^{\text{data, social}} = \frac{\text{Number of social rented properties in data in LSOA } l}{\text{Total properties in data in LSOA } l},
+\]
+\[
+R_l^{\text{census, social rented}} = \text{Social  rented share of households from census in LSOA } l.
+\]
+
+\[
+R_l^{\text{census}} = \text{Privately rented share from census in LSOA } l.
+\]
+
+Technically one could just use all potential ways of measuring the concept of social rented from the OCOD/CCOD data. In the OCOD we have around 10 different categories that could be conceived of as non profit or potentially social landlord owned homes. 
+
+We will use:
+\[
+Y^{(9)}_l = R_l^{\text{data}} - R_l^{\text{census}}
+\]
+as a validation outcome to assess whether the data-based identification of private-rented properties aligns with census benchmarks. Table \ref{tab:mismatch_stats} presents the mismatch statistics, while the table \ref{tab:validation_correlations} and figures \ref{fig:control_validation}, \ref{fig:private_sector_validation} and \ref{fig:non_profit_validation} present correlations. 
+
+\begin{table}[ht]
+    \centering
+    \caption{Descriptive Statistics of the Mismatch between EPC and Census ($Y^{(9)} = R^{\text{data}} - R^{\text{census}}$)}
+    \label{tab:mismatch_stats}
+    
+    % This inputs the tabular generated by R
+    \input{output/tables/validation_mismatch}
+\end{table}
+
+\begin{table}[ht]
+    \centering
+    \caption{Correlation between EPC Data Shares and Census Benchmarks}
+    \label{tab:validation_correlations}
+    
+    % This inputs the tabular generated by R
+    \input{output/tables/validation_correlations}
+\end{table}
+
+
+% --- FIGURE 1: CONTROL GROUP (Single Image) ---
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\linewidth]{output/figures/03_control_vs_census_5.png}
+    \caption{LSOA-level validation of the private rental control group ($T_p=0$) with the share of properties recorded as rentals from private landlords or letting agencies in the census.}
+    \label{fig:control_validation}
+\end{figure}
+
+% --- FIGURE 2: PRIVATE SECTOR (Side-by-Side) ---
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{output/figures/01_total_private_vs_census_56.png}
+        \caption{Total private rental share ($T_p=0, 1, 3$)}
+        \label{fig:total_private_validation}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{output/figures/02_for_profit_vs_census_5.png}
+        \caption{For-profit entities only ($T_p=1, 3$)}
+        \label{fig:for_profit_validation}
+    \end{subfigure}
+    
+    \caption{Validation of private sector entities. (a) compares the total private rental share (including control and for-profit) against census data. (b) compares only UK and foreign for-profit entities against census private landlord data.}
+    \label{fig:private_sector_validation}
+\end{figure}
+
+% --- FIGURE 3: NON-PROFIT & PUBLIC SECTOR (Side-by-Side) ---
+\begin{figure}[htbp]
+    \centering
+
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{output/figures/04_non_profit_vs_census_4.png}
+        \label{fig:nonprofitvalidationsubfigure}
+        \caption{Non-profit sector entities ($T_p=2, 4$)}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{output/figures/05_public_sector_vs_census_3.png}
+        \caption{Public sector entities ($T_p=5$)}
+        \label{fig:public_sector_validation}
+    \end{subfigure}
+    
+    \caption{Validation of non-market housing. (a) compares non-profit entity rental share with ``other social'' census tenure. (b) compares public sector entity share of properties with council social rentals.}
+    \label{fig:non_profit_validation}
+\end{figure}
+
+
+We may use these measures and their fit for robustness exercises to remove observations where the empirical mismatch in the  concepts across the data sources is too high. 
+
+\subsection{Control Variables and Fixed Effects} \label{sec:control-fe}
+
+We collect a vector of observed covariates $X_p$, including:
+
+\begin{itemize}
+    \item Property characteristics: construction year or band, property type (house/flat/other), size (floor area), number of rooms, fuel type, etc.
+    \item Transaction characteristics: price paid, date of purchase.
+    \item Location characteristics: local authority fixed effects, possibly smaller-area fixed effects. 
+\end{itemize}
+\[
+X_p = \Big(
+\underbrace{X_p^{\text{prop}}}_{\text{property}},
+\underbrace{X_p^{\text{trans}}}_{\text{transaction}},
+\underbrace{X_p^{\text{loc}}}_{\text{location}}
+\Big).
+\]
+We will construct rich group fixed effects $g(p)$ from the categorical variables observable at the property level, and include group fixed effects $\lambda_{g(p)}$ in regressions. We will also include local authority fixed effects $\delta_{l(p)}$ and, where relevant, time fixed effects $\theta_t$ by EPC issuance year to account for certificate vintage. Continuous variables are included in the regression as simple controls. Table \ref{tab:control_variables} describes the control variables and specifies which variables are absorbed in fixed effects specification. 
+\begin{table}[htbp]
+    \centering
+    \caption{Control Variables and Fixed Effects Structure}
+    \label{tab:control_variables}
+
+    \begingroup
+
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{@{} l l c c p{6.8cm} @{}}
+        \toprule
+        \textbf{Type} & \textbf{Variable Name} & \textbf{Data Type} & \textbf{Absorbed into FE} & \textbf{Notes} \\
+        \midrule
+        \textbf{Property}
+            & Construction Age Band & Categorical & $\lambda_{g(p)}$ & \\
+            & Property Type & Categorical & $\lambda_{g(p)}$ & e.g.\ house, flat, maisonette, \dots \\
+            & Built Form & Categorical & $\lambda_{g(p)}$ & e.g.\ detached, terrace, \dots \\
+            & Main Fuel Type & Categorical & $\lambda_{g(p)}$ & e.g.\ gas, electricity, \dots \\
+            & Total Floor Area (m$^2$) & Continuous & --- & \\
+            & No.\ of Habitable Rooms & Discrete & --- & \\
+            & EPC Lodgement Year & Discrete & $\theta_t$ & Used for time FE. \\
+            & Council Tax Band$^{\dagger}$ & Categorical & $\lambda_{g(p)}$ & \\
+        \midrule
+        \textbf{Transaction}
+            & Price Paid$^{\ddagger}$ & Continuous & --- & \\
+            & Year of Purchase$^{\ddagger}$ & Discrete & $\lambda_{g(p)}$ & \\
+        \midrule
+        \textbf{Location}
+            & Local Authority & Categorical & $\delta_{l(p)}$ & Location FE. \\
+        \bottomrule
+    \end{tabular}%
+    } % end resizebox
+
+    \vspace{0.75ex}
+    \parbox{\textwidth}{\scriptsize
+        \textit{Notes:}
+        $^{\dagger}$ denotes variables available in the Council Tax core; $^{\ddagger}$ denotes variables available in the Price Paid core. Both are available in the  Combined Council Tax + Price Paid core. \\
+        $\lambda_{g(p)}$ denotes the group fixed effect, $\theta_t$ the time fixed effect, and $\delta_{l(p)}$ the location fixed effect.
+    }
+    \endgroup
+\end{table}
+\section{Hypotheses}
+
+We formalize the main hypotheses as follows. Unless otherwise stated, treatment effects are relative to the UK private individual baseline ($T_p=0$).
+
+\subsection{Energy Performance and Ownership Structure}
+
+\textbf{H1 (Average energy efficiency differences).} 
+For at least one non-baseline ownership type $k \neq 0$, properties owned by category $k$ exhibit systematically different energy performance, measured by $Y^{(1)}_p$ and $Y^{(2)}_p$, relative to UK private individuals:
+
+\[
+\mathbb{E}[Y^{(2)}_p \mid T_p = k, X_p] \neq \mathbb{E}[Y^{(2)}_p \mid T_p = 0, X_p].
+\]
+
+Particular interest lies in foreign for-profit and foreign nonprofit ownership (with and without tax-haven status), and trusts.
+
+\textbf{H1a.} Foreign for-profit ownership, especially via tax havens, is associated with higher normalized energy consumption (worse efficiency) than UK private individuals:
+\[
+\mathbb{E}[Y^{(2)}_p \mid T_p = \text{Foreign For-Profit, TaxHaven}_p=1] >
+\mathbb{E}[Y^{(2)}_p \mid T_p = 0].
+\]
+
+\textbf{H1b.} UK nonprofits and foreign nonprofits may exhibit better energy performance (lower $Y^{(2)}_p$) than UK private individuals.
+
+\subsection{Compliance and Bunching}
+
+\textbf{H2 (Bad EPC prevalence).} 
+The probability of holding a ``bad EPC'' (below threshold $\tau$) differs by ownership type. We are estimating linear probability models to evaluate whether:
+
+\[
+\Pr\left(Y^{(4)}_p(\tau)=1 \mid T_p = k, X_p\right) \neq
+\Pr\left(Y^{(4)}_p(\tau)=1 \mid T_p = 0, X_p\right).
+\]
+
+\textbf{H3 (Bunching around EPC cutoffs).}
+Certain ownership types exhibit excess mass just above key EPC cutoffs $c_\tau$, consistent with strategic manipulation:
+
+\[
+\Pr\left( Y^{(6)}_p(\tau) = 1 \mid T_p = k, X_p \right) >
+\Pr\left( Y^{(6)}_p(\tau) = 1 \mid T_p = 0, X_p \right)
+\]
+and/or the ratio
+\[
+\frac{\Pr\left( Y^{(6)}_p(\tau) = 1 \mid T_p = k \right)}
+{\Pr\left( Y^{(7)}_p(\tau) = 1 \mid T_p = k \right)}
+\]
+is abnormally high for some $k$ relative to the baseline and to a smooth counterfactual density.
+
+\subsection{Robustness to Design Choices}
+
+\textbf{H4 (Design robustness).} 
+Estimated differences in outcomes across ownership types are robust to:
+
+\begin{itemize}
+    \item alternative sample definitions (e.g., common core vs. broader samples),
+    \item inclusion/exclusion of key controls (price paid, council tax band),
+    \item alternative specifications of fixed effects.
+\end{itemize}
+
+Formally, for a parameter of interest $\beta_{k}$ (ownership type $k$ difference), we will examine whether sign and magnitude are stable across pre-defined specification sets:
+
+\[
+\beta_{k} \approx \beta_{k}^{(s')}, \quad \forall s,s' \in \mathcal{S}_{\text{pre-defined}}.
+\]
+
+
+\textbf{H5 (Heterogeneous gaming).}
+Effect heterogeneity across the ownership taxonomy reveals systematic patterns of manipulation: some subgroups (e.g., foreign for-profit, trusts) exhibit substantially higher bunching and borderline behavior than others. This will be formalized through hierarchical modeling and interaction terms.
+
+\section{Empirical Strategy}
+
+\subsection{Baseline Regression Specifications}
+
+We estimate a baseline model with a set of fixed effects that capture property characteristics ($\lambda_{g(p)}$), local authority fixed effects, ($\delta_{l(p)}$) and EPC vintage ($\theta_t$) that enter additively in the regression specification (see section \ref{sec:control-fe}). This can be considered to be the between-property estimator that ignores the potential correlation of features, such as property age and property type. A second specification explores the full set of interactions of these features. Once they enter the empirical model in an interacted fashion, they generate a large set of potential refined like-for-like groups for a within group estimation. 
+
+The main distinction For each outcome $Y^{(m)}_p$,  the baseline regression is:
+
+\begin{equation}
+Y^{(m)}_p
+=
+\alpha^{(m)}
++
+\beta^{(m)}_{k}\,\mathbb{1}\{T_p=k\}
++
+X'_p\gamma^{(m)}
++
+\lambda^{(m)}_{g(p)}
++
+\delta^{(m)}_{l(p)}
++
+\theta^{(m)}_{t(p)}
++
+\varepsilon^{(m)}_p.
+\label{eq:ols_additive}
+\end{equation}
+
+Where:
+
+\begin{itemize}
+    \item $T_p$ is ownership type, with $T_p=0$ (UK private individual) as the omitted baseline.
+    \item $X_p$ is a vector of covariates.
+    \item $\lambda_{g(p)}$ are fixed effects for each of the categorical variables such as construction age band, property type, and fuel type. 
+    \item $\delta_{l(p)}$ are local authority fixed effects.
+    \item $\theta_{t(p)}$ are EPC-year (or other time) fixed effects. 
+    \item $\varepsilon^{(m)}_p$ is an error term.
+\end{itemize}
+
+We then estimate the model with the the fixed effect vectors fully interacted to create unique subgroup fixed effects, that is: $\Omega^{(m)}_{g(p)\times l(p)\times t(p)} = \lambda^{(m)}_{g(p)} \times \delta^{(m)}_{l(p)} \times \theta^{(m)}_{t(p)}$.
+
+\begin{equation}
+Y^{(m)}_p
+=
+\alpha^{(m)}
++
+\beta^{(m)}_{k}\,\mathbb{1}\{T_p=k\}
++
+X'_p\gamma^{(m)}
++
+\Omega^{(m)}_{g(p)\times l(p)\times t(p)}
++
+\varepsilon^{(m)}_p
+\label{eq:ols_interactive_FE}
+\end{equation}
+Estimation:
+
+\begin{itemize}
+    \item Equations \eqref{eq:ols_additive} and \eqref{eq:ols_interactive_FE} are estimated by OLS on the relevant common core samples $\mathcal{S}_{\mathcal{F}}$ for each outcome.
+    \item Standard errors will be clustered at local authority % or ownership-entity 
+    level.
+    \item For heavily skewed or bounded outcomes, we may log-transform or use limited dependent variable models (e.g., logit for binary outcomes). \\
+\end{itemize}
+
+\subsection{Propensity Score Matching (PSM) }
+To address potential selection on observables we implement a Propensity Score Matching (PSM) procedure, comparing each treated ownership type $T_p=k$ to the baseline group $T_p=0$. Matching is performed within local authorities and within strata defined by the exact matching variables ($\mathcal{E}_p$): property type, main fuel source, construction age band and built form. The council tax band and the transfer year (i.e the year the property was last bought or sold) are added to this vector in robustness checks. 
+
+\begin{enumerate}
+    \item Estimate Propensity Scores \\
+    We estimate propensity scores using a logistic regression model, estimated separately for each Local Authority $l$. We define $D_{pk} \equiv 1\{T_p = k\}$. The propensity score is estimated using a logistic regression model (logit):
+\begin{equation} \label{eq:propensity-score}
+e_{pkl}
+=
+\Pr\!\left(D_{pk}=1 \mid X_{p}\right) = \Lambda((X_{p})'\phi_{kl})
+\end{equation}
+where $\Lambda(z)=\frac{\exp{(z)}}{1+\exp{(z)}}$.
+
+\item Perform matching \\
+Let the estimated distance for a property $p$ be $\widehat{e_{pkl}}$ -- the fitted propensity score. For each treated property $i$ with $T_i=k$, we match to a control $j$ with $T_j=0$ by 1:1 nearest-neighbor matching on the fitted propensity score $\widehat{e_{pkl}}$. The matching eligibility is restricted by the maximum distance caliper  $\kappa$) and with exact matching in the categorical exact-matching variables $\mathcal{E}_p$:
+\begin{equation}
+j(i)
+=
+\arg\min_{j:\,D_{jk}=0}
+\left|\widehat e_{ikl}-\widehat e_{jkl}\right|
+\quad\text{s.t.}\quad
+\mathcal{E}_i=\mathcal{E}_j,
+\;\;
+\left|\widehat e_{ikl}-\widehat e_{jkl}\right|\le \kappa,
+\end{equation}
+We will present results using no caliper ($\kappa = \infty$), a 20\% and a 10\% caliper. 
+
+
+
+ \item Create the analysis sample \\
+ Let $\mathcal{M}_{l,k}$ denote the matched sample obtained inside local authority $l$ for treated group $k$, and let the full matched sample be the union across LAs:
+    \begin{equation*}
+    \mathcal{M}_{k} \equiv \bigcup_{l}\mathcal{M}_{l,k}.
+    \label{eq:psm_matched_sample_union}
+    \end{equation*}
+The set of all matched control and treatment observations form the analysis sample $\mathcal{M}_k$, whereby individual matched treatment-control pairs are identifiable by the subclass index $s(p)$. 
+
+
+
+    \item On the matched sample $\mathcal{M}_k$, we estimate the average treatment effect on the treated (ATT) via:
+    \begin{equation}
+    Y^{(m)}_p
+    =
+    \alpha^{(m)}_{k}
+    +
+    \beta^{(m)}_{k}\,\mathbb{1}\{T_p = k\}
+    +
+    X_p' \gamma^{(m)}_{k}
+    +
+    \lambda^{(m)}_{g(p)}
+    +
+    \delta^{(m)}_{l(p)}
+    +
+    \theta^{(m)}_{t(p)}
+    +
+    u^{(m)}_p
+    \qquad p \in \mathcal{M}_k
+    \label{eq:psm_FE}
+    \end{equation}
+We additionally estimate a version of the model with matched-pair fixed effects denoted by $\Psi^{(m)}_{s(p)}$
+    \begin{equation}
+    Y^{(m)}_p
+    =
+    \alpha^{(m)}_{k}
+    +
+    \beta^{(m)}_{k}\,\mathbb{1}\{T_p = k\}
+    +
+    X_p' \gamma^{(m)}_{k}
+    +
+    \Psi^{(m)}_{s(p)}
+    +
+    u^{(m)}_p,
+    \qquad p \in \mathcal{M}_k
+    \label{eq:psm_subclass_FE}
+    \end{equation}
+
+
+
+
+    
+    \item Balance diagnostics: report standardized mean differences before and after matching across all $X_p$.
+
+\end{enumerate}
+
+\subsection{Hierarchical / Bayesian Interpretation of Heterogeneity}
+
+To structurally capture heterogeneity across ownership types, we may estimate a hierarchical model:
+
+\[
+\beta^{(m)}_k \sim \mathcal{N}(\mu^{(m)}, \tau^{2(m)}), \quad k = 1,\dots,K,
+\]
+where $\beta^{(m)}_k$ is the ownership-type effect for each $k$. This framework yields shrunk estimates for small subgroups and a structured view of which ownership types systematically depart from the overall mean effect.
+
+\section{Robustness, Sensitivity, and Specification Families}
+
+We \iffalse will \fi pre-define a set of specification families for each main outcome group. Examples:
+
+\begin{itemize}
+    \item \textbf{Spec A (Baseline):} Core sample, minimal controls, LA and group fixed effects.
+    \item \textbf{Spec B (Price controls):} Spec A + price paid and purchase year controls.
+    \item \textbf{Spec C (Council tax controls):} Spec A + council tax band.
+    \item \textbf{Spec D (Full controls):} Spec A + full vector of property and transaction controls (price, tax band, etc.) as in B and C.
+\end{itemize}
+
+All models within a given family are estimated on the same common core sample. We will present summary plots or tables showing the distribution of $\beta^{(m)}_k$ across specifications to document robustness.
+
+All models within a given family are estimated on the common core sample that corresponds to the vector of controls as well as the narrower common core samples (e.g. Spec B will be estimated on $\mathcal{S}_{CT} $ and $\mathcal{S}_{Comb}$).   We will present summary plots or tables showing the distribution of $\beta^{(m)}_k$ across specifications to document robustness.
+
+Sensitivity analyses will include:
+
+\begin{enumerate}
+    \item Alternative definitions of energy outcomes (e.g., using potential vs. current EPC rating, using measures of realized energy consumption). 
+    \item Alternative bandwidths and definitions of borderline properties.
+    \item Alternative groupings of ownership types (e.g., collapsing some categories).
+    \item Dropping LAs or subregions with poor data quality or large validation discrepancies in $Y^{(9)}_l$.
+\end{enumerate}
+
+\subsection{Cardinality of specification family}
+We can provide a sharp estimate of the full set of empirical specifications that we are estimating to ensure we distil robust narratives from the empirical analysis. We illustrate this calculation here.
+
+In total we have  that given the cardinality of the outcome vector $|y_{i}|$ are up to 12 dependent variables (though some dependent variables technically capture restricted model variations, as e.g. for models where the dependent variable is normalized by a property feature this is de-facto estimating restricted least squares). We have six core empirical models (OLS additive, OLS interactive, along with the matching estimations PSM Matched and PSM matched with matched pair fixed effect with two different caliper cutoffs). Each of the variation has four sets of potential control variable vectors. 
+
+\paragraph{Treatment status}
+Given the set of potential target variables in terms of legal status along the nomenclature there are 7 treatments as indicated in Table \ref{tab:treatment_matrix}, with the possibility to expand to more granular jurisdictional and legal form classifications.
+
+
+\paragraph{Sample overlap} Each of these is estimated off different sample sets to ensure that empirical results are not an artifact of different sample definitions that may arise due to features such as the council tax band or the price-paid data being missing for some observation. The missing data on such relevant variables, which may be indicative e.g. of the vintage of a property purchase which may encode latent information about the identity of the buyer that could be correlated with the latent identity of the buyer and their respective property purchase motivation in a way that is uncorrelated with the specific legal status, but could be correlated with the proclivity to invest in the properties upkeep.
+
+Since such missing data naturally changes the composition of the estimating sample, we further as robustness check define sample cores that ensures \emph{common support} . That is, we estimate the full specification family across the full set of specifications with four sets of potential control variable. This sampling restriction ensures that results are not artificially distorted by missing variables implied sample compositional changes.   
+
+\paragraph{Model Taxonomy}
+For each treatment-outcome pair we estimate 114 Models:
+\begin{itemize}
+    \item \textbf{OLS Analysis (18 Models)} We employ OLS models with additive and with interactive fixed effects. These have 9 unique data configurations. The applicable configurations are determined a specification constraint: a \textit{specification} is only estimated on \textit{regression cores} that contain the necessary variables (e.g., the Council Tax specification is restricted to the Council Tax and PPD+Council Tax cores). The taxonomy is presented in \autoref{tab:ols_taxonomy}. In total, there are $2_\text{Types} \times9_\text{Data Configurations}=18$ OLS models. 
+    
+\begin{table}[ht]
+\centering
+\caption{Taxonomy of OLS Models (18 Models  per Outcome-Treatment pair)}
+\label{tab:ols_taxonomy}
+\begin{tabular}{llc}
+\toprule
+\textbf{Specification} & \textbf{Regression Core(s)} & \textbf{Count} \\
+\midrule
+Baseline & Base, Council Tax, PPD, CT+PPD & 4 \\
+Council Tax & Council Tax, CT+PPD & 2 \\
+Price Paid & PPD, CT+PPD & 2 \\
+CT + Price Paid & CT+PPD & 1 \\
+\midrule
+\multicolumn{2}{l}{\textit{Total Data Configurations}} & \textbf{9} \\
+\multicolumn{2}{l}{\textit{Total Models $\times$( 2 Types: Additive, Interactive FE)}} & \textbf{18} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+    \item \textbf{PSM Analysis (96 Models):} We employ 2 fixed-effect strategies (with and without matched-pair FE) intersected with 3 propensity score calipers (None, 0.1, 0.2). The data configurations follow the following logic:
+    \begin{enumerate}
+    \item \textbf{Specification Constraint:} The chosen \textit{specification} (e.g., Price Paid) restricts the eligible \textit{Matching Cores} to those containing the necessary covariates.
+    \item \textbf{Core Interaction:} For each valid \textit{Matching Core}, we estimate treatment effects on \textit{Regression Cores} that are equal to or stricter than the matching core (e.g. Select ``Price Paid"" spec $\to$ Match on PPD $\to$ Regress on PPD and Combined).
+\end{enumerate}
+\autoref{tab:psm_taxonomy} presents the taxonomy of data configurations. There are $2_\text{Types} \times 3_\text{Calipers} \times 16_\text{Data Configurations}= 96 $ PSM Models. 
+\end{itemize}
+
+\begin{table}[ht]
+\centering
+\caption{Taxonomy of PSM Models (96 Models per Outcome-Treatment pair)}
+\label{tab:psm_taxonomy}
+\begin{tabular}{lllc}
+\toprule
+\textbf{Specification} & \textbf{Matching Core} & \textbf{Regression Core(s)} & \textbf{Configs} \\
+\midrule
+\multirow{4}{*}{Baseline} 
+ & Base & Base, Council Tax, PPD, CT+PPD & 4 \\
+ & Council Tax & Council Tax, CT+PPD & 2 \\
+ & PPD & PPD, CT+PPD & 2 \\
+ & CT+PPD & CT+PPD & 1 \\
+\midrule
+\multirow{2}{*}{Council Tax} 
+ & Council Tax & Council Tax, CT+PPD & 2 \\
+ & CT+PPD & CT+PPD & 1 \\
+\midrule
+\multirow{2}{*}{Price Paid} 
+ & PPD & PPD, CT+PPD & 2 \\
+ & CT+PPD & CT+PPD & 1 \\
+\midrule
+CT + Price Paid & CT+PPD & CT+PPD & 1 \\
+\midrule
+\multicolumn{3}{l}{\textit{Total Data Configurations}} & \textbf{16} \\
+\multicolumn{3}{l}{\textit{Total Models $\times$( 2 Types (Base Matched, Subclass FE) $\times$ 3 Calipers)}} & \textbf{96} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\section{AI-Assisted Pre-Registration and Narrative Synthesis}
+The analysis results will be retrieved into a CSV file with the following columns: \texttt{coef, se, nobs, 	r2, outcome, treatment, model, spec, matching\_core, regression\_core, outcome\_mean, treated\_n, control\_n}. The results can be visualized through an interactive chart that allows the researcher to browse across the specification path toggling various dimensions of analysis as is illustrated in Figure \ref{fig:spanning-tree-nomenclature}.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=1\linewidth]{output/figures/06_disconnected-landlords-traversal.png}
+    \caption{Traversal of treatment effect display along (tentative) nomenclature of treatment status and treatment effects}
+    \label{fig:spanning-tree-nomenclature}
+\end{figure}
+
+Due to the high dimensionality and the potential risk of fitting a difficult-to-generalize narrative to a vector of high dimensional empirical results, we will be leaning on large language models/AI to produce bundles of narratives to distill robust narratives across specification paths and outcome vectors.
+
+That is, the project includes a meta-experiment on using AI tools in empirical social research:
+
+\begin{enumerate}
+
+    \item \textbf{Automated Code, Data Handling, and Diagnostics.} 
+    AI tools will support:
+    \begin{itemize}
+        \item code generation and refactoring for data cleaning, merging, and analysis,
+        \item automated diagnostics (e.g., balance tables, density plots, kernel estimates),
+        \item maintaining an explicit trace of analytic steps for reproducibility.
+    \end{itemize}
+
+    \item \textbf{AI-Assisted Pattern Matching and Formalization.} 
+    We use LLM tools to assist in matching high-dimensional pattern alignment vis-a-vis the vector of hypothesis that have been pre-registered across the menu of defensible empirical modeling choices. This is particularly important given the need to identify robust narratives across both modeling choices, treatment granularity and mechanical sample limitations due to missing variables (e.g. focusing on overlapping samples)
+    
+    \item \textbf{AI-Assisted Narrative Synthesis.} 
+    After estimation, AI will generate candidate narrative summaries for each pre-specified hypothesis (e.g., ``H1''), based on a structured input of results (point estimates, confidence intervals, specification-robustness summaries). Human researchers will curate these summaries, and a ``majority-vote'' narrative will be extracted where multiple AI-generated summaries are compared for consistency. 
+
+\end{enumerate}
+
+
+
+
+\section{Deviations from the Plan}
+
+Any departures from this pre-analysis plan, including:
+\begin{itemize}
+    \item changes in variable definitions or thresholds,
+    \item new specification families,
+    \item additional outcomes not listed here,
+\end{itemize}
+will be clearly labeled as ``exploratory'' or ``post-hoc'' in the paper and in accompanying documentation.
+
+\section{Registration Details}
+
+\begin{itemize}
+    \item Planned pre-registration platforms: \textbf{[e.g., OSF, AEA RCT Registry, or other.]}
+    \item Pre-registration identifier(s): \textbf{[insert once assigned.]}
+    \item Data access and replication files: \textbf{[describe planned repository, e.g., GitHub/OSF, and what will be shared: code, synthetic data, documentation.]}
+\end{itemize}
+
+
+\printbibliography[title={References}]
+
+\end{document}

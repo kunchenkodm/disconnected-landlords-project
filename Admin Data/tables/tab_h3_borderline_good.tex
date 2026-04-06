@@ -1,0 +1,25 @@
+\begin{table}[htbp]
+\centering
+\caption{Bunching Just Above the C Threshold (MEES Cutoff)}
+\label{tab:h3_borderline_good}
+\begin{tabular}{lrrrr}
+\toprule
+Treatment & Coef (pp) & Std.\ coef & $p$-value & $N$ \\
+\midrule
+Public sector & +11.6*** & 0.260 & $<$0.001 & 965,606 \\
+Non-profit & +9.4*** & 0.207 & $<$0.001 & 1,599,851 \\
+For-profit (all) & +1.1*** & 0.026 & $<$0.001 & 2,764,756 \\
+Tax haven (all) & -0.6 & -0.015 & 0.234 & 122,017 \\
+Foreign for-profit & -0.7 & -0.017 & 0.228 & 121,371 \\
+\bottomrule
+\end{tabular}
+\begin{minipage}{0.9\textwidth}
+\vspace{4pt}
+\footnotesize
+\textit{Notes:} PSM with subclass FE, LA geography, Baseline spec, base core.
+Outcome: \texttt{borderline\_good\_epc} (= 1 if SAP score in $(69,\, 69 + \frac{1}{2}\sigma]$).
+Coefficients in percentage points. Positive = excess mass just above the C threshold.
+$^{***}p<0.001$; $^{**}p<0.01$; $^{*}p<0.05$.
+Source: \texttt{results\_enriched\_LA.csv}.
+\end{minipage}
+\end{table}

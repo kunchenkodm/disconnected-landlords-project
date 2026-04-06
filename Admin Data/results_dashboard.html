@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Results Dashboard — Disconnected Landlords</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="output/dashboard_data.js" onerror="console.log('No pre-loaded data')"></script>
+  <style>
+    :root {
+      --bg:#0a0f1a; --panel:#0f172a; --panel2:#1e293b; --border:#334155;
+      --ink:#e5e7eb; --muted:#9ca3af; --dim:#64748b;
+      --green:#22c55e; --dkgreen:#14532d; --red:#ef4444; --dkred:#7f1d1d;
+      --accent:#3b82f6; --accent2:#60a5fa; --yellow:#eab308; --orange:#f97316;
+    }
+    *,*::before,*::after{box-sizing:border-box}
+    html,body{height:100%;margin:0}
+    body{background:var(--bg);color:var(--ink);font:13px/1.45 'Segoe UI',system-ui,sans-serif}
+
+    header{background:var(--panel);border-bottom:1px solid var(--border);padding:10px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+    header h1{font-size:15px;margin:0;color:var(--accent2);white-space:nowrap}
+    #status{color:var(--muted);font-size:12px;margin-left:auto}
+
+    .controls{background:var(--panel);border-bottom:1px solid var(--border);padding:8px 16px;display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+    .controls label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)}
+    select,input[type="file"]{appearance:none;background:var(--panel2);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:12px;min-width:140px}
+    select:focus{outline:1px solid var(--accent);border-color:var(--accent)}
+    select:disabled{opacity:.4}
+    .sep{width:1px;height:28px;background:var(--border);align-self:end}
+    button{background:var(--accent);border:none;color:#fff;font-weight:600;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px}
+    button:hover{filter:brightness(1.15)}
+    button.secondary{background:var(--panel2);border:1px solid var(--border)}
+
+    .main{padding:12px 16px}
+    .panel{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px}
+    .panel h2{margin:0 0 10px;font-size:14px;color:var(--accent2)}
+    details>summary{cursor:pointer;color:var(--accent2);font-size:13px;padding:4px 0}
+
+    /* Heatmap */
+    .heatmap-wrap{overflow-x:auto}
+    table.hm{border-collapse:collapse;font-size:12px}
+    table.hm th{background:var(--panel2);color:var(--muted);padding:6px 5px;text-align:center;font-weight:600;position:sticky;top:0;z-index:2;border-bottom:2px solid var(--border);font-size:11px;white-space:nowrap;cursor:pointer}
+    table.hm th:first-child{text-align:left;position:sticky;left:0;z-index:3;cursor:default}
+    table.hm th:hover{color:var(--accent2)}
+    table.hm td{padding:4px 5px;border-bottom:1px solid #1a2332;text-align:center;position:relative;white-space:nowrap}
+    table.hm td:first-child{text-align:left;font-weight:500;position:sticky;left:0;background:var(--panel);z-index:1;white-space:nowrap}
+    table.hm tr:hover td:first-child{background:var(--panel2)}
+    .indent{padding-left:18px!important;font-weight:400!important;color:var(--muted)}
+    .indent strong{color:var(--ink);font-weight:500}
+    .treat-label{color:var(--dim);font-weight:400;font-size:11px;margin-left:4px}
+    .rank-badge{position:absolute;top:1px;right:2px;font-size:8px;color:var(--dim);font-weight:700}
+
+
+    /* Legend & tree */
+    .legend{display:flex;gap:14px;font-size:11px;color:var(--muted);margin-top:8px}
+    .swatch{display:inline-block;width:12px;height:12px;border-radius:2px;vertical-align:middle;margin-right:3px}
+    #chart{min-height:120px;overflow:auto}
+    .mermaid{background:transparent!important}
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Disconnected Landlords &mdash; Results Dashboard</h1>
+  <label style="flex-direction:row;align-items:center;gap:6px">
+    <input id="file" type="file" accept=".csv" style="min-width:180px" />
+  </label>
+  <span id="status">Loading&hellip;</span>
+</header>
+
+<div class="controls">
+  <label>Model <select id="model"></select></label>
+  <label>Spec <select id="spec"></select></label>
+  <label>Matching Core <select id="matching_core"></select></label>
+  <label>Regression Core <select id="regression_core"></select></label>
+
+</div>
+
+<div class="controls" style="gap:12px">
+  <span style="font-size:11px;color:var(--dim);font-weight:600">Display</span>
+  <label>Metric
+    <select id="colorBy">
+      <option value="coef">Raw Coefficient</option>
+      <option value="standardised_coef">Standardised (coef / SD)</option>
+    </select>
+  </label>
+  <label style="flex-direction:row;align-items:center;gap:5px;cursor:pointer">
+    <input type="checkbox" id="papColor" checked style="accent-color:var(--accent);min-width:auto;cursor:pointer" />
+    Directional colours
+  </label>
+  <label style="flex-direction:row;align-items:center;gap:5px;cursor:pointer">
+    <input type="checkbox" id="showStars" checked style="accent-color:var(--accent);min-width:auto;cursor:pointer" />
+    Stars
+  </label>
+  <label style="flex-direction:row;align-items:center;gap:5px;cursor:pointer">
+    <input type="checkbox" id="showSE" style="accent-color:var(--accent);min-width:auto;cursor:pointer" />
+    SE
+  </label>
+  <div class="sep"></div>
+  <span style="font-size:10px;color:var(--dim);max-width:480px;line-height:1.35">
+    <b>Metric:</b> Raw (units vary by outcome), Standardised (coef/SD, comparable across outcomes). Sample mean and SD shown in the heatmap subheader.
+    <b>Colours:</b> Directional on&nbsp;=&nbsp;<span style="color:var(--red)">red</span> worse / <span style="color:var(--green)">green</span> better. Off&nbsp;=&nbsp;<span style="color:#3b82f6">blue</span> positive / <span style="color:#f97316">orange</span> negative. Directions are customisable per outcome in the Glossary below.
+  </span>
+</div>
+
+<div class="main">
+
+  <!-- Glossary -->
+  <div style="margin-bottom:14px;display:flex;flex-direction:column;gap:6px">
+
+    <!-- Treatment Groups -->
+    <div class="panel" style="margin-bottom:0">
+      <details>
+        <summary>Treatment Groups</summary>
+        <div style="margin-top:8px">
+          <p style="font-size:11px;color:var(--muted);margin:0 0 6px"><b>Control:</b> Privately rented properties with unknown ownership (not in CCOD/OCOD).</p>
+          <div style="overflow-x:auto"><table style="font-size:11px;width:100%;border-collapse:collapse;white-space:nowrap">
+            <thead><tr style="border-bottom:1px solid var(--border)">
+              <th style="text-align:left;padding:3px 6px;color:var(--muted)">Treatment</th>
+              <th style="text-align:left;padding:3px 6px;color:var(--muted)">Code</th>
+              <th style="text-align:left;padding:3px 6px;color:var(--muted)">Legal Form</th>
+              <th style="text-align:left;padding:3px 6px;color:var(--muted)">Jurisdiction</th>
+            </tr></thead>
+            <tbody>
+              <tr><td style="padding:2px 6px">All for-profit</td><td style="padding:2px 6px;font-family:monospace;color:var(--dim);font-size:10px">fp</td><td style="padding:2px 6px">For-Profit</td><td style="padding:2px 6px">Any</td></tr>
+              <tr><td style="padding:2px 6px;padding-left:18px">UK for-profit</td><td style="padding:2px 6px;font-family:monospace;color:var(--dim);font-size:10px">ukfp</td><td style="padding:2px 6px">For-Profit</td><td style="padding:2px 6px">UK</td></tr>
+              <tr><td style="padding:2px 6px;padding-left:18px">Foreign for-profit</td><td style="padding:2px 6px;font-family:monospace;color:var(--dim);font-size:10px">frfp</td><td style="padding:2px 6px">For-Profit</td><td style="padding:2px 6px">Foreign</td></tr>
+              <tr><td style="padding:2px 6px;padding-left:18px">Tax-haven for-profit</td><td style="padding:2px 6px;font-family:monospace;color:var(--dim);font-size:10px">thfp</td><td style="padding:2px 6px">For-Profit</td><td style="padding:2px 6px">Tax Haven</td></tr>
+              <tr style="border-top:1px solid var(--border)"><td style="padding:2px 6px">All non-profit</td><td style="padding:2px 6px;font-family:monospace;color:var(--dim);font-size:10px">np</td><td style="padding:2px 6px">Non-Profit</td><td style="padding:2px 6px">Any</td></tr>
+              <tr><td style="padding:2px 6px;padding-left:18px">UK non-profit</td><td style="padding:2px 6px;font-family:monospace;color:var(--dim);font-size:10px">uknp</td><td style="padding:2px 6px">Non-Profit</td><td style="padding:2px 6px">UK</td></tr>
+              <tr><td style="padding:2px 6px;padding-left:18px">Foreign non-profit</td><td style="padding:2px 6px;font-family:monospace;color:var(--dim);font-size:10px">frnp</td><td style="padding:2px 6px">Non-Profit</td><td style="padding:2px 6px">Foreign</td></tr>
+              <tr><td style="padding:2px 6px;padding-left:18px">Tax-haven non-profit</td><td style="padding:2px 6px;font-family:monospace;color:var(--dim);font-size:10px">thnp</td><td style="padding:2px 6px">Non-Profit</td><td style="padding:2px 6px">Tax Haven</td></tr>
+              <tr style="border-top:1px solid var(--border)"><td style="padding:2px 6px">Public sector</td><td style="padding:2px 6px;font-family:monospace;color:var(--dim);font-size:10px">ps</td><td style="padding:2px 6px">Public Sector</td><td style="padding:2px 6px">UK</td></tr>
+              <tr style="border-top:1px solid var(--border)"><td style="padding:2px 6px">Any tax haven</td><td style="padding:2px 6px;font-family:monospace;color:var(--dim);font-size:10px">th</td><td style="padding:2px 6px">Any</td><td style="padding:2px 6px">Tax Haven</td></tr>
+              <tr><td style="padding:2px 6px;padding-left:18px">British haven</td><td style="padding:2px 6px;font-family:monospace;color:var(--dim);font-size:10px">bh</td><td style="padding:2px 6px">Any</td><td style="padding:2px 6px">British OT</td></tr>
+              <tr><td style="padding:2px 6px;padding-left:18px">European haven</td><td style="padding:2px 6px;font-family:monospace;color:var(--dim);font-size:10px">eh</td><td style="padding:2px 6px">Any</td><td style="padding:2px 6px">European</td></tr>
+              <tr><td style="padding:2px 6px;padding-left:18px">Caribbean haven</td><td style="padding:2px 6px;font-family:monospace;color:var(--dim);font-size:10px">ch</td><td style="padding:2px 6px">Any</td><td style="padding:2px 6px">Caribbean</td></tr>
+              <tr><td style="padding:2px 6px;padding-left:18px">Other haven</td><td style="padding:2px 6px;font-family:monospace;color:var(--dim);font-size:10px">oh</td><td style="padding:2px 6px">Any</td><td style="padding:2px 6px">Other</td></tr>
+            </tbody>
+          </table></div>
+        </div>
+      </details>
+    </div>
+
+    <!-- Outcome Variables -->
+    <div class="panel" style="margin-bottom:0">
+      <details>
+        <summary>Outcome Variables &amp; Sign Convention</summary>
+        <div style="margin-top:8px">
+          <p style="font-size:11px;color:var(--muted);margin:0 0 8px">
+            The <b>"Higher is"</b> column sets whether a positive coefficient is <span style="color:var(--red)">worse</span> or <span style="color:var(--green)">better</span> when <b>Directional colours</b> is on.
+            Use the dropdowns to customise per outcome, or set to <b>neutral</b> to disable directional colouring for that variable.
+          </p>
+          <div style="overflow-x:auto"><table id="outcomeTable" style="font-size:11px;width:100%;border-collapse:collapse;white-space:nowrap">
+            <thead><tr style="border-bottom:1px solid var(--border)">
+              <th style="text-align:left;padding:3px 6px;color:var(--muted)">Label</th>
+              <th style="text-align:left;padding:3px 6px;color:var(--muted)">Code</th>
+              <th style="text-align:left;padding:3px 6px;color:var(--muted)">Definition</th>
+              <th style="text-align:center;padding:3px 6px;color:var(--muted)">Higher is <button id="resetSigns" style="font-size:9px;padding:0 4px;cursor:pointer;background:var(--panel2);color:var(--muted);border:1px solid var(--border);border-radius:3px;margin-left:4px" title="Reset to defaults">reset</button></th>
+            </tr></thead>
+            <tbody>
+              <tr style="border-bottom:1px solid var(--border)"><td colspan="4" style="padding:2px 6px"><b style="color:var(--accent2)">Energy Use &amp; Efficiency (H1)</b></td></tr>
+              <tr><td style="padding:2px 6px">EPC Score</td><td style="padding:2px 6px;font-family:monospace;color:var(--dim);font-size:10px">current_energy_efficiency</td><td style="padding:2px 6px">EPC score (0-100+)</td><td class="sign-toggle" data-outcome="current_energy_efficiency" style="padding:2px 6px;text-align:center;cursor:pointer"></td></tr>
+              <tr><td style="padding:2px 6px">Energy/m&sup2;</td><td style="padding:2px 6px;font-family:monospace;color:var(--dim);font-size:10px">energy_consumption_current</td><td style="padding:2px 6px">kWh/m&sup2;/yr from EPC</td><td class="sign-toggle" data-outcome="energy_consumption_current" style="padding:2px 6px;text-align:center;cursor:pointer"></td></tr>
+              <tr><td style="padding:2px 6px">Energy/property</td><td style="padding:2px 6px;font-family:monospace;color:var(--dim);font-size:10px">energy_consumption_current_property</td><td style="padding:2px 6px">Total kWh/yr (consumption &times; floor area)</td><td class="sign-toggle" data-outcome="energy_consumption_current_property" style="padding:2px 6px;text-align:center;cursor:pointer"></td></tr>
+              <tr><td style="padding:2px 6px">Electricity (postcode)</td><td style="padding:2px 6px;font-family:monospace;color:var(--dim);font-size:10px">el_mean_consumption_k_wh</td><td style="padding:2px 6px">Postcode mean electricity kWh</td><td class="sign-toggle" data-outcome="el_mean_consumption_k_wh" style="padding:2px 6px;text-align:center;cursor:pointer"></td></tr>
+              <tr><td style="padding:2px 6px">Gas (postcode)</td><td style="padding:2px 6px;font-family:monospace;color:var(--dim);font-size:10px">gas_mean_consumption_k_wh</td><td style="padding:2px 6px">Postcode mean gas kWh</td><td class="sign-toggle" data-outcome="gas_mean_consumption_k_wh" style="padding:2px 6px;text-align:center;cursor:pointer"></td></tr>
+              <tr style="border-bottom:1px solid var(--border)"><td colspan="4" style="padding:2px 6px"><b style="color:var(--accent2)">Efficiency Gap (H1)</b></td></tr>
+              <tr><td style="padding:2px 6px">Consump. Gap</td><td style="padding:2px 6px;font-family:monospace;color:var(--dim);font-size:10px">energy_consumption_gap</td><td style="padding:2px 6px">Potential &minus; current consumption per m&sup2;</td><td class="sign-toggle" data-outcome="energy_consumption_gap" style="padding:2px 6px;text-align:center;cursor:pointer"></td></tr>
+              <tr><td style="padding:2px 6px">Consump. Gap (prop)</td><td style="padding:2px 6px;font-family:monospace;color:var(--dim);font-size:10px">energy_consumption_gap_property</td><td style="padding:2px 6px">Potential &minus; current total kWh/yr</td><td class="sign-toggle" data-outcome="energy_consumption_gap_property" style="padding:2px 6px;text-align:center;cursor:pointer"></td></tr>
+              <tr><td style="padding:2px 6px">EPC Gap</td><td style="padding:2px 6px;font-family:monospace;color:var(--dim);font-size:10px">energy_efficiency_potential_gap</td><td style="padding:2px 6px">Potential EPC score &minus; current score</td><td class="sign-toggle" data-outcome="energy_efficiency_potential_gap" style="padding:2px 6px;text-align:center;cursor:pointer"></td></tr>
+              <tr style="border-bottom:1px solid var(--border)"><td colspan="4" style="padding:2px 6px"><b style="color:var(--accent2)">Regulatory Compliance (H2)</b></td></tr>
+              <tr><td style="padding:2px 6px">Bad EPC</td><td style="padding:2px 6px;font-family:monospace;color:var(--dim);font-size:10px">bad_epc</td><td style="padding:2px 6px">1 if EPC band &le; D (score &le; 68)</td><td class="sign-toggle" data-outcome="bad_epc" style="padding:2px 6px;text-align:center;cursor:pointer"></td></tr>
+              <tr><td style="padding:2px 6px">Dist. to C</td><td style="padding:2px 6px;font-family:monospace;color:var(--dim);font-size:10px">energy_efficiency_bad_epc_gap</td><td style="padding:2px 6px">Current score &minus; 68 (distance to C/D boundary)</td><td class="sign-toggle" data-outcome="energy_efficiency_bad_epc_gap" style="padding:2px 6px;text-align:center;cursor:pointer"></td></tr>
+              <tr><td style="padding:2px 6px">Dist. to Band</td><td style="padding:2px 6px;font-family:monospace;color:var(--dim);font-size:10px">energy_efficiency_worse_epc_gap</td><td style="padding:2px 6px">Distance to lower cutoff of own EPC band</td><td class="sign-toggle" data-outcome="energy_efficiency_worse_epc_gap" style="padding:2px 6px;text-align:center;cursor:pointer"></td></tr>
+              <tr style="border-bottom:1px solid var(--border)"><td colspan="4" style="padding:2px 6px"><b style="color:var(--accent2)">Bunching / Strategic Behaviour (H3)</b></td></tr>
+              <tr><td style="padding:2px 6px">Borderline C</td><td style="padding:2px 6px;font-family:monospace;color:var(--dim);font-size:10px">borderline_good_epc</td><td style="padding:2px 6px">1 if score in (69, 69 + &frac12;&sigma;] &mdash; just above C threshold</td><td class="sign-toggle" data-outcome="borderline_good_epc" style="padding:2px 6px;text-align:center;cursor:pointer"></td></tr>
+              <tr><td style="padding:2px 6px">Borderline Band</td><td style="padding:2px 6px;font-family:monospace;color:var(--dim);font-size:10px">borderline_better_epc</td><td style="padding:2px 6px">1 if score in (band_lower, band_lower + &frac12;&sigma;] &mdash; just above any band boundary</td><td class="sign-toggle" data-outcome="borderline_better_epc" style="padding:2px 6px;text-align:center;cursor:pointer"></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+      </details>
+    </div>
+
+    <!-- Model Taxonomy -->
+    <div class="panel" style="margin-bottom:0">
+      <details>
+        <summary>Model Taxonomy</summary>
+        <div style="margin-top:8px">
+          <p style="font-size:11px;color:var(--muted);margin:0 0 8px">Each estimate is defined by four dimensions: <b>Model</b> (estimation strategy), <b>Spec</b> (covariate set), <b>Matching Core</b> (sample used for PSM matching), and <b>Regression Core</b> (sample used for regression). Not all combinations are valid.</p>
+
+          <div style="display:flex;gap:18px;flex-wrap:wrap">
+            <!-- Models -->
+            <div style="flex:1;min-width:280px;overflow:hidden">
+              <h4 style="font-size:12px;color:var(--accent2);margin:0 0 4px">Models (8)</h4>
+              <div style="overflow-x:auto"><table style="font-size:11px;width:100%;border-collapse:collapse;white-space:nowrap">
+                <thead><tr style="border-bottom:1px solid var(--border)">
+                  <th style="text-align:left;padding:2px 6px;color:var(--muted)">Model</th>
+                  <th style="text-align:left;padding:2px 6px;color:var(--muted)">Description</th>
+                </tr></thead>
+                <tbody>
+                  <tr><td style="padding:2px 6px">OLS Additive FE</td><td style="padding:2px 6px;color:var(--muted)">OLS with year + property type + fuel + age + form + LA as separate fixed effects</td></tr>
+                  <tr><td style="padding:2px 6px">OLS Interactive FE</td><td style="padding:2px 6px;color:var(--muted)">OLS with a single fully interacted FE (year &times; type &times; fuel &times; age &times; form &times; LA)</td></tr>
+                  <tr style="border-top:1px solid var(--border)"><td style="padding:2px 6px">PSM (Matched)</td><td style="padding:2px 6px;color:var(--muted)">Nearest-neighbour propensity score matching, no caliper</td></tr>
+                  <tr><td style="padding:2px 6px">PSM + Subclass FE</td><td style="padding:2px 6px;color:var(--muted)">Same matching + subclass (pair) fixed effects in regression</td></tr>
+                  <tr><td style="padding:2px 6px">PSM PS&le;0.2</td><td style="padding:2px 6px;color:var(--muted)">Matching with 0.2 propensity score caliper</td></tr>
+                  <tr><td style="padding:2px 6px">PSM PS&le;0.2 + Sub FE</td><td style="padding:2px 6px;color:var(--muted)">0.2 caliper + subclass FE</td></tr>
+                  <tr><td style="padding:2px 6px">PSM PS&le;0.1</td><td style="padding:2px 6px;color:var(--muted)">Matching with 0.1 propensity score caliper</td></tr>
+                  <tr><td style="padding:2px 6px">PSM PS&le;0.1 + Sub FE</td><td style="padding:2px 6px;color:var(--muted)">0.1 caliper + subclass FE</td></tr>
+                </tbody>
+              </table></div>
+              <p style="font-size:10px;color:var(--dim);margin:4px 0 0">OLS models use matching core = (none). PSM models exact-match on lodgement year, property type, fuel, age band, built form, and local authority.</p>
+            </div>
+
+            <!-- Specs & Cores -->
+            <div style="flex:1;min-width:300px;overflow:hidden">
+              <h4 style="font-size:12px;color:var(--accent2);margin:0 0 4px">Specifications (4)</h4>
+              <div style="overflow-x:auto"><table style="font-size:11px;width:100%;border-collapse:collapse;white-space:nowrap">
+                <thead><tr style="border-bottom:1px solid var(--border)">
+                  <th style="text-align:left;padding:2px 6px;color:var(--muted)">Spec</th>
+                  <th style="text-align:left;padding:2px 6px;color:var(--muted)">Covariates</th>
+                  <th style="text-align:left;padding:2px 6px;color:var(--muted)">Valid Cores</th>
+                </tr></thead>
+                <tbody>
+                  <tr><td style="padding:2px 6px">Baseline</td><td style="padding:2px 6px;color:var(--muted)">Property type, age, fuel, form, floor area</td><td style="padding:2px 6px;color:var(--dim)">all 4</td></tr>
+                  <tr><td style="padding:2px 6px">Council Tax</td><td style="padding:2px 6px;color:var(--muted)">Baseline + council tax band</td><td style="padding:2px 6px;color:var(--dim)">council_tax, ppd_ct</td></tr>
+                  <tr><td style="padding:2px 6px">Price Paid</td><td style="padding:2px 6px;color:var(--muted)">Baseline + transaction price</td><td style="padding:2px 6px;color:var(--dim)">ppd, ppd_ct</td></tr>
+                  <tr><td style="padding:2px 6px">CT + PPD</td><td style="padding:2px 6px;color:var(--muted)">Baseline + council tax + price</td><td style="padding:2px 6px;color:var(--dim)">ppd_ct only</td></tr>
+                </tbody>
+              </table></div>
+
+              <h4 style="font-size:12px;color:var(--accent2);margin:10px 0 4px">Data Cores (4)</h4>
+              <div style="overflow-x:auto"><table style="font-size:11px;width:100%;border-collapse:collapse;white-space:nowrap">
+                <thead><tr style="border-bottom:1px solid var(--border)">
+                  <th style="text-align:left;padding:2px 6px;color:var(--muted)">Core</th>
+                  <th style="text-align:left;padding:2px 6px;color:var(--muted)">Sample restriction</th>
+                </tr></thead>
+                <tbody>
+                  <tr><td style="padding:2px 6px;font-family:monospace">base</td><td style="padding:2px 6px;color:var(--muted)">All observations (no additional data requirements)</td></tr>
+                  <tr><td style="padding:2px 6px;font-family:monospace">council_tax</td><td style="padding:2px 6px;color:var(--muted)">Only properties with council tax band data</td></tr>
+                  <tr><td style="padding:2px 6px;font-family:monospace">ppd</td><td style="padding:2px 6px;color:var(--muted)">Only properties with Price Paid transaction data</td></tr>
+                  <tr><td style="padding:2px 6px;font-family:monospace">ppd_counciltax</td><td style="padding:2px 6px;color:var(--muted)">Only properties with both PPD and council tax (most restrictive)</td></tr>
+                </tbody>
+              </table></div>
+              <p style="font-size:10px;color:var(--dim);margin:4px 0 0">Different cores restrict to different samples. Comparisons across cores compare different populations. The specification curve groups rows by regression core for this reason.</p>
+            </div>
+          </div>
+        </div>
+      </details>
+    </div>
+
+  </div>
+
+  <!-- Heatmap -->
+  <div class="panel">
+    <h2>Treatment &times; Outcome &mdash; <span id="heatmapTitle">Selected Specification</span></h2>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;align-items:center">
+      <div id="heatmapGroups" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+      <button id="heatmapReset" style="font-size:10px;padding:2px 8px;cursor:pointer;background:var(--panel2);color:var(--muted);border:1px solid var(--border);border-radius:4px" title="Show all groups">Reset</button>
+    </div>
+    <div class="heatmap-wrap"><div id="heatmap"></div></div>
+    <div id="heatmapLegend" class="legend" style="margin-top:6px"></div>
+  </div>
+
+
+  <!-- Outcome-Specific Analysis -->
+  <div class="panel">
+    <h2>Outcome-Specific Analysis</h2>
+    <div style="display:flex;gap:10px;align-items:end;margin-bottom:12px;flex-wrap:wrap">
+      <label style="font-size:11px;color:var(--muted);display:flex;flex-direction:column;gap:3px">Outcome <select id="treeOutcome" style="min-width:220px"></select></label>
+    </div>
+
+    <!-- Mermaid Tree -->
+    <details open>
+      <summary>Treatment Hierarchy Tree</summary>
+      <div style="margin:8px 0">
+        <button class="secondary" id="copyMermaid" style="margin-bottom:8px">Copy Mermaid</button>
+      </div>
+      <div id="chart" class="mermaid" style="text-align:center;color:var(--muted)">Loading&hellip;</div>
+      <div id="treeLegend" class="legend"></div>
+      <details style="margin-top:6px"><summary>Mermaid source</summary>
+        <pre id="mermaidSrc" style="background:var(--panel2);padding:10px;border-radius:6px;overflow:auto;font-size:11px;color:var(--muted);max-height:250px"></pre>
+      </details>
+    </details>
+
+    <!-- Specification Curve -->
+    <details open style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
+      <summary>Specification Curve</summary>
+      <p style="font-size:11px;color:var(--muted);margin:6px 0 8px">
+        Toggle layers to compare estimates across specifications. Range statistics appear with 2+ specs.
+      </p>
+      <div style="display:flex;gap:6px;margin-bottom:6px">
+        <button class="secondary" id="curveReset" style="font-size:10px;padding:3px 8px">Reset</button>
+        <button class="secondary" id="curveSelectAll" style="font-size:10px;padding:3px 8px">Select All</button>
+      </div>
+      <div id="curveLayers" style="margin-bottom:10px"></div>
+      <div class="heatmap-wrap"><div id="curveSummary"></div></div>
+      <details id="curveFullTable" style="margin-top:6px">
+        <summary style="font-size:11px;color:var(--muted);cursor:pointer">Show full specification table</summary>
+        <div style="margin:6px 0">
+          <label style="font-size:10px;color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;gap:4px">
+            <input type="checkbox" id="showInactive" style="accent-color:var(--accent);min-width:auto;cursor:pointer;width:11px;height:11px" />
+            Show inactive rows
+          </label>
+        </div>
+        <div class="heatmap-wrap"><div id="robustnessTable"></div></div>
+      </details>
+    </details>
+  </div>
+
+</div>
+
+<script>
+// ================================================================
+// PAP sign conventions
+// ================================================================
+const WORSE_SIGN_DEFAULT = {
+  current_energy_efficiency:-1, energy_consumption_current:1,
+  energy_consumption_current_property:1, el_mean_consumption_k_wh:1,
+  gas_mean_consumption_k_wh:1, energy_consumption_gap:-1,
+  energy_consumption_gap_property:-1, energy_efficiency_potential_gap:1,
+  bad_epc:1, energy_efficiency_bad_epc_gap:-1,
+  energy_efficiency_worse_epc_gap:-1, borderline_good_epc:1, borderline_better_epc:1
+};
+const WORSE_SIGN = {...WORSE_SIGN_DEFAULT};
+
+const OUTCOME_LABELS = {
+  bad_epc:'Bad EPC', current_energy_efficiency:'EPC Score',
+  energy_consumption_current:'Energy/m\u00B2', energy_consumption_current_property:'Energy/property',
+  el_mean_consumption_k_wh:'Electricity (postcode)', gas_mean_consumption_k_wh:'Gas (postcode)',
+  energy_consumption_gap:'Consump. Gap', energy_consumption_gap_property:'Consump. Gap (prop)',
+  energy_efficiency_potential_gap:'EPC Gap',
+  energy_efficiency_bad_epc_gap:'Dist. to C', energy_efficiency_worse_epc_gap:'Dist. to Band',
+  borderline_good_epc:'Borderline C', borderline_better_epc:'Borderline Band'
+};
+const HEADLINE_OUTCOMES = ['bad_epc'];
+const OUTCOME_GROUPS = [
+  {id:'energy',label:'Energy Use & Efficiency (H1)',outcomes:['current_energy_efficiency','energy_consumption_current','energy_consumption_current_property','el_mean_consumption_k_wh','gas_mean_consumption_k_wh']},
+  {id:'gap',label:'Efficiency Gap (H1)',outcomes:['energy_consumption_gap','energy_consumption_gap_property','energy_efficiency_potential_gap']},
+  {id:'compliance',label:'Regulatory Compliance (H2)',outcomes:['energy_efficiency_bad_epc_gap','energy_efficiency_worse_epc_gap']},
+  {id:'bunching',label:'Bunching / Strategic Behaviour (H3)',outcomes:['borderline_good_epc','borderline_better_epc']}
+];
+const OUTCOME_ORDER = [...HEADLINE_OUTCOMES, ...OUTCOME_GROUPS.flatMap(g=>g.outcomes)];
+
+const TREAT_INFO = {
+  fp:{label:'All for-profit',lv:1}, ukfp:{label:'UK for-profit',lv:2,p:'fp'},
+  frfp:{label:'Foreign for-profit',lv:2,p:'fp'}, thfp:{label:'Tax-haven for-profit',lv:2,p:'fp'},
+  np:{label:'All non-profit',lv:1}, uknp:{label:'UK non-profit',lv:2,p:'np'},
+  frnp:{label:'Foreign non-profit',lv:2,p:'np'}, thnp:{label:'Tax-haven non-profit',lv:2,p:'np'},
+  ps:{label:'Public sector',lv:1},
+  th:{label:'Any tax haven',lv:1}, bh:{label:'British haven',lv:2,p:'th'},
+  eh:{label:'European haven',lv:2,p:'th'}, ch:{label:'Caribbean haven',lv:2,p:'th'},
+  oh:{label:'Other haven',lv:2,p:'th'}
+};
+const TREAT_ORDER = ['fp','ukfp','frfp','thfp','np','uknp','frnp','thnp','ps','th','bh','eh','ch','oh'];
+const TREAT_TITLE_TO_SHORT = {
+  'Effect of For-Profit Ownership':'fp','Effect of UK For-Profit Ownership':'ukfp',
+  'Effect of Foreign For-Profit Ownership':'frfp','Effect of Tax Haven For-Profit Ownership':'thfp',
+  'Effect of Non-Profit Ownership':'np','Effect of UK Non-Profit Ownership':'uknp',
+  'Effect of Foreign Non-Profit Ownership':'frnp','Effect of Tax Haven Non-Profit Ownership':'thnp',
+  'Effect of Public Sector Ownership':'ps','Effect of Tax Haven Ownership':'th',
+  'Effect of British Haven Ownership':'bh','Effect of European Haven Ownership':'eh',
+  'Effect of Caribbean Haven Ownership':'ch','Effect of Other Haven Ownership':'oh'
+};
+const TREE_EDGES = [
+  ['ROOT','fp'],['ROOT','np'],['ROOT','ps'],['ROOT','th'],
+  ['fp','ukfp'],['fp','frfp'],['fp','thfp'],
+  ['np','uknp'],['np','frnp'],['np','thnp'],
+  ['th','bh'],['th','eh'],['th','ch'],['th','oh']
+];
+
+// ================================================================
+// State
+// ================================================================
+let DATA = [];
+let sortCol = null;
+let sortAsc = true;
+
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+
+// ================================================================
+// Utilities
+// ================================================================
+function median(a){const s=a.filter(Number.isFinite).sort((a,b)=>a-b);if(!s.length)return NaN;const m=s.length>>1;return s.length%2?s[m]:(s[m-1]+s[m])/2}
+function lerpColor(c1,c2,t){const p=(s,i)=>parseInt(s.slice(i,i+2),16);return`rgb(${Math.round(p(c1,1)+(p(c2,1)-p(c1,1))*t)},${Math.round(p(c1,3)+(p(c2,3)-p(c1,3))*t)},${Math.round(p(c1,5)+(p(c2,5)-p(c1,5))*t)})`}
+function coefToColor(v,mx,o){if(!Number.isFinite(v)||mx===0)return'#1e293b';const t=Math.min(1,Math.abs(v/mx));const neutral=v>=0?lerpColor('#1e293b','#3b82f6',t):lerpColor('#1e293b','#f97316',t);if(!$('#papColor')?.checked||(WORSE_SIGN[o]||0)===0)return neutral;const s=Math.max(-1,Math.min(1,v/mx)),b=s*(WORSE_SIGN[o]),bt=Math.abs(b);return b>=0?lerpColor('#1e293b','#dc2626',bt):lerpColor('#1e293b','#16a34a',bt)}
+function textCol(v,mx){return mx>0&&Math.abs(v/mx)>.45?'#fff':'#e5e7eb'}
+function fmtC(x){if(!Number.isFinite(x))return'';const a=Math.abs(x);return a===0?'0':a<.005?x.toExponential(1):a<.1?x.toFixed(3):x.toFixed(2)}
+function starsRaw(p){if(!Number.isFinite(p))return'';return p<.01?'***':p<.05?'**':p<.1?'*':''}
+function stars(p){return $('#showStars')?.checked?starsRaw(p):''}
+function seStr(se){return $('#showSE')?.checked&&Number.isFinite(se)?`<div style="font-size:9px;opacity:.65">(${fmtC(se)})</div>`:''}
+function quantile(a,q){const s=a.filter(Number.isFinite).sort((x,y)=>x-y);if(!s.length)return NaN;const p=(s.length-1)*q,b=Math.floor(p),f=p-b;return s[b+1]!=null?s[b]+f*(s[b+1]-s[b]):s[b]}
+const MODEL_SHORT={'OLS Additive FE':'OLS Add','OLS Interactive FE':'OLS Int','PSM (Matched)':'PSM','PSM (Matched) + Subclass FE':'PSM+Sub','PSM (Matched) PS<=0.2':'PSM p<=.2','PSM (Matched) PS<=0.2 + Subclass FE':'PSM+Sub p<=.2','PSM (Matched) PS<=0.1':'PSM p<=.1','PSM (Matched) PS<=0.1 + Subclass FE':'PSM+Sub p<=.1'};
+// ================================================================
+// Data normalisation
+// ================================================================
+function normalizeRow(row){
+  const o={};for(const k in row)o[k.trim()]=row[k];
+  if(!o.treatment_short_id&&o.treatment)o.treatment_short_id=TREAT_TITLE_TO_SHORT[String(o.treatment).trim()]||o.treatment;
+  for(const f of['outcome','model','spec','status'])if(f in o)o[f]=String(o[f]??'').trim();
+  // Default status to 'ok' if missing (pre-filtered data from dashboard_data.js)
+  if(!o.status||o.status==='')o.status='ok';
+  for(const f of['matching_core','regression_core'])if(f in o)o[f]=String(o[f]??'').trim().toLowerCase();
+  // Normalise empty matching_core (OLS rows) to a sentinel so it never acts as wildcard
+  if(!o.matching_core||o.matching_core==='')o.matching_core='(none)';
+  for(const f of['coef','se','p_value','nobs','standardised_coef','pct_effect','outcome_mean','outcome_sd'])
+    if(f in o&&o[f]!==''&&o[f]!=null)o[f]=parseFloat(o[f]);
+  return o;
+}
+
+const HM_COL_W=76,HM_FIRST_W=180;
+function hmStyle(nCols){const w=Math.max(HM_FIRST_W+nCols*HM_COL_W,400);return`style="width:${w}px"`}
+const SC_INFO_W=280;// Model+Spec+MC+RC combined
+function scStyle(nTreats){const w=Math.max(SC_INFO_W+nTreats*HM_COL_W,400);return`style="width:${w}px"`}
+
+// ================================================================
+// Selector logic (mirrors existing mermaid chart)
+// ================================================================
+const SEL_IDS = ['model','spec','matching_core','regression_core'];
+const PREFERRED = {
+  model:['PSM (Matched) + Subclass FE','PSM (Matched)',
+         'OLS Additive FE','OLS Interactive FE',
+         'PSM (Matched) PS<=0.2 + Subclass FE','PSM (Matched) PS<=0.2',
+         'PSM (Matched) PS<=0.1 + Subclass FE','PSM (Matched) PS<=0.1'],
+  spec:['Baseline','Council Tax','Price Paid','Council Tax + Price Paid'],
+  regression_core:['base','council_tax','ppd','ppd_counciltax'],
+  matching_core:['(none)','base','council_tax','ppd','ppd_counciltax']
+};
+// Valid spec → regression_core pairs (from model_specifications.R)
+const SPEC_CORE_PAIRS = {
+  'Baseline':['base','council_tax','ppd','ppd_counciltax'],
+  'Council Tax':['council_tax','ppd_counciltax'],
+  'Price Paid':['ppd','ppd_counciltax'],
+  'Council Tax + Price Paid':['ppd_counciltax']
+};
+const OLS_MODELS = ['OLS Additive FE','OLS Interactive FE'];
+
+function unique(arr){return[...new Set(arr.filter(v=>v!=null))]}
+function fieldVal(r,f){return(f==='matching_core'||f==='regression_core')?(r[f]||'').toLowerCase():String(r[f]||'')}
+
+function populateSelectors(){
+  const ok = DATA.filter(r=>r.status==='ok'&&Number.isFinite(r.coef));
+  for(const id of SEL_IDS){
+    const el=$('#'+id);const cur=el.value;const isInit=el.options.length===0;
+    // Get values compatible with current other selections
+    const others=SEL_IDS.filter(x=>x!==id);
+    const compat=ok.filter(r=>others.every(oid=>{
+      const sel=$('#'+oid);
+      // Before selectors are populated, treat as wildcard
+      if(sel.options.length===0)return true;
+      return fieldVal(r,oid)===sel.value;
+    }));
+    let vals=unique(compat.map(r=>fieldVal(r,id)));
+    // Sort by preferred order
+    const pref=PREFERRED[id];
+    if(pref){const s=new Set(vals);vals=pref.filter(v=>s.has(v)).concat(vals.filter(v=>!pref.includes(v)))}
+    // Display labels
+    const label=v=>{
+      if(id==='matching_core'&&v==='(none)')return '(OLS — no matching)';
+      return v;
+    };
+    el.innerHTML=vals.map(v=>`<option value="${v}">${label(v)}</option>`).join('');
+    if(vals.includes(cur))el.value=cur;
+    el.disabled=vals.length<=1;
+  }
+  // Outcome selectors
+  const outcomes=OUTCOME_ORDER.filter(o=>ok.some(r=>r.outcome===o));
+  for(const selId of['treeOutcome']){
+    const el=$('#'+selId);const cur=el.value;
+    el.innerHTML=outcomes.map(o=>`<option value="${o}">${OUTCOME_LABELS[o]||o}</option>`).join('');
+    if(outcomes.includes(cur))el.value=cur;
+  }
+}
+
+function getSliceRows(){
+  const m=$('#model').value, sp=$('#spec').value, mc=$('#matching_core').value, rc=$('#regression_core').value;
+  return DATA.filter(r=>r.status==='ok'&&Number.isFinite(r.coef)&&
+    r.model===m&&r.spec===sp&&fieldVal(r,'matching_core')===mc&&fieldVal(r,'regression_core')===rc);
+}
+
+// Build map: treat -> outcome -> row
+function buildSliceMap(rows){
+  const m=new Map();
+  for(const r of rows){
+    if(!m.has(r.treatment_short_id))m.set(r.treatment_short_id,new Map());
+    m.get(r.treatment_short_id).set(r.outcome,r);
+  }
+  return m;
+}
+
+// ================================================================
+// Mermaid tree
+// ================================================================
+function renderTree(){
+  const outcome=$('#treeOutcome').value;if(!outcome||!DATA.length)return;
+  const sliceMap=buildSliceMap(getSliceRows());
+  const coefs={},pvals={},ses={};
+  for(const tid of TREAT_ORDER){const r=sliceMap.get(tid)?.get(outcome);coefs[tid]=r?r.coef:null;pvals[tid]=r?r.p_value:null;ses[tid]=r?r.se:null}
+  const allVals=Object.values(coefs).filter(Number.isFinite).map(Math.abs);
+  const mx=allVals.length?Math.max(...allVals):1;
+  const pap=$('#papColor')?.checked;
+  const ws=WORSE_SIGN[outcome]||1;
+  function cls(v){
+    if(v==null||!Number.isFinite(v))return'na';
+    const t=Math.abs(v/mx);
+    if(!pap){if(t>.6)return'b3';if(t>.3)return'b2';if(t>.05)return'b1';return'n'}
+    const b=(v/mx)*ws;
+    if(b>.6)return'dr';if(b>.3)return'r';if(b>.05)return'lr';
+    if(b<-.6)return'dg';if(b<-.3)return'g';if(b<-.05)return'lg';return'n'}
+  const fmt=v=>(v==null||!Number.isFinite(v))?'N/A':((v>=0?'+':'')+v.toFixed(3));
+  let src='flowchart TB\n  ROOT["Control: privately rented,<br/>owner = Unknown"]\n\n';
+  const fmtSe=v=>(v==null||!Number.isFinite(v))?'':' ('+v.toFixed(3)+')';
+  const showTreeSE=$('#showSE')?.checked;
+  for(const tid of TREAT_ORDER){const sePart=showTreeSE?`<br/>${fmtSe(ses[tid])}`:'';src+=`  ${tid}["${TREAT_INFO[tid].label}<br/>${fmt(coefs[tid])}${stars(pvals[tid])}${sePart}"]\n`}
+  src+='\n';for(const[f,t]of TREE_EDGES)src+=`  ${f} --> ${t}\n`;
+  src+='\n  classDef root fill:#1e293b,stroke:#334155,color:#e5e7eb,rx:6,ry:6;\n';
+  src+='  classDef dg fill:#14532d,stroke:#166534,color:#dcfce7,rx:6,ry:6;\n';
+  src+='  classDef g fill:#166534,stroke:#22c55e,color:#dcfce7,rx:6,ry:6;\n';
+  src+='  classDef lg fill:#1a3329,stroke:#22c55e,color:#bbf7d0,rx:6,ry:6;\n';
+  src+='  classDef n fill:#1e293b,stroke:#475569,color:#94a3b8,rx:6,ry:6;\n';
+  src+='  classDef lr fill:#2d1a1a,stroke:#ef4444,color:#fecaca,rx:6,ry:6;\n';
+  src+='  classDef r fill:#991b1b,stroke:#ef4444,color:#fef2f2,rx:6,ry:6;\n';
+  src+='  classDef dr fill:#7f1d1d,stroke:#991b1b,color:#fef2f2,rx:6,ry:6;\n';
+  src+='  classDef b1 fill:#1a2540,stroke:#3b82f6,color:#bfdbfe,rx:6,ry:6;\n';
+  src+='  classDef b2 fill:#1e3a5f,stroke:#3b82f6,color:#dbeafe,rx:6,ry:6;\n';
+  src+='  classDef b3 fill:#1e40af,stroke:#2563eb,color:#eff6ff,rx:6,ry:6;\n';
+  src+='  classDef na fill:#1e293b,stroke:#334155,color:#64748b,rx:6,ry:6;\n\n';
+  src+='  class ROOT root;\n';
+  for(const tid of TREAT_ORDER)src+=`  class ${tid} ${cls(coefs[tid])};\n`;
+  $('#mermaidSrc').textContent=src;
+  // Update tree legend
+  $('#treeLegend').innerHTML=pap
+    ?'<span><span class="swatch" style="background:var(--green)"></span> Better</span><span><span class="swatch" style="background:var(--red)"></span> Worse</span>'
+    :'<span><span class="swatch" style="background:#3b82f6"></span> Positive</span><span><span class="swatch" style="background:#f97316"></span> Negative</span>';
+  const target=$('#chart');target.removeAttribute('data-processed');target.textContent=src;
+  try{mermaid.run({nodes:[target]})}catch(e){console.warn(e)}
+}
+
+// ================================================================
+// Heatmap with rankings
+// ================================================================
+function renderHeatmap(){
+  if(!DATA.length)return;
+  const rows=getSliceRows();
+  const sliceMap=buildSliceMap(rows);
+  const cf=$('#colorBy').value;
+  const m=$('#model').value,sp=$('#spec').value;
+
+  // Group toggles
+  const enabledGroups=new Set([...$$('.hm-grp:checked')].map(e=>e.value));
+  // On first render (no checkboxes yet), enable all
+  const firstRender=$$('.hm-grp').length===0;
+  if(firstRender)OUTCOME_GROUPS.forEach(g=>enabledGroups.add(g.id));
+
+  // Build toggle UI
+  let togHtml='';
+  for(const g of OUTCOME_GROUPS){
+    const on=enabledGroups.has(g.id);
+    togHtml+=`<label style="font-size:10px;color:${on?'var(--accent2)':'var(--dim)'};cursor:pointer;display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border-radius:4px;${on?'background:rgba(59,130,246,0.1)':''}"><input type="checkbox" class="hm-grp" value="${g.id}" ${on?'checked':''} style="accent-color:var(--accent);min-width:auto;cursor:pointer;width:11px;height:11px" />${g.label}</label>`;
+  }
+  $('#heatmapGroups').innerHTML=togHtml;
+  for(const cb of $$('.hm-grp'))cb.addEventListener('change',renderHeatmap);
+
+  // Headline outcomes (always shown, outside groups)
+  const hasData=o=>{for(const t of TREAT_ORDER)if(sliceMap.get(t)?.has(o))return true;return false};
+  const headlinePresent=HEADLINE_OUTCOMES.filter(hasData);
+
+  // Visible group outcomes = enabled groups, filtered to those with data
+  const visibleGroups=OUTCOME_GROUPS.filter(g=>enabledGroups.has(g.id));
+  const groupPresent=visibleGroups.flatMap(g=>g.outcomes.filter(hasData));
+  const present=[...headlinePresent,...groupPresent];
+  if(!present.length){$('#heatmap').innerHTML='<p style="color:var(--muted)">No data for this specification</p>';return}
+
+  // Wire reset button
+  const resetBtn=$('#heatmapReset');
+  if(resetBtn&&!resetBtn._wired){resetBtn._wired=true;resetBtn.addEventListener('click',()=>{for(const cb of $$('.hm-grp'))cb.checked=true;renderHeatmap()})}
+
+  // Compute ranks per outcome (1=strongest absolute effect)
+  const ranks={};
+  for(const o of present){
+    const entries=TREAT_ORDER.map(t=>{const r=sliceMap.get(t)?.get(o);if(!r)return{t,val:NaN};const v=cf==='coef'?r.coef:(r[cf]!=null?r[cf]:NaN);return{t,val:Number.isFinite(v)?Math.abs(v):NaN}}).filter(e=>Number.isFinite(e.val));
+    entries.sort((a,b)=>b.val-a.val);
+    ranks[o]={};entries.forEach((e,i)=>ranks[o][e.t]=i+1);
+  }
+
+  // Per-column max
+  const colMax={};
+  for(const o of present){
+    let mx=0;
+    for(const t of TREAT_ORDER){const r=sliceMap.get(t)?.get(o);if(r){const v=cf==='coef'?r.coef:(r[cf]!=null?r[cf]:NaN);if(Number.isFinite(v))mx=Math.max(mx,Math.abs(v))}}
+    colMax[o]=mx||1;
+  }
+
+  // Sort order
+  let order=[...TREAT_ORDER];
+  if(sortCol&&present.includes(sortCol)){
+    order.sort((a,b)=>{
+      const ra=sliceMap.get(a)?.get(sortCol),rb=sliceMap.get(b)?.get(sortCol);
+      const va=ra?(cf==='coef'?ra.coef:(ra[cf]!=null?ra[cf]:NaN)):NaN;
+      const vb=rb?(cf==='coef'?rb.coef:(rb[cf]!=null?rb[cf]:NaN)):NaN;
+      if(!Number.isFinite(va))return 1;if(!Number.isFinite(vb))return -1;
+      return sortAsc?va-vb:vb-va;
+    });
+  }
+
+  // Build header with headline + group sections
+  let html=`<table class="hm"><thead>`;
+  // Group header row
+  html+='<tr><th rowspan="2">Treatment</th>';
+  // Headline columns span both rows
+  for(const o of headlinePresent){
+    const arrow=sortCol===o?(sortAsc?' &#9650;':' &#9660;'):'';
+    html+=`<th rowspan="2" data-col="${o}" style="border-right:3px solid var(--border);vertical-align:middle" title="${o}\n${WORSE_SIGN[o]===1?'+ = worse':'- = worse'}">${OUTCOME_LABELS[o]||o}${arrow}</th>`;
+  }
+  for(const g of visibleGroups){
+    const cols=g.outcomes.filter(o=>groupPresent.includes(o));
+    if(cols.length)html+=`<th colspan="${cols.length}" style="border-bottom:2px solid var(--accent);font-size:10px;color:var(--accent2);font-weight:600;letter-spacing:.3px">${g.label}</th>`;
+  }
+  html+='</tr>';
+  // Outcome header row (headline already placed via rowspan)
+  html+='<tr>';
+  for(const g of visibleGroups){
+    const cols=g.outcomes.filter(o=>groupPresent.includes(o));
+    cols.forEach((o,i)=>{
+      const arrow=sortCol===o?(sortAsc?' &#9650;':' &#9660;'):'';
+      const borderL=i===0?'border-left:3px solid var(--border);':'';
+      html+=`<th data-col="${o}" style="${borderL}" title="${o}\n${WORSE_SIGN[o]===1?'+ = worse':'- = worse'}">${OUTCOME_LABELS[o]||o}${arrow}</th>`;
+    });
+  }
+  html+='</tr></thead><tbody>';
+
+  // Build group boundary set for thick left borders on data cells
+  const groupStarts=new Set();
+  // First group column always gets a left border (separates from headline)
+  for(const g of visibleGroups){
+    const firstO=g.outcomes.find(o=>groupPresent.includes(o));
+    if(firstO)groupStarts.add(firstO);
+  }
+  // Headline right border set
+  const headlineSet=new Set(headlinePresent);
+
+  // Mean / SD subheader row — averaged across displayed treatments per outcome
+  html+='<tr style="font-size:10px;color:var(--muted);background:var(--panel2)">';
+  html+='<td style="background:var(--panel2);font-style:italic;font-weight:400">Sample mean (SD)</td>';
+  for(const o of present){
+    const borderL=groupStarts.has(o)?'border-left:3px solid var(--border);':'';
+    const borderR=headlineSet.has(o)?'border-right:3px solid var(--border);':'';
+    const means=[],sds=[];
+    for(const t of TREAT_ORDER){const r=sliceMap.get(t)?.get(o);if(r){if(Number.isFinite(r.outcome_mean))means.push(r.outcome_mean);if(Number.isFinite(r.outcome_sd))sds.push(r.outcome_sd)}}
+    const avg=means.length?means.reduce((a,b)=>a+b,0)/means.length:NaN;
+    const avgSd=sds.length?sds.reduce((a,b)=>a+b,0)/sds.length:NaN;
+    const mStr=Number.isFinite(avg)?(Math.abs(avg)<1?avg.toFixed(2):avg.toFixed(1)):'';
+    const sStr=Number.isFinite(avgSd)?(Math.abs(avgSd)<1?avgSd.toFixed(2):avgSd.toFixed(1)):'';
+    const txt=mStr?(sStr?`${mStr} (${sStr})`:mStr):'&mdash;';
+    html+=`<td style="background:var(--panel2);${borderL}${borderR}font-style:italic">${txt}</td>`;
+  }
+  html+='</tr>';
+
+  for(const t of order){
+    const info=TREAT_INFO[t];if(!info)continue;
+    const isChild=info.lv===2;
+    html+=`<tr><td${isChild?' class="indent"':''}><strong>${info.label}</strong><span class="treat-label">(${t})</span></td>`;
+    for(const o of present){
+      const borderL=groupStarts.has(o)?'border-left:3px solid var(--border);':'';
+      const borderR=headlineSet.has(o)?'border-right:3px solid var(--border);':'';
+      const borders=borderL+borderR;
+      const r=sliceMap.get(t)?.get(o);
+      if(!r||!Number.isFinite(r.coef)){html+=`<td style="background:#111827;color:#475569;${borders}">&mdash;</td>`;continue}
+      const val=cf==='coef'?r.coef:(r[cf]!=null?r[cf]:NaN);
+      if(!Number.isFinite(val)){html+=`<td style="background:#111827;color:#475569;${borders}">&mdash;</td>`;continue}
+      const bg=coefToColor(val,colMax[o],o);
+      const tc=textCol(val,colMax[o]);
+      const st=stars(r.p_value);
+      const rk=ranks[o]?.[t];
+      const rkHtml=rk?`<span class="rank-badge">${rk}</span>`:'';
+      const tip=`coef=${r.coef?.toFixed(4)}, se=${r.se?.toFixed(4)}, p=${r.p_value?.toFixed(4)}\nnobs=${r.nobs?.toLocaleString()}${Number.isFinite(r.standardised_coef)?', std='+r.standardised_coef.toFixed(3):''}`;
+      html+=`<td style="background:${bg};color:${tc};${borders}" title="${tip}">${fmtC(val)}${st}${rkHtml}${seStr(r.se)}</td>`;
+    }
+    html+='</tr>';
+  }
+  html+='</tbody></table>';
+  $('#heatmap').innerHTML=html;
+  $('#heatmapTitle').textContent=`${m} | ${sp}`;
+  const pap=$('#papColor')?.checked;
+  $('#heatmapLegend').innerHTML=pap
+    ?'<span><span class="swatch" style="background:var(--green)"></span> Better</span><span><span class="swatch" style="background:var(--red)"></span> Worse</span>'
+     +'<span>Stars: p &lt; .01 ***, &lt; .05 **, &lt; .10 *</span><span>Superscript: rank (1 = strongest)</span>'
+    :'<span><span class="swatch" style="background:#3b82f6"></span> Positive</span><span><span class="swatch" style="background:#f97316"></span> Negative</span>'
+     +'<span>Stars: p &lt; .01 ***, &lt; .05 **, &lt; .10 *</span><span>Superscript: rank (1 = strongest)</span>';
+
+  // Wire up column sorting
+  for(const th of $$('#heatmap th[data-col]')){
+    th.addEventListener('click',()=>{
+      const col=th.dataset.col;
+      if(sortCol===col)sortAsc=!sortAsc;else{sortCol=col;sortAsc=false}
+      renderHeatmap();
+    });
+  }
+}
+
+// ================================================================
+// Specification Curve — Layer Controls
+// ================================================================
+// Coupling rules: which matching cores a model needs, which reg cores a spec needs
+const MC_FOR_MODEL={};
+for(const m of['OLS Additive FE','OLS Interactive FE'])MC_FOR_MODEL[m]=['(none)'];
+for(const m of['PSM (Matched)','PSM (Matched) + Subclass FE','PSM (Matched) PS<=0.2','PSM (Matched) PS<=0.2 + Subclass FE','PSM (Matched) PS<=0.1','PSM (Matched) PS<=0.1 + Subclass FE'])MC_FOR_MODEL[m]=['base','council_tax','ppd','ppd_counciltax'];
+const RC_FOR_SPEC={'Baseline':['base','council_tax','ppd','ppd_counciltax'],'Council Tax':['council_tax','ppd_counciltax'],'Price Paid':['ppd','ppd_counciltax'],'Council Tax + Price Paid':['ppd_counciltax']};
+
+function populateCurveLayers(){
+  const outcome=$('#treeOutcome').value;
+  if(!outcome){$('#curveLayers').innerHTML='';return}
+  const ok=DATA.filter(r=>r.status==='ok'&&Number.isFinite(r.coef)&&r.outcome===outcome);
+  // Preserve previous checkbox state
+  const prev={m:new Set([...$$('.cl-m:checked')].map(e=>e.value)),s:new Set([...$$('.cl-s:checked')].map(e=>e.value)),
+    mc:new Set([...$$('.cl-mc:checked')].map(e=>e.value)),rc:new Set([...$$('.cl-rc:checked')].map(e=>e.value))};
+  const had=$$('.cl-m').length>0;
+  const sm=$('#model').value,ss=$('#spec').value,smc=$('#matching_core').value,src=$('#regression_core').value;
+  const chk={m:had?new Set([...prev.m,sm]):new Set([sm]),s:had?new Set([...prev.s,ss]):new Set([ss]),
+    mc:had?new Set([...prev.mc,smc]):new Set([smc]),rc:had?new Set([...prev.rc,src]):new Set([src])};
+  const sortP=(v,k)=>{const p=PREFERRED[k];if(!p)return v;const st=new Set(v);return p.filter(x=>st.has(x)).concat(v.filter(x=>!p.includes(x)))};
+  const av={m:sortP(unique(ok.map(r=>r.model)),'model'),s:sortP(unique(ok.map(r=>r.spec)),'spec'),
+    mc:sortP(unique(ok.map(r=>fieldVal(r,'matching_core'))),'matching_core'),rc:sortP(unique(ok.map(r=>fieldVal(r,'regression_core'))),'regression_core')};
+  function grp(cls,lbl,vals,ck,sel){
+    const allOn=vals.every(v=>ck.has(v));
+    let h=`<div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap"><span style="font-size:10px;color:var(--dim);min-width:55px;font-weight:600">${lbl}</span>`;
+    h+=`<a href="#" class="cl-all" data-cls="${cls}" style="font-size:9px;color:var(--accent);text-decoration:none;margin-right:2px">${allOn?'none':'all'}</a>`;
+    for(const v of vals){const isSel=v===sel;const dsp=cls==='cl-m'?(MODEL_SHORT[v]||v):(v==='(none)'?'(OLS)':v);h+=`<label style="font-size:10px;${isSel?'color:var(--accent2);background:rgba(59,130,246,0.12)':'color:var(--muted)'};cursor:pointer;display:inline-flex;align-items:center;gap:2px;padding:1px 5px;border-radius:3px"><input type="checkbox" class="${cls}" value="${v}" ${ck.has(v)?'checked':''} style="accent-color:var(--accent);min-width:auto;cursor:pointer;width:11px;height:11px" />${dsp}</label>`}
+    return h+'</div>';
+  }
+  $('#curveLayers').innerHTML=grp('cl-m','Models',av.m,chk.m,sm)+grp('cl-s','Specs',av.s,chk.s,ss)+grp('cl-mc','Match.C',av.mc,chk.mc,smc)+grp('cl-rc','Reg.Core',av.rc,chk.rc,src);
+  // Wire handlers with smart coupling
+  for(const cb of $$('.cl-m'))cb.addEventListener('change',function(){
+    if(this.checked){const need=MC_FOR_MODEL[this.value]||[];for(const mc of $$('.cl-mc'))if(need.includes(mc.value)&&!mc.checked)mc.checked=true}
+    renderRobustness();
+  });
+  for(const cb of $$('.cl-s'))cb.addEventListener('change',function(){
+    if(this.checked){const need=RC_FOR_SPEC[this.value]||[];for(const rc of $$('.cl-rc'))if(need.includes(rc.value)&&!rc.checked)rc.checked=true}
+    renderRobustness();
+  });
+  for(const cb of $$('.cl-mc,.cl-rc'))cb.addEventListener('change',renderRobustness);
+  // All/none toggles
+  for(const a of $$('.cl-all'))a.addEventListener('click',function(e){
+    e.preventDefault();
+    const cls=this.dataset.cls,boxes=$$('.'+cls);
+    const allOn=[...boxes].every(b=>b.checked);
+    boxes.forEach(b=>{b.checked=!allOn});
+    // Fire coupling for models/specs when selecting all
+    if(!allOn&&cls==='cl-m')for(const b of boxes){const need=MC_FOR_MODEL[b.value]||[];for(const mc of $$('.cl-mc'))if(need.includes(mc.value))mc.checked=true}
+    if(!allOn&&cls==='cl-s')for(const b of boxes){const need=RC_FOR_SPEC[b.value]||[];for(const rc of $$('.cl-rc'))if(need.includes(rc.value))rc.checked=true}
+    renderRobustness();
+  });
+}
+
+// ================================================================
+// Specification Curve
+// ================================================================
+function renderRobustness(){
+  if(!DATA.length)return;
+  const outcome=$('#treeOutcome').value;
+  if(!outcome){$('#curveSummary').innerHTML='<p style="color:var(--muted)">Select an outcome</p>';$('#robustnessTable').innerHTML='';return}
+
+  // Read layer toggles
+  const chkM=new Set([...$$('.cl-m:checked')].map(e=>e.value));
+  const chkS=new Set([...$$('.cl-s:checked')].map(e=>e.value));
+  const chkMC=new Set([...$$('.cl-mc:checked')].map(e=>e.value));
+  const chkRC=new Set([...$$('.cl-rc:checked')].map(e=>e.value));
+  if(!chkM.size)chkM.add($('#model').value);
+  if(!chkS.size)chkS.add($('#spec').value);
+  if(!chkMC.size)chkMC.add($('#matching_core').value);
+  if(!chkRC.size)chkRC.add($('#regression_core').value);
+
+  const ok=DATA.filter(r=>r.status==='ok'&&Number.isFinite(r.coef)&&r.outcome===outcome);
+  if(!ok.length){$('#curveSummary').innerHTML='<p style="color:var(--muted)">No data for this outcome</p>';$('#robustnessTable').innerHTML='';return}
+
+  // Build ALL spec rows (full taxonomy)
+  const specKey=r=>`${r.model}|${r.spec}|${fieldVal(r,'matching_core')}|${fieldVal(r,'regression_core')}`;
+  const specMap=new Map();
+  for(const r of ok){
+    const k=specKey(r);
+    if(!specMap.has(k))specMap.set(k,{model:r.model,spec:r.spec,mc:fieldVal(r,'matching_core'),rc:fieldVal(r,'regression_core'),treats:new Map()});
+    specMap.get(k).treats.set(r.treatment_short_id,r);
+  }
+
+  const SPEC_ORD=['Baseline','Council Tax','Price Paid','Council Tax + Price Paid'];
+  const CORE_ORD=['(none)','base','council_tax','ppd','ppd_counciltax'];
+  const specRows=[...specMap.values()].sort((a,b)=>{
+    let d=CORE_ORD.indexOf(a.rc)-CORE_ORD.indexOf(b.rc);if(d)return d;
+    d=PREFERRED.model.indexOf(a.model)-PREFERRED.model.indexOf(b.model);if(d)return d;
+    d=SPEC_ORD.indexOf(a.spec)-SPEC_ORD.indexOf(b.spec);if(d)return d;
+    return CORE_ORD.indexOf(a.mc)-CORE_ORD.indexOf(b.mc);
+  });
+
+  if(!specRows.length){$('#curveSummary').innerHTML='<p style="color:var(--muted)">No data for this outcome</p>';$('#robustnessTable').innerHTML='';return}
+
+  // Mark active (matches all 4 toggles) vs inactive (dimmed)
+  function isActive(s){return chkM.has(s.model)&&chkS.has(s.spec)&&chkMC.has(s.mc)&&chkRC.has(s.rc)}
+  const activeRows=specRows.filter(isActive);
+
+  // Current selection
+  const selModel=$('#model').value,selSpec=$('#spec').value;
+  const selMc=$('#matching_core').value,selRc=$('#regression_core').value;
+  const selKey=`${selModel}|${selSpec}|${selMc}|${selRc}`;
+  const selRow=specRows.find(s=>`${s.model}|${s.spec}|${s.mc}|${s.rc}`===selKey);
+
+  // Always show Model column (full taxonomy has multiple models)
+  const nInfoCols=4;
+
+  // Per-treatment colour scaling (across ALL rows for consistent colour)
+  const colMax={};
+  for(const t of TREAT_ORDER){let mx=0;for(const s of specRows){const r=s.treats.get(t);if(r){const v=Math.abs(r.coef);if(v>mx)mx=v}}colMax[t]=mx||1}
+
+  // Row renderer — active rows get full colour, inactive rows are dimmed
+  function dataRow(s,pin){
+    const k=`${s.model}|${s.spec}|${s.mc}|${s.rc}`,isSel=k===selKey,act=isActive(s);
+    const sty=pin?'background:var(--panel2);outline:2px solid var(--accent);outline-offset:-1px'
+      :(isSel?'outline:2px solid var(--accent);outline-offset:-1px'
+      :(!act?'opacity:0.35':''));
+    let h=`<tr${sty?' style="'+sty+'"':''}>`;
+    h+=`<td style="font-size:10px;white-space:nowrap">${MODEL_SHORT[s.model]||s.model}</td>`;
+    h+=`<td style="font-size:11px">${s.spec}</td><td style="font-size:11px;color:var(--dim)">${s.mc==='(none)'?'':s.mc}</td><td style="font-size:11px;color:var(--dim)">${s.rc}</td>`;
+    for(const t of TREAT_ORDER){
+      const d=s.treats.get(t);
+      if(!d||!Number.isFinite(d.coef)){h+='<td style="background:#111827;color:#475569">&mdash;</td>';continue}
+      const bg=act?coefToColor(d.coef,colMax[t],outcome):'#1e293b',tc=act?textCol(d.coef,colMax[t]):'var(--dim)',st=stars(d.p_value);
+      h+=`<td style="background:${bg};color:${tc};font-size:11px" title="coef=${d.coef.toFixed(4)}, se=${d.se?.toFixed(4)}, p=${d.p_value?.toFixed(4)}\nnobs=${d.nobs?.toLocaleString()}">${fmtC(d.coef)}${st}${seStr(d.se)}</td>`;
+    }
+    return h+'</tr>';
+  }
+  function lblRow(lbl,cells){return`<tr><td colspan="${nInfoCols}" style="font-size:10px;font-weight:600;color:var(--muted)">${lbl}</td>${cells}</tr>`}
+
+  // Summary statistics per treatment (ACTIVE rows only)
+  const stats={};
+  for(const t of TREAT_ORDER){
+    const cs=activeRows.map(s=>s.treats.get(t)?.coef).filter(Number.isFinite);
+    const ps=activeRows.map(s=>s.treats.get(t)?.p_value).filter(Number.isFinite);
+    stats[t]={n:cs.length,med:quantile(cs,.5),q1:quantile(cs,.25),q3:quantile(cs,.75),
+      min:cs.length?Math.min(...cs):NaN,max:cs.length?Math.max(...cs):NaN,
+      nPos:cs.filter(c=>c>0).length,nNeg:cs.filter(c=>c<0).length,nSig:ps.filter(p=>p<.05).length,nP:ps.length};
+  }
+  const showRange=activeRows.length>=2;
+
+  // Table header (shared)
+  const hdr='<tr><th style="min-width:80px">Model</th><th>Spec</th><th>MC</th><th>RC</th>'+TREAT_ORDER.map(t=>`<th title="${t}">${TREAT_INFO[t]?.label||t}</th>`).join('')+'</tr>';
+
+  // === Summary panel (always visible) ===
+  let sumHtml=`<table class="hm"><thead>`+hdr+'</thead><tbody>';
+  if(selRow)sumHtml+=dataRow(selRow,true);
+  if(showRange){
+    let med='',iqr='',rng='',pos='',neg='',sig='';
+    for(const t of TREAT_ORDER){
+      const s=stats[t],e='<td style="color:var(--dim);font-size:10px">&mdash;</td>';
+      if(!s.n){med+=e;iqr+=e;rng+=e;pos+=e;neg+=e;sig+=e;continue}
+      if(Number.isFinite(s.med)){const bg=coefToColor(s.med,colMax[t],outcome),tc=textCol(s.med,colMax[t]);med+=`<td style="background:${bg};color:${tc};font-size:10px">${fmtC(s.med)}</td>`}else med+=e;
+      iqr+=Number.isFinite(s.q1)?`<td style="font-size:9px;color:var(--muted)" title="Q1=${s.q1.toFixed(4)} Q3=${s.q3.toFixed(4)}">${fmtC(s.q1)} &ndash; ${fmtC(s.q3)}</td>`:e;
+      rng+=Number.isFinite(s.min)?`<td style="font-size:9px;color:var(--muted)" title="min=${s.min.toFixed(4)} max=${s.max.toFixed(4)}">${fmtC(s.min)} &ndash; ${fmtC(s.max)}</td>`:e;
+      pos+=`<td style="font-size:10px;color:var(--muted)">${s.nPos}</td>`;
+      neg+=`<td style="font-size:10px;color:var(--muted)">${s.nNeg}</td>`;
+      const fr=s.nP>0?s.nSig/s.nP:0;
+      sig+=`<td style="font-size:10px;color:${fr>=.75?'var(--green)':fr>=.5?'var(--yellow)':'var(--muted)'}">${s.nSig}/${s.nP}</td>`;
+    }
+    sumHtml+=lblRow('Median',med)+lblRow('IQR',iqr)+lblRow('Range',rng);
+    sumHtml+=lblRow('+ positive',pos)+lblRow('&minus; negative',neg)+lblRow('sig p&lt;.05',sig);
+  }
+  sumHtml+='</tbody></table>';
+  const nActive=activeRows.length,nTotal=specRows.length;
+  sumHtml+=`<p style="font-size:10px;color:var(--dim);margin:4px 0 0">${nActive} active / ${nTotal} total specs. Summary from active rows.</p>`;
+  $('#curveSummary').innerHTML=sumHtml;
+
+  // === Full table (collapsible) — inactive rows only when toggled on ===
+  const showInact=$('#showInactive')?.checked;
+  const visRows=showInact?specRows:specRows.filter(s=>isActive(s));
+  let tblHtml=`<table class="hm"><thead>`+hdr+'</thead><tbody>';
+  let prevRc='';
+  for(const s of visRows){
+    if(s.rc!==prevRc){prevRc=s.rc;tblHtml+=`<tr><td colspan="${nInfoCols+TREAT_ORDER.length}" style="font-size:11px;font-weight:600;color:var(--accent2);padding:6px 6px 2px;background:var(--bg)">Sample: regression_core = ${s.rc}</td></tr>`}
+    tblHtml+=dataRow(s,false);
+  }
+  tblHtml+='</tbody></table>';
+  $('#robustnessTable').innerHTML=tblHtml;
+}
+
+// ================================================================
+// Master render
+// ================================================================
+// ================================================================
+// Sign convention toggles
+// ================================================================
+function renderSignCells(){
+  for(const td of $$('.sign-toggle')){
+    const o=td.dataset.outcome,ws=WORSE_SIGN[o]||0;
+    const sel=td.querySelector('select');
+    if(sel)sel.value=String(ws);
+    else{
+      td.innerHTML=`<select data-outcome="${o}" style="font-size:10px;background:var(--panel2);color:inherit;border:1px solid var(--border);border-radius:3px;padding:0 1px;cursor:pointer;width:62px"><option value="1" style="color:var(--red)">worse</option><option value="-1" style="color:var(--green)">better</option><option value="0" style="color:var(--muted)">neutral</option></select>`;
+      const s=td.querySelector('select');
+      s.value=String(ws);
+      s.style.color=ws===1?'var(--red)':ws===-1?'var(--green)':'var(--muted)';
+      s.addEventListener('change',()=>{
+        WORSE_SIGN[o]=parseInt(s.value);
+        s.style.color=s.value==='1'?'var(--red)':s.value==='-1'?'var(--green)':'var(--muted)';
+        if($('#papColor')?.checked){renderTree();renderHeatmap();renderRobustness()}
+      });
+    }
+    const s=td.querySelector('select');
+    if(s)s.style.color=ws===1?'var(--red)':ws===-1?'var(--green)':'var(--muted)';
+  }
+}
+function initSignToggles(){
+  renderSignCells();
+  $('#resetSigns').addEventListener('click',()=>{
+    Object.assign(WORSE_SIGN,WORSE_SIGN_DEFAULT);
+    renderSignCells();
+    if($('#papColor')?.checked){renderTree();renderHeatmap();renderRobustness()}
+  });
+}
+
+function render(){
+  if(!DATA.length)return;
+  renderTree();
+  renderHeatmap();
+  populateCurveLayers();
+  renderRobustness();
+}
+
+// ================================================================
+// Data loading
+// ================================================================
+function loadCSV(rows){
+  DATA=rows.map(normalizeRow).filter(r=>r.outcome&&r.coef!==''&&r.coef!=null);
+  populateSelectors();
+  // Stabilise selectors (4 passes like mermaid chart)
+  for(let i=0;i<4;i++)populateSelectors();
+  render();
+}
+
+$('#file').addEventListener('change',()=>{
+  const f=$('#file').files?.[0];if(!f)return;
+  $('#status').textContent='Parsing CSV...';
+  Papa.parse(f,{header:true,dynamicTyping:true,skipEmptyLines:true,
+    complete:res=>{if(res.data.length){loadCSV(res.data);$('#status').textContent=`Uploaded ${DATA.length} rows from ${f.name}`}
+    else{$('#status').textContent='No rows'}},
+    error:e=>{console.error(e);$('#status').textContent='Parse error'}});
+});
+
+// Selector change handlers
+for(const id of[...SEL_IDS,'colorBy','treeOutcome']){
+  $('#'+id).addEventListener('change',()=>{
+    if(SEL_IDS.includes(id))populateSelectors();
+    render();
+  });
+}
+$('#showSE').addEventListener('change',()=>{renderTree();renderHeatmap();renderRobustness()});
+$('#showStars').addEventListener('change',()=>{renderTree();renderHeatmap();renderRobustness()});
+$('#papColor').addEventListener('change',()=>{renderTree();renderHeatmap();renderRobustness()});
+$('#showInactive').addEventListener('change',renderRobustness);
+$('#curveReset').addEventListener('click',()=>{
+  // Clear all layer checkboxes, then re-populate (starts fresh with current selection only)
+  $$('.cl-m,.cl-s,.cl-mc,.cl-rc').forEach(cb=>cb.remove());
+  $('#curveLayers').innerHTML='';
+  populateCurveLayers();
+  renderRobustness();
+});
+$('#curveSelectAll').addEventListener('click',()=>{
+  $$('.cl-m,.cl-s,.cl-mc,.cl-rc').forEach(cb=>{cb.checked=true});
+  renderRobustness();
+});
+$('#copyMermaid').addEventListener('click',async()=>{
+  try{await navigator.clipboard.writeText($('#mermaidSrc').textContent);$('#status').textContent='Copied!'}catch(e){}
+});
+
+// ================================================================
+// Init
+// ================================================================
+mermaid.initialize({startOnLoad:false,theme:'dark'});
+
+initSignToggles();
+
+if(window.PIPELINE_DATA&&window.PIPELINE_COLS){
+  const cols=window.PIPELINE_COLS;
+  const rows=window.PIPELINE_DATA.map(a=>{const o={};for(let i=0;i<cols.length;i++)o[cols[i]]=a[i];return o});
+  loadCSV(rows);
+  $('#status').textContent=`Pre-loaded ${DATA.length} rows (LA)`;
+} else {
+  $('#status').textContent='Upload a results CSV to begin';
+}
+</script>
+</body>
+</html>

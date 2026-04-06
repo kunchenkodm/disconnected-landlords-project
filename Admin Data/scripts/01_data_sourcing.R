@@ -13,27 +13,27 @@ source(here::here("scripts", "00_setup.R"))
 library(httr)
 library(jsonlite)
 library(data.table)
+library(janitor)
 
-# SETUP: INPUTS REQUIRED  --------------------------------------------------
-# Configuration section for user customization (using global variables from 00_setup.R)
+
+# Inputs ------------------------------------------------------------------
 api_key <- API_KEY
 ccod_version <- CCOD_VERSION
 ocod_version <- OCOD_VERSION
 admin_path <- RAW_ADMIN_DIR
 output_dir <- PROCESSED_DATA_DIR
 
-### PATH TO API URL ###
+# API URLs ----------------------------------------------------------------
 # NB! If you wish to request the newest dataset, change this to "https://use-land-property-data.service.gov.uk/api/v1/datasets/ccod/"
 ccod_url <- paste0("https://use-land-property-data.service.gov.uk/api/v1/datasets/history/ccod/", ccod_version, ".zip", sep ='')
 ocod_url <- paste0("https://use-land-property-data.service.gov.uk/api/v1/datasets/history/ocod/", ocod_version, ".zip", sep ='')
 
-# Expected *cod file names #
+# Expected file paths
 ccod_file <- file.path(admin_path, paste0(ccod_version, ".csv"))
 ocod_file <- file.path(admin_path, paste0(ocod_version, ".csv"))
 
 
-# Create *COD Datasets and Merge ------------------------------------------
-### Program to Fetch Land Registry Data #
+# Fetch & Merge -----------------------------------------------------------
 fetch_cod_data <- function(api_url, api_key, dest_file) {
   if (file.exists(dest_file)) {
     message("File ", dest_file, " already exists. Loading from local storage.")
@@ -117,7 +117,6 @@ setkey(ocod, Title.Number)
 combined <- rbindlist(list(ocod, ccod), fill = TRUE) # Data-table merge please
 
 # Clean Dataset Names 
-library(janitor)
 combined <- clean_names(combined)
 
 # Bring variable ordering in line with the OCOD dataset [optional]
