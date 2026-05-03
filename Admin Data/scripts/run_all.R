@@ -17,6 +17,7 @@ scripts <- c(
   "05_create_matched_pairs.R",
   "06_run_regressions.R",
   "07_create_plots.R",
+  "07b_plot_covariates.R",
   "08_validation_exercices.R"
 )
 
