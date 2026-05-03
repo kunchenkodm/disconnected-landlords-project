@@ -33,6 +33,11 @@ MATCHING_MIN_CONTROL_LOW  <- 25L  # Min control obs (sparse cores)
 MATCHING_MIN_CONTROL_HIGH <- 50L  # Min control obs (admin-only cores)
 MATCHING_GEOGRAPHY <- Sys.getenv("MATCHING_GEOGRAPHY_OVERRIDE", unset = "LA")  # "LA", "ITL1", "ITL2", or "ITL3"
 WITHIN_CORPORATE   <- as.logical(Sys.getenv("WITHIN_CORPORATE_OVERRIDE", unset = "FALSE"))
+BUILD_YEAR_CUTOFF <- local({
+  v <- suppressWarnings(as.integer(Sys.getenv("BUILD_YEAR_CUTOFF", unset = "")))
+  if (is.na(v) || v <= 0L) NULL else v
+})
+BUILD_YEAR_SUFFIX <- if (!is.null(BUILD_YEAR_CUTOFF)) paste0("_pre", BUILD_YEAR_CUTOFF) else ""
 MATCHING_N_WORKERS <- local({
   ov <- suppressWarnings(as.integer(Sys.getenv("MATCHING_N_WORKERS_OVERRIDE", unset = "")))
   if (!is.na(ov) && ov > 0L) ov else 1L

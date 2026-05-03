@@ -19,7 +19,8 @@ source(here::here("scripts", "00_setup.R"))
 
 # Geography: read from env var (same pattern as 06_run_regressions.R)
 # MATCHING_GEOGRAPHY is already set by 00_setup.R from MATCHING_GEOGRAPHY_OVERRIDE.
-wc_suffix <- if (WITHIN_CORPORATE) "_wc" else ""
+wc_suffix  <- if (WITHIN_CORPORATE) "_wc" else ""
+out_suffix <- paste0(wc_suffix, BUILD_YEAR_SUFFIX)
 
 message("===================================================================")
 message("  06b_enrich_results.R - Post-hoc Enrichment")
@@ -29,7 +30,7 @@ message("===================================================================")
 
 # Read inputs ---------------------------------------------------------------
 results_path <- file.path(SUMMARY_TABLES_DIR,
-                          paste0("results_table_", MATCHING_GEOGRAPHY, wc_suffix, ".csv"))
+                          paste0("results_table_", MATCHING_GEOGRAPHY, out_suffix, ".csv"))
 if (!file.exists(results_path)) {
   stop("Results CSV not found: ", results_path,
        "\n  Run 06_run_regressions.R first.")
@@ -206,7 +207,7 @@ if (has_balance && nrow(balance) > 0L &&
 
 ## Enriched results
 enriched_path <- file.path(SUMMARY_TABLES_DIR,
-                           paste0("results_enriched_", MATCHING_GEOGRAPHY, wc_suffix, ".csv"))
+                           paste0("results_enriched_", MATCHING_GEOGRAPHY, out_suffix, ".csv"))
 fwrite(results, enriched_path)
 message(sprintf("  Enriched results written: %s (%d rows)", basename(enriched_path), nrow(results)))
 
@@ -225,7 +226,7 @@ narrative <- results[status == "ok" & !is.na(coef), .(
 ), by = .(treatment_short_id, outcome, hypothesis_tag)]
 
 narrative_path <- file.path(SUMMARY_TABLES_DIR,
-                             paste0("narrative_summary_", MATCHING_GEOGRAPHY, wc_suffix, ".csv"))
+                             paste0("narrative_summary_", MATCHING_GEOGRAPHY, out_suffix, ".csv"))
 fwrite(narrative, narrative_path)
 message(sprintf("  Narrative summary written: %s (%d rows)", basename(narrative_path), nrow(narrative)))
 

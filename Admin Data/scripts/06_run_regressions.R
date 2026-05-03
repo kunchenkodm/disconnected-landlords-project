@@ -67,9 +67,11 @@ if (!dir.exists(matched_data_dir)) {
 }
 
 # Write run manifest (once per geography level; skipped on crash-resume).
-wc_suffix <- if (WITHIN_CORPORATE) "_wc" else ""
+wc_suffix     <- if (WITHIN_CORPORATE) "_wc" else ""
+cutoff_suffix <- BUILD_YEAR_SUFFIX
+out_suffix    <- paste0(wc_suffix, cutoff_suffix)
 manifest_path <- file.path(SUMMARY_TABLES_DIR,
-                           paste0("run_manifest_06_", MATCHING_GEOGRAPHY, wc_suffix, ".json"))
+                           paste0("run_manifest_06_", MATCHING_GEOGRAPHY, out_suffix, ".json"))
 if (!file.exists(manifest_path)) {
   jsonlite::write_json(
     list(
@@ -199,6 +201,27 @@ if (length(drop_cols) > 0L) {
   message(sprintf("  Dropped %d treatment-input columns (%.1f MB freed).",
                   length(drop_cols),
                   length(drop_cols) * nrow(EPC_matched_combined) * 8 / 1024^2))
+}
+
+# Construction-Year Cutoff Filter ----------------------------------------
+# Filter applied here (post-load, pre-FE pre-compute) so .GRP ids reflect
+# the restricted sample. Matching is exact on construction_age_band, so
+# every matched pair lives within a single band — filtering whole bands
+# at this stage is equivalent to re-matching on the pre-cutoff subset.
+# NOTE: PSM provenance columns (n_treated_initial, match_rate_*, caliper_*)
+# in the suffixed CSV still describe full-sample matching, not pre-cutoff
+# matching. Documented limitation; not refactored.
+if (!is.null(BUILD_YEAR_CUTOFF)) {
+  n_before <- nrow(EPC_matched_combined)
+  band_start <- construction_age_band_start_year(EPC_matched_combined$construction_age_band)
+  keep_mask  <- !is.na(band_start) & band_start < BUILD_YEAR_CUTOFF
+  EPC_matched_combined <- EPC_matched_combined[keep_mask]
+  n_unique_bands <- uniqueN(EPC_matched_combined$construction_age_band)
+  message(sprintf("  BUILD_YEAR_CUTOFF=%d: %s -> %s rows (%d unique bands retained; rows with unparseable bands like 'NO DATA!' dropped)",
+                  BUILD_YEAR_CUTOFF,
+                  format(n_before, big.mark = ","),
+                  format(nrow(EPC_matched_combined), big.mark = ","),
+                  n_unique_bands))
 }
 
 # Pre-compute integer interaction FE columns for each spec -----------------
@@ -348,7 +371,7 @@ FEW_CLUSTERS_THRESHOLD <- 20L
 
 # Error log ---------------------------------------------------------------
 error_log_path <- file.path(summary_dir,
-                            paste0("regression_errors_", MATCHING_GEOGRAPHY, wc_suffix, ".csv"))
+                            paste0("regression_errors_", MATCHING_GEOGRAPHY, out_suffix, ".csv"))
 error_log_schema <- data.table(
   run_id        = character(0),
   model         = character(0),
@@ -363,7 +386,7 @@ error_log_schema <- data.table(
 if (!file.exists(error_log_path)) fwrite(error_log_schema, error_log_path)
 
 # Output CSV Setup (with crash-resume support) ----------------------------
-output_csv_path <- file.path(summary_dir, paste0("results_table_", MATCHING_GEOGRAPHY, wc_suffix, ".csv"))
+output_csv_path <- file.path(summary_dir, paste0("results_table_", MATCHING_GEOGRAPHY, out_suffix, ".csv"))
 
 results_schema <- data.table(
   coef               = numeric(0),
@@ -551,7 +574,7 @@ other_geos <- setdiff(c("LA", "ITL2", "ITL3"), MATCHING_GEOGRAPHY)
 ols_model_names <- c("OLS Additive FE", "OLS Interactive FE")
 
 for (other_geo in other_geos) {
-  other_csv <- file.path(summary_dir, paste0("results_table_", other_geo, wc_suffix, ".csv"))
+  other_csv <- file.path(summary_dir, paste0("results_table_", other_geo, out_suffix, ".csv"))
   if (!file.exists(other_csv)) next
 
   other_dt <- tryCatch(fread(other_csv), error = function(e) NULL)
@@ -1107,10 +1130,13 @@ for (current_model_name in c("OLS Interactive FE", "OLS Additive FE")) {
         if (local_errors > 0L) ols_error_counter <- ols_error_counter + local_errors
         
         rm(multi_result, treat_rows)
-        
-        # Safety-net gc: drain residual C-level finalizers every 5 treatments
-        if (ols_treat_counter %% 5L == 0L) gc()
-        
+
+        # Drain residual C-level finalizers after every treatment.
+        # Every-5 was insufficient under the pre-1996 council_tax core load
+        # (recursive-gc wedge reproduced at txn ~17 and ~53). full = TRUE
+        # forces a major collection so fixest finalizers don't queue up.
+        gc(full = TRUE)
+
       }  # end config (treatment) loop
       
       # Flush OLS archive for this regression_core batch

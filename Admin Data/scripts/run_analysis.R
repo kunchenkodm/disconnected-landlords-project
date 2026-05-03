@@ -25,6 +25,11 @@ RUN_ENRICHMENT  <- as.logical(Sys.getenv("RUN_ENRICHMENT",  unset = "TRUE"))
 RUN_SYNTHESIS   <- as.logical(Sys.getenv("RUN_SYNTHESIS",   unset = "TRUE"))
 RUN_WITHIN_CORPORATE <- as.logical(Sys.getenv("RUN_WITHIN_CORPORATE", unset = "FALSE"))
 
+# Construction-year cutoff for robustness runs (Task 2.2). Empty = full sample.
+# When set, regression / enrichment / synthesis outputs get a "_pre<CUTOFF>" suffix
+# and the matched dataset is filtered to construction_age_band start year < cutoff.
+BUILD_YEAR_CUTOFF <- Sys.getenv("BUILD_YEAR_CUTOFF", unset = "")
+
 # Overwrite control ---------------------------------------------------------
 # FALSE (default): skip already-completed steps (crash-resume mode).
 # TRUE: delete existing outputs before running, forcing a full rerun.
@@ -40,11 +45,15 @@ message(sprintf("Pipeline run ID: %s", run_id))
 
 if (RUN_WITHIN_CORPORATE) Sys.setenv(WITHIN_CORPORATE_OVERRIDE = "TRUE")
 
+# Propagate cutoff to all subprocesses (no-op if empty / already inherited).
+if (nzchar(BUILD_YEAR_CUTOFF)) Sys.setenv(BUILD_YEAR_CUTOFF = BUILD_YEAR_CUTOFF)
+
 on.exit({
   Sys.unsetenv("MATCHING_GEOGRAPHY_OVERRIDE")
   Sys.unsetenv("MATCHING_N_WORKERS_OVERRIDE")
   Sys.unsetenv("PIPELINE_RUN_ID")
   Sys.unsetenv("WITHIN_CORPORATE_OVERRIDE")
+  Sys.unsetenv("BUILD_YEAR_CUTOFF")
 }, add = TRUE)
 
 # Geography queue.
@@ -66,6 +75,12 @@ message(sprintf("RUN_MATCHING: %s | RUN_REGRESSIONS: %s | RUN_BALANCE: %s | RUN_
                 RUN_MATCHING, RUN_REGRESSIONS, RUN_BALANCE, RUN_ENRICHMENT, RUN_SYNTHESIS, RUN_WITHIN_CORPORATE))
 message(sprintf("OVERWRITE_MATCHING: %s | OVERWRITE_REGRESSIONS: %s",
                 OVERWRITE_MATCHING, OVERWRITE_REGRESSIONS))
+if (nzchar(BUILD_YEAR_CUTOFF)) {
+  message(sprintf("BUILD_YEAR_CUTOFF: %s (output suffix: _pre%s)",
+                  BUILD_YEAR_CUTOFF, BUILD_YEAR_CUTOFF))
+} else {
+  message("BUILD_YEAR_CUTOFF: (none — full sample)")
+}
 
 # Track pass/fail for the final console summary.
 run_log <- list()
@@ -116,13 +131,15 @@ clear_matching_outputs <- function(level) {
 }
 
 clear_regression_outputs <- function(level) {
-  wc_sfx <- if (RUN_WITHIN_CORPORATE) "_wc" else ""
+  wc_sfx    <- if (RUN_WITHIN_CORPORATE) "_wc" else ""
+  build_sfx <- if (nzchar(BUILD_YEAR_CUTOFF)) paste0("_pre", BUILD_YEAR_CUTOFF) else ""
+  out_sfx   <- paste0(wc_sfx, build_sfx)
   files <- c(
-    file.path(SUMMARY_TABLES_DIR, paste0("results_table_",       level, wc_sfx, ".csv")),
-    file.path(SUMMARY_TABLES_DIR, paste0("regression_errors_",   level, wc_sfx, ".csv")),
-    file.path(SUMMARY_TABLES_DIR, paste0("run_manifest_06_",     level, wc_sfx, ".json")),
-    file.path(SUMMARY_TABLES_DIR, paste0("results_enriched_",    level, wc_sfx, ".csv")),
-    file.path(SUMMARY_TABLES_DIR, paste0("narrative_summary_",   level, wc_sfx, ".csv"))
+    file.path(SUMMARY_TABLES_DIR, paste0("results_table_",       level, out_sfx, ".csv")),
+    file.path(SUMMARY_TABLES_DIR, paste0("regression_errors_",   level, out_sfx, ".csv")),
+    file.path(SUMMARY_TABLES_DIR, paste0("run_manifest_06_",     level, out_sfx, ".json")),
+    file.path(SUMMARY_TABLES_DIR, paste0("results_enriched_",    level, out_sfx, ".csv")),
+    file.path(SUMMARY_TABLES_DIR, paste0("narrative_summary_",   level, out_sfx, ".csv"))
   )
   for (f in files) {
     if (file.exists(f)) { file.remove(f); message(sprintf("  [OVERWRITE] Removed %s", basename(f))) }

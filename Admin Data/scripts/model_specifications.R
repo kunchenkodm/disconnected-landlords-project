@@ -62,3 +62,32 @@ spec_core_pairs <- list(
   `Price Paid` = c("ppd", "ppd_counciltax"),
   `Council Tax + Price Paid` = c("ppd_counciltax")
 )
+
+# Construction-Age-Band Cutoff Helper -------------------------------------
+# Used by 06_run_regressions.R when BUILD_YEAR_CUTOFF is set, to filter the
+# matched dataset to rows whose construction-age band has a START year
+# strictly less than the cutoff. Returns one integer per input element
+# (NA for unparseable bands like "NO DATA!", "INVALID!", or empty strings —
+# those rows are excluded by the < cutoff comparison).
+#
+# Handles four EPC band shapes seen in the parquet:
+#   "England and Wales: before 1900"    -> 1899
+#   "England and Wales: 1996-2002"      -> 1996
+#   "England and Wales: 2007 onwards"   -> 2007
+#   raw 4-digit year e.g. "2021"        -> 2021
+construction_age_band_start_year <- function(x) {
+  if (is.null(x) || length(x) == 0L) return(integer(0))
+  s <- tolower(trimws(as.character(x)))
+  s <- sub("^england and wales:\\s*", "", s)
+  s <- sub("^scotland:\\s*",          "", s)
+  s <- sub("^northern ireland:\\s*",  "", s)
+  out <- rep(NA_integer_, length(s))
+  out[s == "before 1900"] <- 1899L
+  rng_idx <- grepl("^[0-9]{4}-[0-9]{4}$", s)
+  if (any(rng_idx)) out[rng_idx] <- as.integer(sub("^([0-9]{4})-.*$", "\\1", s[rng_idx]))
+  on_idx <- grepl("^[0-9]{4}\\s+onwards$", s)
+  if (any(on_idx))  out[on_idx]  <- as.integer(sub("^([0-9]{4}).*$", "\\1", s[on_idx]))
+  yr_idx <- grepl("^[0-9]{4}$", s)
+  if (any(yr_idx))  out[yr_idx]  <- as.integer(s[yr_idx])
+  out
+}
