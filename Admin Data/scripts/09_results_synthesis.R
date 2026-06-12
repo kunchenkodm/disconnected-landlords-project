@@ -411,11 +411,16 @@ outcome_worse_sign <- c(
 
   energy_consumption_gap_property      = -1L,   # same logic
   energy_efficiency_potential_gap      = -1L,   # smaller potential gap if already low = neg
-  bad_epc                              = +1L,   # more bad EPCs = worse
+  bad_epc_c                            = +1L,   # below C (incoming MEES bound) = worse
+  bad_epc_e                            = +1L,   # below E (present minimum) = worse
   energy_efficiency_bad_epc_gap        = -1L,   # further below C/D boundary = neg = worse
   energy_efficiency_worse_epc_gap      = -1L,   # closer to band floor = neg = worse
+  energy_efficiency_c_gap              = -1L,   # further below C cutoff = neg = worse
+  energy_efficiency_e_gap              = -1L,   # further below E cutoff = neg = worse
   borderline_good_epc                  = +1L,   # more bunching = worse (gaming)
-  borderline_better_epc                = +1L    # more bunching = worse (gaming)
+  borderline_better_epc                = +1L,   # more bunching = worse (gaming)
+  borderline_good_epc_c                = +1L,   # bunching above C cutoff = worse (gaming)
+  borderline_good_epc_e                = +1L    # bunching above E cutoff = worse (gaming)
 )
 
 # Green-red colour scale: green = better for tenants, red = worse for tenants.
@@ -593,16 +598,26 @@ out_defs <- list(
        "Gap between current and potential total consumption (kWh/yr)", "+"),
   list("energy_efficiency_potential_gap", "Efficiency Gap", "H1",
        "Gap between current and potential EPC score", "+"),
-  list("bad_epc", "Regulatory Compliance", "H2",
-       "Binary: 1 if EPC band is D or worse (below regulatory threshold)", "+"),
+  list("bad_epc_c", "Regulatory Compliance", "H2",
+       "Binary: 1 if below EPC C (score &lt; 69) &mdash; incoming MEES bound (main definition)", "+"),
+  list("bad_epc_e", "Regulatory Compliance", "H2",
+       "Binary: 1 if below EPC E (score &lt; 39) &mdash; present regulatory minimum", "+"),
   list("energy_efficiency_bad_epc_gap", "Efficiency Gap", "H2",
        "Interaction: efficiency gap among properties with bad EPC", "+"),
   list("energy_efficiency_worse_epc_gap", "Efficiency Gap", "H2",
        "Interaction: efficiency gap among properties with worse EPC", "+"),
+  list("energy_efficiency_c_gap", "Efficiency Gap", "H2",
+       "Efficiency-score distance to the C cutoff (score &minus; 68)", "&minus;"),
+  list("energy_efficiency_e_gap", "Efficiency Gap", "H2",
+       "Efficiency-score distance to the E cutoff (score &minus; 38)", "&minus;"),
   list("borderline_good_epc", "Bunching", "H3",
        "Binary: 1 if property is just above the regulatory EPC cutoff", "+"),
   list("borderline_better_epc", "Bunching", "H3",
-       "Binary: 1 if property is just above the next higher EPC cutoff", "+")
+       "Binary: 1 if property is just above the next higher EPC cutoff", "+"),
+  list("borderline_good_epc_c", "Bunching", "H3",
+       "Binary: 1 if just above the C cutoff (incoming MEES bound)", "+"),
+  list("borderline_good_epc_e", "Bunching", "H3",
+       "Binary: 1 if just above the E cutoff (present regulatory minimum)", "+")
 )
 for (od in out_defs) {
   h("<tr><td><code>", od[[1]], "</code></td><td>", od[[2]], "</td><td>", od[[3]],

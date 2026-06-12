@@ -1,0 +1,3218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Vintage Analysis Dashboard &mdash; Disconnected Landlords</title>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<style>
+  :root{
+    --bg:#0a0f1a;--panel:#0f172a;--panel2:#1e293b;--border:#334155;
+    --ink:#e5e7eb;--muted:#9ca3af;--dim:#64748b;
+    --green:#22c55e;--dkgreen:#14532d;--red:#ef4444;--dkred:#7f1d1d;
+    --accent:#3b82f6;--accent2:#60a5fa;--yellow:#eab308;--orange:#f97316;
+    --purple:#a855f7;
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{background:var(--bg);color:var(--ink);font:13px/1.45 'Segoe UI',system-ui,sans-serif}
+
+  header{background:var(--panel);border-bottom:1px solid var(--border);padding:10px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;position:relative}
+  header h1{font-size:15px;margin:0;color:var(--accent2);white-space:nowrap}
+  .badge{font-size:10px;padding:2px 8px;border-radius:4px;background:var(--panel2);color:var(--accent2);border:1px solid var(--border);font-weight:600;letter-spacing:.05em}
+  .badge.ok{color:var(--green);border-color:var(--dkgreen)}
+  .badge.warn{color:var(--yellow)}
+  #status{color:var(--muted);font-size:12px;margin-left:auto}
+  #dropzone{border:1px dashed var(--border);border-radius:6px;padding:6px 12px;font-size:11px;color:var(--muted);cursor:pointer;background:var(--panel2)}
+  #dropzone.drag{background:var(--dkgreen);color:var(--green);border-color:var(--green)}
+
+  .tabs{background:var(--panel);border-bottom:1px solid var(--border);padding:0 16px;display:flex;gap:4px}
+  .tabs button{background:transparent;color:var(--muted);border:none;border-bottom:2px solid transparent;padding:10px 14px;font-size:13px;cursor:pointer;font-weight:500}
+  .tabs button:hover{color:var(--accent2)}
+  .tabs button.active{color:var(--accent2);border-bottom-color:var(--accent)}
+
+  .main{padding:12px 16px}
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px}
+  .panel h2{margin:0 0 10px;font-size:14px;color:var(--accent2)}
+  details>summary{cursor:pointer;color:var(--accent2);font-size:13px;padding:4px 0}
+  /* Collapsible top-level sections in the clustering tab */
+  details.cl-section{margin-bottom:14px}
+  details.cl-section>summary{font-size:14px;font-weight:600;color:var(--accent2);background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:9px 14px;margin-bottom:10px;list-style-position:inside;user-select:none}
+  details.cl-section>summary:hover{border-color:var(--accent)}
+  details.cl-section[open]>summary{border-bottom-left-radius:0;border-bottom-right-radius:0;margin-bottom:14px}
+
+  .controls{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:8px 12px;display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:14px}
+  .controls label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)}
+  select,input[type="file"],input[type="text"]{appearance:none;background:var(--panel2);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:12px;min-width:140px}
+  select:focus,input:focus{outline:1px solid var(--accent);border-color:var(--accent)}
+  select:disabled{opacity:.4}
+  button.btn{background:var(--accent);border:none;color:#fff;font-weight:600;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px}
+  button.btn:hover{filter:brightness(1.15)}
+  button.btn.secondary{background:var(--panel2);border:1px solid var(--border);color:var(--ink)}
+  .sep{width:1px;height:28px;background:var(--border);align-self:end}
+
+  /* Range slider */
+  input[type="range"]{appearance:none;height:18px;background:transparent;width:160px;padding:0;min-width:0}
+  input[type="range"]::-webkit-slider-runnable-track{height:4px;background:var(--panel2);border:1px solid var(--border);border-radius:3px}
+  input[type="range"]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;background:var(--accent);border-radius:50%;margin-top:-6px;cursor:pointer;border:1px solid var(--accent2)}
+  input[type="range"]::-moz-range-track{height:4px;background:var(--panel2);border:1px solid var(--border);border-radius:3px}
+  input[type="range"]::-moz-range-thumb{width:14px;height:14px;background:var(--accent);border-radius:50%;cursor:pointer;border:1px solid var(--accent2)}
+  .slider-row{display:flex;align-items:center;gap:8px}
+  .slider-row .v{font-variant-numeric:tabular-nums;color:var(--accent2);font-weight:600;min-width:46px;text-align:right}
+
+  /* Export menu */
+  .menu-wrap{position:relative;display:inline-block}
+  .menu-wrap .menu{display:none;position:absolute;right:0;top:calc(100% + 4px);background:var(--panel);border:1px solid var(--border);border-radius:8px;min-width:240px;box-shadow:0 6px 20px rgba(0,0,0,.5);z-index:60;padding:4px}
+  .menu-wrap.open .menu{display:block}
+  .menu-wrap .menu button{display:block;width:100%;text-align:left;background:transparent;border:none;color:var(--ink);padding:7px 10px;font-size:12px;cursor:pointer;border-radius:5px}
+  .menu-wrap .menu button:hover{background:var(--panel2);color:var(--accent2)}
+  .menu-wrap .menu .sep{display:block;height:1px;background:var(--border);margin:3px 0;width:auto}
+  .menu-wrap .menu .lbl{display:block;color:var(--dim);font-size:10px;letter-spacing:.05em;text-transform:uppercase;padding:6px 10px 2px}
+
+  /* Tab content */
+  .tabpane{display:none}
+  .tabpane.active{display:block}
+
+  /* File list */
+  #fileList{display:flex;flex-wrap:wrap;gap:6px;font-size:11px}
+  .file-chip{background:var(--panel2);border:1px solid var(--border);border-radius:14px;padding:2px 10px;color:var(--muted)}
+  .file-chip.bundle{color:var(--green);border-color:var(--green);font-weight:600}
+  .file-chip.signflip{color:var(--accent2);border-color:var(--accent)}
+  .file-chip.cluster{color:var(--purple);border-color:var(--purple)}
+  .file-chip.tree{color:var(--green);border-color:var(--dkgreen)}
+  .file-chip.dendro{color:var(--orange);border-color:var(--orange)}
+  .file-chip .x{margin-left:6px;cursor:pointer;color:var(--dim)}
+  .file-chip .x:hover{color:var(--red)}
+
+  /* Headline grid */
+  .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+  .kpi{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px}
+  .kpi .v{font-size:22px;font-weight:600;color:var(--ink)}
+  .kpi .l{font-size:11px;color:var(--muted);margin-top:2px}
+  .kpi .pct{font-size:12px;color:var(--dim);margin-left:6px}
+  .kpi.hilite .v{color:var(--accent2)}
+  .kpi.worse .v{color:var(--red)}
+  .kpi.better .v{color:var(--green)}
+
+  /* Heatmap */
+  .heatmap-wrap{overflow-x:auto;overflow-y:auto;max-height:600px}
+  table.hm{border-collapse:collapse;font-size:12px}
+  table.hm th{background:var(--panel2);color:var(--muted);padding:6px 6px;text-align:center;font-weight:600;position:sticky;top:0;z-index:2;border-bottom:2px solid var(--border);font-size:11px;white-space:nowrap;cursor:pointer}
+  table.hm th:first-child{text-align:left;position:sticky;left:0;z-index:3;cursor:default;background:var(--panel2)}
+  table.hm th:hover{color:var(--accent2)}
+  table.hm td{padding:5px 6px;border-bottom:1px solid #1a2332;text-align:center;position:relative;white-space:nowrap;cursor:pointer}
+  table.hm td:first-child{text-align:left;font-weight:500;position:sticky;left:0;background:var(--panel);z-index:1;white-space:nowrap;cursor:default}
+  table.hm tr:hover td:first-child{background:var(--panel2)}
+  table.hm td.zero{color:var(--dim)}
+
+  /* Sign-convention table */
+  table.sc{font-size:11px;width:100%;border-collapse:collapse}
+  table.sc th{background:var(--panel2);color:var(--muted);padding:5px 8px;font-weight:600;text-align:left;border-bottom:1px solid var(--border)}
+  table.sc td{padding:4px 8px;border-bottom:1px solid #18213a}
+  table.sc tr:hover td{background:var(--panel2)}
+  table.sc .sc-fam{background:var(--panel2);font-weight:600;color:var(--accent2)}
+  .sign-pill{display:inline-block;font-size:10px;padding:1px 8px;border-radius:10px;cursor:pointer;font-weight:600;border:1px solid var(--border);background:var(--panel2);color:var(--muted)}
+  .sign-pill.worse{background:rgba(220,38,38,.20);color:var(--red);border-color:rgba(220,38,38,.5)}
+  .sign-pill.better{background:rgba(34,197,94,.18);color:var(--green);border-color:rgba(34,197,94,.5)}
+  .sign-pill.neutral{background:var(--panel2);color:var(--muted);border-color:var(--border)}
+
+  /* Pair-class stack bar */
+  .stackbar{display:flex;height:24px;width:100%;border-radius:6px;overflow:hidden;border:1px solid var(--border)}
+  .stackbar div{display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 2px}
+  .stack-legend{display:flex;flex-wrap:wrap;gap:12px;font-size:11px;color:var(--muted);margin-top:6px}
+  .swatch{display:inline-block;width:11px;height:11px;border-radius:2px;vertical-align:middle;margin-right:4px}
+
+  /* Pair table */
+  table.dt{border-collapse:collapse;font-size:11px;width:100%}
+  table.dt th{background:var(--panel2);color:var(--muted);padding:5px 6px;text-align:left;font-weight:600;border-bottom:1px solid var(--border);font-size:10px;cursor:pointer;white-space:nowrap}
+  table.dt th:hover{color:var(--accent2)}
+  table.dt td{padding:4px 6px;border-bottom:1px solid #18213a;white-space:nowrap}
+  table.dt tr:hover td{background:var(--panel2)}
+  table.dt tr.cred-worse td{background:rgba(220,38,38,.12)}
+  table.dt tr.cred-worse:hover td{background:rgba(220,38,38,.22)}
+  table.dt tr.cred-better td{background:rgba(34,197,94,.10)}
+  table.dt .num{text-align:right;font-variant-numeric:tabular-nums}
+  table.dt .pos{color:var(--orange)}
+  table.dt .neg{color:var(--accent2)}
+
+  /* D3 viz */
+  .viz-container{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:8px;overflow:auto;position:relative}
+  .viz-container.scroll-tree{max-height:70vh}
+  svg.tree text,svg.dend text,svg.cp text,svg.scatter text,svg.imp text{fill:var(--ink);font:11px 'Segoe UI',sans-serif}
+  svg.tree .axis text,svg.dend .axis text,svg.cp .axis text,svg.scatter .axis text{fill:var(--muted);font-size:10px}
+  svg .grid line{stroke:#1f2a3f;stroke-dasharray:2 2}
+  svg .axis line,svg .axis path{stroke:var(--border)}
+  .node circle{stroke:var(--ink);stroke-width:1.5px}
+  .node--internal circle{cursor:pointer}
+  .node--collapsed circle{fill:var(--accent)!important}
+  .node text{font:10px 'Segoe UI',sans-serif}
+  .link{fill:none;stroke:var(--border);stroke-width:1.4px}
+  .tooltip{position:absolute;pointer-events:none;background:var(--panel);border:1px solid var(--accent);border-radius:6px;padding:7px 9px;font-size:11px;color:var(--ink);box-shadow:0 4px 12px rgba(0,0,0,.4);max-width:340px;z-index:50;line-height:1.45}
+  .tooltip b{color:var(--accent2)}
+  .tooltip .row{display:flex;justify-content:space-between;gap:8px}
+  .tooltip .k{color:var(--muted)}
+
+  .empty-state{padding:40px 20px;text-align:center;color:var(--muted);font-size:13px}
+  .empty-state code{background:var(--panel2);padding:1px 6px;border-radius:3px;color:var(--accent2);font-size:11px}
+
+  .help-text{font-size:10.5px;color:var(--dim);margin:4px 0 0;line-height:1.45}
+
+  /* Filter chip row */
+  .filter-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;align-items:center}
+  .filter-row label{display:flex;flex-direction:column;gap:2px;font-size:10px;color:var(--muted)}
+  .filter-row select{min-width:120px;font-size:11px;padding:4px 7px}
+
+  /* Checkbox-list dropdown */
+  .cbdrop{position:relative;display:inline-block;font-size:11px;color:var(--muted)}
+  .cbdrop>button{background:var(--panel2);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;min-width:160px;text-align:left}
+  .cbdrop>button:hover{border-color:var(--accent)}
+  .cbdrop>button:after{content:'▾';float:right;color:var(--muted)}
+  .cbdrop .menu{display:none;position:absolute;left:0;top:calc(100% + 4px);background:var(--panel);border:1px solid var(--border);border-radius:8px;min-width:280px;max-height:340px;overflow-y:auto;box-shadow:0 6px 20px rgba(0,0,0,.5);z-index:55;padding:6px}
+  .cbdrop.open .menu{display:block}
+  .cbdrop .menu-actions{display:flex;gap:4px;margin-bottom:4px;padding:2px 4px;border-bottom:1px solid var(--border);padding-bottom:6px}
+  .cbdrop .menu-actions button{flex:1;background:var(--panel2);border:1px solid var(--border);color:var(--ink);font-size:10px;padding:3px 6px;border-radius:4px;cursor:pointer}
+  .cbdrop .menu-actions button:hover{background:var(--border)}
+  .cbdrop .menu input[type="search"]{width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:4px;padding:4px 8px;color:var(--ink);font-size:11px;margin-bottom:4px}
+  .cbdrop .menu label{display:flex;align-items:center;gap:6px;padding:4px 6px;font-size:11px;color:var(--ink);cursor:pointer;border-radius:4px}
+  .cbdrop .menu label:hover{background:var(--panel2)}
+  .cbdrop .menu input[type="checkbox"]{accent-color:var(--accent);cursor:pointer;min-width:auto}
+  .cbdrop .menu .group{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:4px 6px 2px}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Disconnected Landlords &mdash; Vintage Analysis</h1>
+  <span id="geoBadge" class="badge">geography: ?</span>
+  <span id="coreBadge" class="badge">scope: ?</span>
+  <label id="dropzone" for="fileInput">
+    Drop bundle JSON or CSVs here
+    <input id="fileInput" type="file" multiple accept=".csv,.json" style="display:none" />
+  </label>
+  <div class="menu-wrap" id="exportMenu">
+    <button class="btn secondary" id="exportBtn">Export &#9662;</button>
+    <div class="menu">
+      <span class="lbl">Sign-flip tab</span>
+      <button data-act="export-pairs">Filtered pairs CSV</button>
+      <button data-act="export-heatmap">Heatmap data CSV</button>
+      <button data-act="export-detail">Detail table CSV</button>
+      <button data-act="export-scatter">Scatter SVG</button>
+      <span class="sep"></span>
+      <span class="lbl">Spec clustering tab</span>
+      <button data-act="export-tree">Decision tree SVG</button>
+      <button data-act="export-cp">CP curve SVG</button>
+      <button data-act="export-imp">Importance SVG</button>
+      <button data-act="export-dend">Dendrogram SVG</button>
+      <button data-act="export-clusters">Cluster table CSV</button>
+      <span class="sep"></span>
+      <span class="lbl">Bundle</span>
+      <button data-act="export-bundle">Save bundle JSON</button>
+      <button data-act="export-signs">Sign convention CSV</button>
+    </div>
+  </div>
+  <span id="status">No files loaded</span>
+</header>
+
+<div class="tabs">
+  <button class="active" data-tab="signflip">Sign-flip explorer (script 10)</button>
+  <button data-tab="clustering">Spec clustering &amp; trees (script 10b)</button>
+</div>
+
+<div class="main">
+
+  <!-- Loaded files -->
+  <div class="panel" style="padding:8px 12px">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span style="font-size:11px;color:var(--muted);font-weight:600">LOADED</span>
+      <div id="fileList"><span style="font-size:11px;color:var(--dim)">none</span></div>
+      <button class="btn secondary" id="clearFiles" style="margin-left:auto;font-size:10px;padding:3px 10px">Clear</button>
+    </div>
+  </div>
+
+  <!-- Glossary -->
+  <div class="panel" style="padding:8px 14px">
+    <details>
+      <summary>Glossary &amp; pair-class definitions</summary>
+      <div style="margin-top:8px">
+        <p style="font-size:11.5px;margin:6px 0;color:var(--muted)">
+          A <b>pair</b> is two regression rows that share <i>model</i>, <i>treatment</i>, <i>outcome</i>, <i>regression core</i>, <i>matching core</i>, and <i>tax-band level</i>, and differ only in whether year-of-transaction + price-paid are added as covariates.
+        </p>
+        <table style="font-size:11px;width:100%;border-collapse:collapse">
+          <tr><td style="color:var(--accent2);padding:3px 6px;font-family:monospace">both_sig_opposite_sign</td><td style="padding:3px 6px;color:var(--muted)">both pair members significant, signs disagree &mdash; <b style="color:var(--red)">credible sign-flip</b></td></tr>
+          <tr><td style="color:var(--accent2);padding:3px 6px;font-family:monospace">both_sig_same_sign</td><td style="padding:3px 6px;color:var(--muted)">both significant, signs agree &mdash; robust effect</td></tr>
+          <tr><td style="color:var(--accent2);padding:3px 6px;font-family:monospace">gain_sig_year</td><td style="padding:3px 6px;color:var(--muted)">year+price <i>brings</i> the estimate into significance</td></tr>
+          <tr><td style="color:var(--accent2);padding:3px 6px;font-family:monospace">lose_sig_year</td><td style="padding:3px 6px;color:var(--muted)">year+price <i>knocks</i> the estimate out of significance</td></tr>
+          <tr><td style="color:var(--accent2);padding:3px 6px;font-family:monospace">neither_sig</td><td style="padding:3px 6px;color:var(--muted)">both insignificant &mdash; fragile near-zero</td></tr>
+        </table>
+        <p style="font-size:11px;margin:8px 0 0;color:var(--muted)">
+          <b>Decision-tree targets.</b>
+          <span style="color:var(--accent2)">A</span> = worse-for-tenants (row level, applies WORSE_SIGN relabel),
+          <span style="color:var(--accent2)">B</span> = significance direction, 3-class (significant-better / insignificant / significant-worse),
+          <span style="color:var(--accent2)">C</span> = sign-flip (pair level),
+          <span style="color:var(--accent2)">D</span> = adding year+price widens the worse direction (pair level),
+          <span style="color:var(--accent2)">E</span> = adding year+price loses significance (pair level).
+        </p>
+      </div>
+    </details>
+  </div>
+
+  <!-- Sign convention customisation -->
+  <div class="panel" style="padding:8px 14px">
+    <details>
+      <summary>Sign convention &mdash; custom &ldquo;higher is&rdquo; per outcome
+        <span id="sc-stat" style="font-size:11px;color:var(--muted);font-weight:400;margin-left:8px"></span>
+      </summary>
+      <div style="margin-top:8px">
+        <p style="font-size:11px;color:var(--muted);margin:0 0 6px">
+          Click a pill to cycle <b style="color:var(--red)">worse</b> &rarr; <b style="color:var(--green)">better</b> &rarr; <b style="color:var(--muted)">neutral</b>. Defaults match script 10b's <code style="background:var(--panel2);padding:0 4px">outcome_worse_sign</code>.
+          When you change a sign, all <i>worse-direction</i> counts, heatmap entries, and tree leaf colours recompute live.
+          <button class="btn secondary" id="sc-reset" style="font-size:10px;padding:2px 8px;margin-left:8px">Reset all to defaults</button>
+        </p>
+        <div style="overflow-x:auto"><table class="sc" id="sc-table"></table></div>
+      </div>
+    </details>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- Tab 1: Sign-flip explorer                                     -->
+  <!-- ============================================================ -->
+  <div id="tab-signflip" class="tabpane active">
+
+    <div class="controls" style="flex-direction:column;align-items:stretch">
+      <div class="filter-row" style="margin:0">
+        <label>Model family <select id="sf-model"></select></label>
+        <label>Treatment <select id="sf-treat"></select></label>
+        <label style="margin-right:8px">Outcome family
+          <div class="cbdrop" id="sf-fam-cb">
+            <button type="button">— any —</button>
+            <div class="menu"></div>
+          </div>
+        </label>
+        <label style="margin-right:8px">Outcome
+          <div class="cbdrop" id="sf-outcome-cb">
+            <button type="button">— any —</button>
+            <div class="menu"></div>
+          </div>
+        </label>
+        <label>Pair class <select id="sf-class"></select></label>
+        <label>Tax band <select id="sf-tb"><option value="">any</option><option value="0">spec without CT</option><option value="1">spec with CT</option></select></label>
+      </div>
+      <div class="filter-row" style="margin:0">
+        <label>Reg. core <select id="sf-rc"></select></label>
+        <label>Match. core <select id="sf-mc"></select></label>
+        <label>Cores with PPD data
+          <select id="sf-ppd-core">
+            <option value="">all cores</option>
+            <option value="1">only PPD-required cores (ppd, ppd_counciltax)</option>
+            <option value="0">only non-PPD cores (base, council_tax)</option>
+          </select>
+        </label>
+        <label class="slider-row">max |coef| (no-yr &amp; yr)
+          <input type="range" id="sf-maxcoef" min="0" max="100" step="1" value="100" />
+          <span class="v" id="sf-maxcoef-val">∞</span>
+        </label>
+        <button class="btn secondary" id="sf-reset" style="margin-left:auto">Reset filters</button>
+      </div>
+    </div>
+
+    <div id="sf-empty" class="panel empty-state">
+      <b>This is the empty uploader template.</b> For the ready-to-view dashboard with the data already baked in, open
+      <b><code>vintage_dashboard_LA_core.html</code></b> instead (written next to this file by <code>scripts/10c_generate_dashboard.R</code>) — no upload needed.<br/><br/>
+      Otherwise, drop <code>vintage_bundle_LA_core.json</code> (or its non-core sibling) onto this page.
+      Backwards-compatible: individual CSVs / JSONs from <code>output/project1_vintage/</code> still work.
+    </div>
+
+    <div id="sf-content" style="display:none">
+
+      <details class="cl-section" open><summary>1 · Counts &amp; pair-class distribution</summary>
+      <div class="panel">
+        <h2>Counts <span style="font-size:11px;color:var(--muted);font-weight:400" id="sf-headline-scope"></span></h2>
+        <div id="sf-kpi" class="kpi-grid"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Pair-class distribution</h2>
+        <div id="sf-stackbar" class="stackbar"></div>
+        <div id="sf-stack-legend" class="stack-legend"></div>
+      </div>
+      </details>
+
+      <details class="cl-section" open><summary>2 · (Treatment × Outcome) heatmap — pick a cell metric, click to drill into pairs</summary>
+      <div class="panel">
+        <h2>(Treatment &times; Outcome) heatmap</h2>
+        <div class="filter-row" style="margin-bottom:8px">
+          <label>Cell metric
+            <select id="sf-hm-metric">
+              <optgroup label="Sign-flip">
+                <option value="n_credible_flip_to_worse">n credible-flip to worse</option>
+                <option value="n_credible_flip">n credible-flip (any)</option>
+                <option value="n_flipped">n sign-flipped (any)</option>
+                <option value="n_flipped_to_worse">n sign-flipped to worse</option>
+                <option value="frac_flipped">frac sign-flipped</option>
+                <option value="frac_flipped_to_worse">frac flipped to worse</option>
+              </optgroup>
+              <optgroup label="Gain significance with PPD">
+                <option value="n_gain_sig_to_worse">n gain-sig → worse</option>
+                <option value="n_gain_sig_to_better">n gain-sig → better</option>
+                <option value="frac_gain_sig_to_worse">frac gain-sig → worse</option>
+                <option value="frac_gain_sig_to_better">frac gain-sig → better</option>
+              </optgroup>
+              <optgroup label="Lose significance with PPD">
+                <option value="n_lose_sig_from_worse">n lose-sig from worse</option>
+                <option value="n_lose_sig_from_better">n lose-sig from better</option>
+                <option value="frac_lose_sig_from_worse">frac lose-sig from worse</option>
+                <option value="frac_lose_sig_from_better">frac lose-sig from better</option>
+              </optgroup>
+              <optgroup label="Other">
+                <option value="n_both_sig_same">n robust (both sig, same sign)</option>
+                <option value="n_neither_sig">n neither sig</option>
+                <option value="n_pairs">n pairs (denominator)</option>
+              </optgroup>
+            </select>
+          </label>
+          <p class="help-text" style="margin:0;flex:1">Click a cell to filter the pair detail table to that (treatment, outcome).</p>
+        </div>
+        <div class="heatmap-wrap"><div id="sf-heatmap"></div></div>
+      </div>
+      </details>
+
+      <details class="cl-section"><summary>3 · Coefficient scatter &amp; pair-detail table</summary>
+      <div class="panel">
+        <h2>Coefficients: no-year vs year+price</h2>
+        <p class="help-text" style="margin:0 0 6px">Each point is one pair. Off-diagonal points cross x=0 or y=0 lines &rarr; sign-flip. Hover for details.</p>
+        <div class="viz-container"><svg class="scatter" id="sf-scatter"></svg></div>
+      </div>
+
+      <div class="panel">
+        <h2>Pair detail
+          <span style="font-size:11px;color:var(--muted);font-weight:400" id="sf-detail-scope"></span>
+          <button class="btn secondary" id="sf-detail-clear" style="font-size:10px;margin-left:8px;display:none">Clear cell filter</button>
+        </h2>
+        <div class="filter-row" style="margin-bottom:6px">
+          <label>Show
+            <select id="sf-detail-mode">
+              <option value="flagged">Flagged pairs (pair_class != neither_sig)</option>
+              <option value="all">All pairs</option>
+              <option value="credible">Credible flips only</option>
+              <option value="credible_worse">Credible flips to worse only</option>
+            </select>
+          </label>
+          <label>Search <input type="text" id="sf-detail-search" placeholder="e.g. tax haven, EPC ≥ C, PSM, ppd_counciltax…" style="min-width:300px" /></label>
+        </div>
+        <div class="heatmap-wrap"><table class="dt" id="sf-detail"></table></div>
+        <p class="help-text" id="sf-detail-count"></p>
+      </div>
+      </details>
+
+    </div>
+
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- Tab 2: Spec clustering & decision trees                       -->
+  <!-- ============================================================ -->
+  <div id="tab-clustering" class="tabpane">
+
+    <div class="controls">
+      <label>Tree target <span class="help-text">(what the tree predicts)</span>
+        <select id="cl-base">
+          <option value="worse_for_tenants">A · Worse-for-tenants (row)</option>
+          <option value="sig_dir3">B · Significance direction — 3-class (better/insig/worse)</option>
+          <option value="sign_flip">C · Sign-flip (pair)</option>
+          <option value="ppd_direction">D · Adding year+price widens worse (pair)</option>
+          <option value="ppd_lose_sig">E · Adding year+price loses significance (pair)</option>
+        </select>
+      </label>
+      <label>Focus <span class="help-text">(restrict to one outcome family)</span>
+        <select id="cl-focus"><option value="">— all combined —</option></select>
+      </label>
+      <label>Tree view <select id="cl-view"><option value="pruned">Pruned (1-SE rule)</option><option value="full">Full (cp=0)</option></select></label>
+      <div class="sep"></div>
+      <label style="flex-direction:row;align-items:center;gap:5px;cursor:pointer">
+        <input type="checkbox" id="cl-leaves-only" style="accent-color:var(--accent);min-width:auto;cursor:pointer" />
+        Show leaves only
+      </label>
+      <button class="btn secondary" id="cl-expand-all">Expand all</button>
+      <button class="btn secondary" id="cl-collapse-depth">Collapse depth&gt;2</button>
+      <span class="help-text" style="margin-left:auto" id="cl-target-info"></span>
+    </div>
+
+    <div id="cl-empty" class="panel empty-state">
+      Drop <code>vintage_bundle_LA_core.json</code> (or non-core) here.<br/>
+      Or drop the granular files: <code>tree_&lt;TARGET&gt;_nodes_pruned_&lt;GEO&gt;[_core].json</code>, <code>tree_&lt;TARGET&gt;_cptable_&lt;GEO&gt;[_core].csv</code>, <code>feature_importance_&lt;TARGET&gt;_&lt;GEO&gt;[_core].csv</code>, <code>cluster_membership_&lt;GEO&gt;[_core].csv</code>, <code>dendrogram_&lt;GEO&gt;[_core].json</code>.
+    </div>
+
+    <div id="cl-content" style="display:none">
+
+      <details class="cl-section" open><summary>1 · Cross-tabulation — does adding year + price change the offshore sign?</summary>
+      <!-- Cross-tabulation of coefficient sign against the presence of year+price covariates. -->
+      <div class="panel" style="border-color:var(--accent2)">
+        <h2>Cross-tabulation &mdash; does adding <span style="color:var(--accent2)">year + price</span> change the sign of the offshore coefficient?
+          <span style="font-size:11px;color:var(--muted);font-weight:400" id="cl-headline-scope"></span>
+        </h2>
+
+        <div class="filter-row" style="margin-bottom:8px">
+          <label>Significance filter
+            <select id="cl-headline-sig">
+              <option value="all">All specs</option>
+              <option value="sig_either">Sig in either spec</option>
+              <option value="sig_both">Sig in both specs</option>
+            </select>
+          </label>
+          <label>Treatment group
+            <select id="cl-headline-treats">
+              <option value="offshore" selected>Offshore only (th, bh, eh, ch, oh, thfp, thnp)</option>
+              <option value="abroad">Any abroad (offshore + frfp + frnp)</option>
+              <option value="all">All treatments</option>
+            </select>
+          </label>
+          <p class="help-text" style="margin:0 0 0 auto">Cross-tab over rows of <code>spec_features</code>; paired-bars over signflip pairs (with vs without PPD). Scope honours the <b>Focus</b> selector above (default: all combined).</p>
+        </div>
+
+        <div style="display:grid;grid-template-columns:minmax(280px,1fr) 2fr;gap:14px;align-items:start">
+          <!-- Cross-tab: sign × has_ppd -->
+          <div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Cross-tab: sign of coefficient × has PPD covariates</div>
+            <table class="dt" id="cl-headline-xtab" style="margin-top:0"></table>
+            <div id="cl-headline-callout" class="help-text" style="margin-top:8px;line-height:1.5;font-size:11.5px"></div>
+          </div>
+          <!-- Per-treatment paired bars -->
+          <div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Per treatment &middot; share of specs with positive coefficient (without PPD vs with PPD)</div>
+            <div class="viz-container" style="padding:6px"><svg id="cl-headline-bars"></svg></div>
+            <div class="help-text" style="margin-top:4px">A leftward shift between the bars (purple → orange) means adding year+price <i>reduces</i> positive-share — i.e. flips coefs to negative. Numbers above each pair = (n specs without PPD, n specs with PPD).</div>
+          </div>
+        </div>
+      </div>
+
+      </details>
+
+      <details class="cl-section" open><summary>2 · Decision tree, CV pruning &amp; variable importance</summary>
+
+      <!-- Decision-tree pruning controls (client-side, live — re-prunes the tree below as you drag) -->
+      <div class="controls" id="cl-tree-controls" style="background:var(--panel2);flex-direction:column;align-items:stretch">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
+          <span style="font-size:11px;color:var(--accent2);font-weight:600;align-self:center">Decision-tree pruning (live)</span>
+          <label class="slider-row">Complexity (cp) prune ≥
+            <input type="range" id="cl-cp-slider" min="0" max="1000" step="1" value="0" />
+            <input type="number" id="cl-cp-input" min="0" step="0.0001" value="0" style="width:84px;font-size:11px;padding:3px 6px" />
+            <span class="v" id="cl-cp-val" style="min-width:88px;display:none">cp=0.000000</span>
+          </label>
+          <label class="slider-row">Max tree depth
+            <input type="range" id="cl-depth-slider" min="1" max="20" step="1" value="20" />
+            <input type="number" id="cl-depth-input" min="1" max="20" step="1" value="20" style="width:50px;font-size:11px;padding:3px 6px" />
+          </label>
+          <label class="slider-row">Min obs per leaf
+            <input type="range" id="cl-minn-slider" min="0" max="500" step="10" value="0" />
+            <input type="number" id="cl-minn-input" min="0" max="500" step="1" value="0" style="width:60px;font-size:11px;padding:3px 6px" />
+          </label>
+          <label class="slider-row">Max leaves
+            <input type="range" id="cl-maxleaves-slider" min="2" max="80" step="1" value="80" />
+            <input type="number" id="cl-maxleaves-input" min="2" max="1000" step="1" value="80" style="width:60px;font-size:11px;padding:3px 6px" />
+          </label>
+          <label class="slider-row">Min leaf purity %
+            <input type="range" id="cl-purity-slider" min="0" max="100" step="1" value="0" />
+            <input type="number" id="cl-purity-input" min="0" max="100" step="1" value="0" style="width:50px;font-size:11px;padding:3px 6px" />
+            <span class="v" id="cl-purity-val" style="min-width:28px">%</span>
+          </label>
+          <button class="btn secondary" id="cl-prune-reset">Reset defaults</button>
+          <button class="btn secondary" id="cl-reload">Reload graphs</button>
+        </div>
+        <span class="help-text" id="cl-prune-info" style="margin-top:4px"></span>
+      </div>
+
+      <div class="panel">
+        <h2>Decision tree <span style="font-size:11px;color:var(--muted);font-weight:400" id="cl-tree-meta"></span></h2>
+        <div class="viz-container scroll-tree"><svg class="tree" id="cl-tree"></svg></div>
+        <p class="help-text">
+          <span class="swatch" style="background:var(--green)"></span>leaf predicts <b>0</b>
+          <span class="swatch" style="background:var(--red);margin-left:14px"></span>leaf predicts <b>1</b>
+          <span class="swatch" style="background:var(--accent);margin-left:14px"></span>collapsed (click to expand)
+        </p>
+      </div>
+
+      <div class="panel">
+        <h2>CV pruning curve</h2>
+        <div class="viz-container"><svg class="cp" id="cl-cp"></svg></div>
+      </div>
+
+      <div class="panel">
+        <h2>Variable importance</h2>
+        <div class="viz-container"><svg class="imp" id="cl-imp"></svg></div>
+      </div>
+      </details>
+
+      <details class="cl-section" open><summary>3 · Spec dendrogram &amp; clusters — (treatment × outcome) grouped by coefficient profile</summary>
+
+      <div class="panel">
+        <h2>Spec dendrogram &mdash; (treatment &times; outcome) clustered by std coef across spec blocks</h2>
+        <div class="filter-row" style="margin-bottom:6px">
+          <label class="slider-row">Ward distance cut
+            <input type="range" id="cl-cut-slider" min="0" max="1000" step="1" value="500" />
+            <input type="number" id="cl-cut-input" min="0" step="0.1" value="500" style="width:60px;font-size:11px;padding:3px 6px" />
+          </label>
+          <label class="slider-row">K (override # clusters)
+            <input type="range" id="cl-k-slider" min="1" max="24" step="1" value="12" />
+            <input type="number" id="cl-k-input" min="1" max="100" step="1" value="12" style="width:50px;font-size:11px;padding:3px 6px" />
+          </label>
+          <label style="flex-direction:row;align-items:center;gap:4px">
+            <input type="checkbox" id="cl-log-height" style="accent-color:var(--accent);min-width:auto;cursor:pointer" />
+            <span style="font-size:11px;color:var(--muted)">log height</span>
+          </label>
+          <label class="slider-row">Leaf-label font (px)
+            <input type="range" id="cl-leaf-font" min="3" max="16" step="1" value="9" />
+            <span class="v" id="cl-leaf-font-val">9</span>
+          </label>
+          <p class="help-text" style="margin:0 0 0 auto">Drag the cut slider to set Ward distance from 0 (every leaf its own cluster) up to the maximum fusion height (single cluster). The K slider gives an exact-K override.</p>
+        </div>
+        <div class="viz-container"><svg class="dend" id="cl-dend"></svg></div>
+      </div>
+
+      <div class="panel">
+        <h2>PPD scatter — coefficient with vs without year+price
+          <span style="font-size:11px;color:var(--muted);font-weight:400">— one point per pair, colour = cluster from current dendrogram cut</span>
+        </h2>
+        <div class="filter-row" style="margin-bottom:6px">
+          <label>Highlight
+            <select id="cl-scatter-class">
+              <option value="">all pair classes</option>
+              <option value="both_sig_opposite_sign">credible flip only</option>
+              <option value="both_sig_same_sign">robust only</option>
+              <option value="gain_sig_year">gain-sig only</option>
+              <option value="lose_sig_year">lose-sig only</option>
+              <option value="neither_sig">neither sig only</option>
+            </select>
+          </label>
+          <label>Show
+            <select id="cl-scatter-coords">
+              <option value="raw">Raw coefficients</option>
+              <option value="standardised">Standardised (coef / SD)</option>
+            </select>
+          </label>
+          <label>Cluster filter <select id="cl-scatter-cluster-filter"><option value="">all</option></select></label>
+          <p class="help-text" style="margin:0 0 0 auto">Points on the y=x diagonal: PPD does not change the estimate (robust). Off-diagonal: PPD shifts the coefficient. Points crossing x=0 or y=0: PPD changes the sign.</p>
+        </div>
+        <div class="viz-container"><svg id="cl-scatter-cluster"></svg></div>
+      </div>
+
+      <div class="panel">
+        <h2>Cluster membership</h2>
+        <div class="filter-row" style="margin-bottom:6px">
+          <label>Cluster <select id="cl-cluster-filter"><option value="">all</option></select></label>
+          <label>Search <input type="text" id="cl-cluster-search" placeholder="treatment / outcome" style="min-width:240px" /></label>
+        </div>
+        <div class="heatmap-wrap"><table class="dt" id="cl-cluster-table"></table></div>
+      </div>
+      </details>
+
+    </div>
+  </div>
+
+  </div>
+
+</div>
+
+<div class="tooltip" id="tooltip" style="display:none"></div>
+
+<!-- Embedded-bundle slot. As shipped, the value below is null and the page is a
+     drag-drop uploader. scripts/10c_generate_dashboard.R compiles a self-contained
+     copy by splicing the JSON bundle into the comment-delimited slot on the next
+     line (do NOT repeat those exact comment tokens elsewhere in this file). -->
+<script id="embedded-bundle">window.__VINTAGE_BUNDLE__ = /*__BUNDLE_JSON__*/null/*__END__*/;</script>
+
+<script>
+'use strict';
+
+// =============================================================
+// Constants and helpers
+// =============================================================
+
+const $  = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+// Null-safe textContent setter. Some value-display spans (e.g. #cl-k-val,
+// #cl-cut-val, #cl-maxleaves-val) are not present in the markup — the matching
+// number inputs already show the value — so writing .textContent directly would
+// throw on null and abort the whole tab render. Use this for those updates.
+const setTxt = (s, v) => { const el = $(s); if (el) el.textContent = v; };
+// Reflect a control's value into its paired number-input textbox (the visible
+// field for depth/minn/maxleaves/cut/k) and its optional `<base>-val` span,
+// without clobbering whichever the user is currently editing. `base` is e.g.
+// 'cl-k' for #cl-k-input / #cl-k-val.
+function setCtl(base, inputValue, spanText){
+  const inp = $('#' + base + '-input');
+  if (inp && document.activeElement !== inp) inp.value = inputValue;
+  setTxt('#' + base + '-val', spanText !== undefined ? spanText : inputValue);
+}
+
+// On-page error banner — surfaces JS errors directly in the UI so problems are
+// visible without opening DevTools. Also used by guard() below.
+function showErr(msg){
+  let b = document.getElementById('err-banner');
+  if (!b){
+    b = document.createElement('div');
+    b.id = 'err-banner';
+    b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#b91c1c;color:#fff;'
+      + 'padding:8px 12px;font:12px/1.45 ui-monospace,Consolas,monospace;max-height:35vh;overflow:auto;'
+      + 'box-shadow:0 2px 10px rgba(0,0,0,.45);white-space:pre-wrap';
+    b.textContent = 'Dashboard error(s) — please screenshot and share:\n';
+    (document.body || document.documentElement).appendChild(b);
+  }
+  b.appendChild(document.createTextNode(String(msg) + '\n'));
+  b.style.display = 'block';
+}
+window.addEventListener('error', e =>
+  showErr((e.message || 'error') + '  @' + String(e.filename || '').split('/').pop() + ':' + (e.lineno || '?')));
+window.addEventListener('unhandledrejection', e =>
+  showErr('promise: ' + ((e.reason && e.reason.message) || e.reason)));
+// Run fn; if it throws, log + surface the error but DON'T abort the caller, so a
+// single broken section can't blank an entire tab.
+function guard(label, fn){
+  try { fn(); } catch (e) { console.error(label, e); showErr(label + ': ' + (e && e.message ? e.message : e)); }
+}
+
+const PAIR_CLASS_COLOUR = {
+  both_sig_opposite_sign: '#dc2626',
+  both_sig_same_sign:     '#16a34a',
+  gain_sig_year:          '#3b82f6',
+  lose_sig_year:          '#f97316',
+  neither_sig:            '#64748b'
+};
+const PAIR_CLASS_ORDER = [
+  'both_sig_opposite_sign','both_sig_same_sign',
+  'gain_sig_year','lose_sig_year','neither_sig'
+];
+const PAIR_CLASS_LABEL = {
+  both_sig_opposite_sign: 'Credible flip',
+  both_sig_same_sign:     'Robust (same sign)',
+  gain_sig_year:          'Gains sig (year+price)',
+  lose_sig_year:          'Loses sig (year+price)',
+  neither_sig:            'Neither sig'
+};
+
+// Default sign convention from script 10b's outcome_worse_sign.
+// +1 = positive coef means worse-for-tenants
+// -1 = negative coef means worse-for-tenants
+//  0 = neutral (no directional interpretation)
+const WORSE_SIGN_DEFAULT = {
+  current_energy_efficiency:-1, energy_consumption_current:1,
+  energy_consumption_current_property:1, el_mean_consumption_k_wh:1,
+  gas_mean_consumption_k_wh:1, energy_consumption_gap:-1,
+  energy_consumption_gap_property:-1, energy_efficiency_potential_gap:-1,
+  energy_efficiency_bad_epc_gap:-1, energy_efficiency_worse_epc_gap:-1,
+  borderline_good_epc:1, borderline_better_epc:1,
+  // Standardised bad-EPC regulatory bounds (mainline bad_epc_c = below C,
+  // bad_epc_e = below E) and their gap/bunching aliases.
+  bad_epc_c:1, bad_epc_e:1,
+  borderline_good_epc_c:1, borderline_good_epc_e:1,
+  energy_efficiency_c_gap:-1, energy_efficiency_e_gap:-1
+};
+
+const TREAT_LABEL = {
+  fp:'All for-profit',ukfp:'UK for-profit',frfp:'Foreign for-profit',thfp:'Tax-haven for-profit',
+  np:'All non-profit',uknp:'UK non-profit',frnp:'Foreign non-profit',thnp:'Tax-haven non-profit',
+  ps:'Public sector',th:'Any tax haven',
+  bh:'British haven',eh:'European haven',ch:'Caribbean haven',oh:'Other haven'
+};
+const TREAT_ORDER = ['fp','ukfp','frfp','thfp','np','uknp','frnp','thnp','ps','th','bh','eh','ch','oh'];
+
+const OUTCOME_LABEL = {
+  current_energy_efficiency:'EPC Score',
+  energy_consumption_current:'Energy/m²',
+  energy_consumption_current_property:'Energy/property',
+  el_mean_consumption_k_wh:'Electricity (postcode)',
+  gas_mean_consumption_k_wh:'Gas (postcode)',
+  energy_consumption_gap:'Consump. Gap',
+  energy_consumption_gap_property:'Consump. Gap (prop)',
+  energy_efficiency_potential_gap:'EPC Gap',
+  energy_efficiency_bad_epc_gap:'Dist. to C',
+  energy_efficiency_worse_epc_gap:'Dist. to Band',
+  borderline_good_epc:'Borderline C',
+  borderline_better_epc:'Borderline Band',
+  bad_epc_c:'Bad EPC (< C)', bad_epc_e:'Bad EPC (< E)',
+  borderline_good_epc_c:'Borderline C', borderline_good_epc_e:'Borderline E',
+  energy_efficiency_c_gap:'Dist. to C', energy_efficiency_e_gap:'Dist. to E'
+};
+
+const OUTCOME_DEFINITION = {
+  current_energy_efficiency:'EPC score (0-100+); higher = more efficient',
+  energy_consumption_current:'kWh/m²/yr from EPC',
+  energy_consumption_current_property:'Total kWh/yr (consumption × floor area)',
+  el_mean_consumption_k_wh:'Postcode mean electricity kWh',
+  gas_mean_consumption_k_wh:'Postcode mean gas kWh',
+  energy_consumption_gap:'Potential − current consumption per m²',
+  energy_consumption_gap_property:'Potential − current total kWh/yr',
+  energy_efficiency_potential_gap:'Potential EPC score − current score',
+  energy_efficiency_bad_epc_gap:'Distance to C/D boundary',
+  energy_efficiency_worse_epc_gap:'Distance to lower cutoff of own EPC band',
+  borderline_good_epc:'1 if score in (69, 69+½σ]',
+  borderline_better_epc:'1 if score just above any band boundary',
+  bad_epc_c:'1 if below EPC C (score < 69) — incoming MEES bound (main)',
+  bad_epc_e:'1 if below EPC E (score < 39) — present regulatory minimum',
+  borderline_good_epc_c:'1 if score just above the C threshold',
+  borderline_good_epc_e:'1 if score just above the E threshold',
+  energy_efficiency_c_gap:'Distance to the C threshold (score − 68)',
+  energy_efficiency_e_gap:'Distance to the E threshold (score − 38)'
+};
+
+function fmt(x, dp=3){
+  if (x==null || !Number.isFinite(+x)) return '';
+  const v = +x; const a = Math.abs(v);
+  if (a===0) return '0';
+  if (a < .005) return v.toExponential(1);
+  if (a < .1) return v.toFixed(dp);
+  return v.toFixed(2);
+}
+function fmtP(x){
+  if (x==null||!Number.isFinite(+x)) return '';
+  const v=+x;
+  if (v < 1e-4) return v.toExponential(1);
+  if (v < .001) return v.toFixed(4);
+  return v.toFixed(3);
+}
+function fmtPct(x, dp=1){
+  if (!Number.isFinite(+x)) return '';
+  return (100*+x).toFixed(dp)+'%';
+}
+function fmtInt(x){
+  if (!Number.isFinite(+x)) return '';
+  return Math.round(+x).toLocaleString();
+}
+function stars(p){
+  if (!Number.isFinite(+p)) return '';
+  return p<.01?'***':p<.05?'**':p<.1?'*':'';
+}
+function tlabel(t){ return TREAT_LABEL[t] || t; }
+function olabel(o){ return OUTCOME_LABEL[o] || o; }
+
+// Build a lowercase haystack of all human-readable identifiers for a pair so
+// the search box matches full names (e.g. "tax haven", "Bad EPC ≥ C") not just
+// the short-id codes.
+function searchableHaystack(r){
+  if (r._haystack) return r._haystack;
+  const t = r.treatment_short_id || '';
+  const o = r.outcome || '';
+  const parts = [
+    t, TREAT_LABEL[t] || '',
+    o, OUTCOME_LABEL[o] || '', OUTCOME_DEFINITION && OUTCOME_DEFINITION[o] || '',
+    r.outcome_family || '', r.model || '',
+    r.regression_core || '', r.matching_core || '',
+    r.legal_form || '', r.jurisdiction || '',
+    r.pair_class || ''
+  ];
+  const h = parts.filter(Boolean).join(' | ').toLowerCase();
+  Object.defineProperty(r, '_haystack', {value:h, enumerable:false, writable:false, configurable:true});
+  return h;
+}
+
+function uniq(arr){ return [...new Set(arr)]; }
+
+const TIP = $('#tooltip');
+function showTip(html, ev){ TIP.innerHTML = html; TIP.style.display = 'block'; moveTip(ev); }
+function moveTip(ev){
+  const tw = TIP.offsetWidth, th = TIP.offsetHeight;
+  let x = ev.pageX + 14, y = ev.pageY + 14;
+  if (x + tw + 12 > window.scrollX + window.innerWidth) x = ev.pageX - tw - 14;
+  if (y + th + 12 > window.scrollY + window.innerHeight) y = ev.pageY - th - 14;
+  TIP.style.left = x + 'px'; TIP.style.top  = y + 'px';
+}
+function hideTip(){ TIP.style.display='none'; }
+
+// =============================================================
+// State
+// =============================================================
+const STATE = {
+  pairs: [],
+  features: [],
+  clusters: [],
+  trees: {},        // { '<target>_<view>': obj, ... } - parsed JSON; __built lazily added
+  cptables: {},
+  importance: {},
+  dendrogram: null,
+  worse_sign: {...WORSE_SIGN_DEFAULT},
+  geo: null, core: null, wc: null,
+  files: [],
+  bundle_meta: null,
+  // Sign-flip filter state — fam/outcome are arrays (multi-select)
+  sf_filters: {model:'', treat:'', fam:[], outcome:[], cls:'', tb:'', rc:'', mc:'', ppd_core:'', maxcoef:Infinity},
+  sf_cell_treat: null, sf_cell_outcome: null,
+  sf_detail_mode: 'flagged', sf_detail_search: '',
+  sf_hm_metric: 'n_credible_flip_to_worse',
+  sf_maxcoef_max: 1,    // dynamic, set from data extent
+  // Tab 2
+  cl_base: 'worse_for_tenants',
+  cl_focus: '',         // '' = all combined; or 'family:Energy Efficiency'
+  cl_view: 'pruned',
+  cl_collapsed: new Set(),
+  cl_leaves_only: false,
+  cl_cluster_filter: '', cl_cluster_search: '',
+  cl_cp_thresh: 0,
+  cl_max_depth: 20,
+  cl_min_n: 0,
+  cl_max_leaves: 80,
+  cl_purity: 0,         // 0..1; collapse leaves with max class prob below this
+  cl_k: 12,             // explicit-K override; null when cut-height drives K
+  cl_use_k_override: false,
+  cl_cut_height: null,  // Ward distance threshold; null = use K
+  cl_log_height: false,
+  cl_leaf_font: 9,
+  cl_scatter_y: 'cluster',
+  cl_scatter_size: 'const',
+  cl_headline_sig: 'all',          // 'all' | 'sig_either' | 'sig_both'
+  cl_headline_treats: 'offshore'   // 'offshore' | 'abroad' | 'all'
+};
+// Treatment groups for the cross-tabulation panel
+//   offshore = tax-haven owners (any-haven + per-region havens + tax-haven for-profit/non-profit)
+//   abroad   = offshore  + foreign (non-haven) for-profit/non-profit
+const HEADLINE_TREAT_GROUPS = {
+  offshore: new Set(['th','bh','eh','ch','oh','thfp','thnp']),
+  abroad:   new Set(['th','bh','eh','ch','oh','thfp','thnp','frfp','frnp'])
+};
+// cl_target getter (combines base + focus)
+function clTargetName(){
+  const base = STATE.cl_base;
+  const f = STATE.cl_focus || '';
+  if (!f) return base;
+  if (f.startsWith('family:'))  { const slug = slugify(f.slice(7)); return `${base}_${slug}`; }
+  if (f.startsWith('outcome:')) { const slug = f.slice(8);          return `${base}_outcome_${slug}`; }
+  return base;
+}
+function slugify(s){ return String(s).toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,''); }
+
+// =============================================================
+// Sign-convention recomputation
+// =============================================================
+// Given the user's WORSE_SIGN dict and a pair row, return derived flags.
+// pair_class itself is direction-agnostic so we keep the R-side value.
+function derivePair(p){
+  const ws = +(STATE.worse_sign[p.outcome] ?? 0);
+  const c0 = +p.coef_no_year, c1 = +p.coef_year;
+  const sign_ny_worse = (ws !== 0 && Number.isFinite(c0)) ? (Math.sign(c0) * ws > 0 ? 1 : 0) : 0;
+  const sign_y_worse  = (ws !== 0 && Number.isFinite(c1)) ? (Math.sign(c1) * ws > 0 ? 1 : 0) : 0;
+  const flipped = +p.sign_flipped === 1 ? 1 : 0;
+  const credible = +p.credible_flip === 1 ? 1 : 0;
+  return {
+    sign_no_year_worse:    sign_ny_worse,
+    sign_year_worse:       sign_y_worse,
+    sign_flipped_to_worse: flipped & sign_y_worse,
+    credible_flip_to_worse: credible & sign_y_worse,
+    gain_sig_to_worse:  (p.pair_class === 'gain_sig_year') ? sign_y_worse : 0,
+    gain_sig_to_better: (p.pair_class === 'gain_sig_year') ? (ws !== 0 ? 1-sign_y_worse : 0) : 0,
+    lose_sig_from_worse:  (p.pair_class === 'lose_sig_year') ? sign_ny_worse : 0,
+    lose_sig_from_better: (p.pair_class === 'lose_sig_year') ? (ws !== 0 ? 1-sign_ny_worse : 0) : 0
+  };
+}
+
+// =============================================================
+// Filename + kind detection
+// =============================================================
+function classifyFile(name){
+  const n = name.toLowerCase();
+  if (n.startsWith('vintage_bundle_'))      return {kind:'bundle'};
+  if (n.startsWith('signflip_pairs_'))      return {kind:'signflip_pairs'};
+  if (n.startsWith('signflip_summary_'))    return {kind:'signflip_summary'};
+  if (n.startsWith('spec_features_'))       return {kind:'features'};
+  if (n.startsWith('cluster_membership_'))  return {kind:'clusters'};
+  if (n.startsWith('feature_importance_'))  {
+    const m = n.match(/^feature_importance_(.+?)_(la|itl2|itl3)(_wc)?(_core)?\.csv$/);
+    return {kind:'importance', target: m ? m[1] : null};
+  }
+  if (/^tree_.+_cptable_/.test(n)) {
+    const m = n.match(/^tree_(.+?)_cptable_(la|itl2|itl3)(_wc)?(_core)?\.csv$/);
+    return {kind:'cptable', target: m ? m[1] : null};
+  }
+  if (/^tree_.+_nodes_(full|pruned)_/.test(n)) {
+    const m = n.match(/^tree_(.+?)_nodes_(full|pruned)_(la|itl2|itl3)(_wc)?(_core)?\.json$/);
+    return {kind:'tree', target: m ? m[1] : null, view: m ? m[2] : null};
+  }
+  if (n.startsWith('dendrogram_')) return {kind:'dendrogram'};
+  return {kind:'unknown'};
+}
+
+function parseGeoSuffix(name){
+  const m = name.match(/_(LA|ITL2|ITL3)(_wc)?(_core)?\.(csv|json)$/i);
+  if (!m) return null;
+  return {geo: m[1].toUpperCase(), wc: !!m[2], core: !!m[3]};
+}
+
+// =============================================================
+// File ingest
+// =============================================================
+function setStatus(msg){ $('#status').textContent = msg; }
+
+function updateBadges(){
+  $('#geoBadge').textContent = 'geography: ' + (STATE.geo || '?');
+  $('#geoBadge').className = 'badge' + (STATE.geo ? ' ok' : '');
+  const scope = [];
+  if (STATE.core) scope.push('core outcomes');
+  else if (STATE.core === false) scope.push('all outcomes (incl. diagnostic families)');
+  if (STATE.wc) scope.push('within-corporate');
+  $('#coreBadge').textContent = 'scope: ' + (scope.length ? scope.join(' + ') : '?');
+  $('#coreBadge').className = 'badge' + (STATE.geo ? ' ok' : '');
+}
+
+function recordFile(name, kind, target){
+  const i = STATE.files.findIndex(f => f.name === name);
+  const rec = {name, kind, target};
+  if (i >= 0) STATE.files[i] = rec; else STATE.files.push(rec);
+  renderFileList();
+}
+function renderFileList(){
+  const fl = $('#fileList');
+  if (!STATE.files.length) { fl.innerHTML = '<span style="font-size:11px;color:var(--dim)">none</span>'; return; }
+  fl.innerHTML = STATE.files.map((f,i) => {
+    const cls = f.kind==='bundle' ? 'bundle'
+              : (f.kind==='signflip_pairs' || f.kind==='signflip_summary') ? 'signflip'
+              : f.kind==='clusters' ? 'cluster'
+              : f.kind==='dendrogram' ? 'dendro'
+              : (f.kind==='tree' || f.kind==='cptable' || f.kind==='importance') ? 'tree'
+              : '';
+    const tag = f.target ? ` <span style="color:var(--dim)">[${f.target}]</span>` : '';
+    return `<span class="file-chip ${cls}" title="${f.kind}">${f.name}${tag}<span class="x" data-idx="${i}">&times;</span></span>`;
+  }).join('');
+  $$('.file-chip .x').forEach(x => x.addEventListener('click', e => {
+    removeFile(STATE.files[+e.target.dataset.idx]);
+  }));
+}
+function removeFile(f){
+  STATE.files = STATE.files.filter(x => x.name !== f.name);
+  if (f.kind === 'bundle') {
+    STATE.pairs = []; STATE.features = []; STATE.clusters = [];
+    STATE.trees = {}; STATE.cptables = {}; STATE.importance = {};
+    STATE.dendrogram = null; STATE.bundle_meta = null;
+  }
+  if (f.kind === 'signflip_pairs') STATE.pairs = [];
+  if (f.kind === 'features')        STATE.features = [];
+  if (f.kind === 'clusters')        STATE.clusters = [];
+  if (f.kind === 'dendrogram')      STATE.dendrogram = null;
+  if (f.kind === 'tree' && f.target) {
+    delete STATE.trees[f.target + '_full'];
+    delete STATE.trees[f.target + '_pruned'];
+  }
+  if (f.kind === 'cptable'    && f.target) delete STATE.cptables[f.target];
+  if (f.kind === 'importance' && f.target) delete STATE.importance[f.target];
+  renderFileList();
+  refreshAll();
+}
+$('#clearFiles').addEventListener('click', () => {
+  STATE.pairs = []; STATE.features = []; STATE.clusters = [];
+  STATE.trees = {}; STATE.cptables = {}; STATE.importance = {};
+  STATE.dendrogram = null; STATE.files = []; STATE.bundle_meta = null;
+  STATE.geo = STATE.core = STATE.wc = null;
+  renderFileList(); updateBadges(); refreshAll();
+  setStatus('Cleared');
+});
+
+function adoptGeoFromName(name){
+  const g = parseGeoSuffix(name);
+  if (!g) return;
+  if (!STATE.geo) STATE.geo = g.geo;
+  if (STATE.core == null) STATE.core = g.core;
+  if (STATE.wc   == null) STATE.wc   = g.wc;
+  updateBadges();
+}
+
+function ingestFiles(fileList){
+  const files = Array.from(fileList);
+  if (!files.length) return;
+  setStatus(`Loading ${files.length} file(s)…`);
+  let pending = files.length;
+  files.forEach(f => {
+    const cls = classifyFile(f.name);
+    adoptGeoFromName(f.name);
+    if (cls.kind === 'unknown') {
+      pending--; if (!pending) finishIngest();
+      console.warn('Unknown file kind:', f.name); return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        if (f.name.toLowerCase().endsWith('.json')) {
+          const parsed = JSON.parse(reader.result);
+          handleParsed(cls, f.name, parsed);
+        } else {
+          Papa.parse(reader.result, {
+            header:true, skipEmptyLines:true, dynamicTyping:true,
+            complete: res => handleParsed(cls, f.name, res.data)
+          });
+        }
+      } catch (err) {
+        console.error('Parse error in', f.name, err);
+        setStatus(`Error parsing ${f.name}: ${err.message}`);
+      } finally {
+        pending--; if (!pending) finishIngest();
+      }
+    };
+    reader.readAsText(f);
+  });
+}
+function finishIngest(){
+  setStatus(`Loaded ${STATE.files.length} file(s)`);
+  refreshAll();
+}
+
+function handleParsed(cls, name, data){
+  recordFile(name, cls.kind, cls.target);
+  if (cls.kind === 'bundle') {
+    // data is the full bundle object — populate everything
+    STATE.bundle_meta = data.meta || null;
+    if (data.meta) {
+      STATE.geo  = data.meta.geography || STATE.geo;
+      STATE.core = data.meta.core_only;
+      STATE.wc   = data.meta.within_corporate;
+    }
+    STATE.pairs    = data.pairs || [];
+    STATE.features = data.features || [];
+    STATE.clusters = data.clusters || [];
+    STATE.dendrogram = data.dendrogram || null;
+    // Default the dendrogram to the partition the writeup uses (10b's Ward k_clusters),
+    // so the figure shown on load matches the paper rather than a generic K.
+    if (STATE.dendrogram && STATE.dendrogram.k_clusters) {
+      STATE.cl_k = +STATE.dendrogram.k_clusters;
+      STATE.cl_use_k_override = false;
+      STATE.cl_cut_height = null;
+    }
+    STATE.trees    = {};
+    STATE.cptables = {};
+    STATE.importance = {};
+    if (data.trees && typeof data.trees === 'object') {
+      for (const t of Object.keys(data.trees)) {
+        const tt = data.trees[t];
+        if (tt.full)       STATE.trees[t + '_full']   = tt.full;
+        if (tt.pruned)     STATE.trees[t + '_pruned'] = tt.pruned;
+        if (tt.cptable)    STATE.cptables[t]          = tt.cptable;
+        if (tt.importance) STATE.importance[t]        = tt.importance;
+      }
+    }
+    return;
+  }
+  switch (cls.kind) {
+    case 'signflip_pairs':    STATE.pairs    = data; break;
+    case 'signflip_summary':  break;
+    case 'features':          STATE.features = data; break;
+    case 'clusters':          STATE.clusters = data; break;
+    case 'importance':        if (cls.target) STATE.importance[cls.target] = data; break;
+    case 'cptable':           if (cls.target) STATE.cptables[cls.target] = data; break;
+    case 'tree':              if (cls.target && cls.view) STATE.trees[`${cls.target}_${cls.view}`] = data; break;
+    case 'dendrogram':        STATE.dendrogram = data; break;
+  }
+}
+
+// Drag-drop
+const dz = $('#dropzone');
+['dragenter','dragover'].forEach(ev => document.body.addEventListener(ev, e => {
+  e.preventDefault(); dz.classList.add('drag');
+}));
+document.body.addEventListener('dragleave', e => {
+  e.preventDefault();
+  if (e.target === document.body) dz.classList.remove('drag');
+});
+document.body.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('drag');
+  ingestFiles(e.dataTransfer.files);
+});
+$('#fileInput').addEventListener('change', e => ingestFiles(e.target.files));
+
+// Tabs
+const TAB_RENDERERS = {
+  signflip:   () => renderSignflipTab(),
+  clustering: () => renderClusteringTab()
+};
+$$('.tabs button').forEach(b => b.addEventListener('click', () => {
+  $$('.tabs button').forEach(x => x.classList.remove('active'));
+  b.classList.add('active');
+  $$('.tabpane').forEach(p => p.classList.remove('active'));
+  $('#tab-' + b.dataset.tab).classList.add('active');
+  // Charts size themselves from parentElement.clientWidth (0 while a pane is
+  // display:none) and the decision tree needs a second pass to escape a
+  // carried-over root-stump prune ("bootstrap"). So (re)render now, then again
+  // on the next frame once the pane is visible and the first-pass bootstrap has
+  // applied — otherwise dendrograms / trees / PPD charts come up empty.
+  const r = TAB_RENDERERS[b.dataset.tab];
+  if (r) {
+    const run = () => { try { r(); } catch (e) { console.error('tab render error', e); } };
+    run();
+    run();
+    requestAnimationFrame(run);
+  }
+}));
+
+// Re-render a collapsible section's charts when it expands. SVGs size from
+// parentElement.clientWidth (0 while a <details> is closed), so the first paint
+// while collapsed is skipped — repaint on open.
+$$('details.cl-section').forEach(d => {
+  d.addEventListener('toggle', () => {
+    if (!d.open) return;
+    const tab = d.closest('.tabpane');
+    requestAnimationFrame(() => {
+      try {
+        if (tab && tab.id === 'tab-signflip') { renderSignflipTab(); return; }
+        if (d.querySelector('#cl-tree'))          { renderClTree(); renderClCp(); renderClImp(); }
+        if (d.querySelector('#cl-dend'))          { renderClDendrogram(); renderClScatter(); renderClClusterTable(); }
+        if (d.querySelector('#cl-headline-bars')) { renderClHeadline(); }
+      } catch (e) { console.error('section toggle render error', e); }
+    });
+  });
+});
+
+// =============================================================
+// Sign-convention UI
+// =============================================================
+const OUTCOME_FAMILIES_DEFAULT = {
+  current_energy_efficiency:'Energy Efficiency',
+  energy_consumption_current:'Energy Use',
+  energy_consumption_current_property:'Energy Use',
+  el_mean_consumption_k_wh:'Realised Energy',
+  gas_mean_consumption_k_wh:'Realised Energy',
+  energy_consumption_gap:'Efficiency Gap',
+  energy_consumption_gap_property:'Efficiency Gap',
+  energy_efficiency_potential_gap:'Efficiency Gap',
+  energy_efficiency_bad_epc_gap:'Regulatory Compliance',
+  energy_efficiency_worse_epc_gap:'Regulatory Compliance',
+  borderline_good_epc:'Bunching', borderline_better_epc:'Bunching',
+  bad_epc_c:'Regulatory Compliance', bad_epc_e:'Regulatory Compliance',
+  borderline_good_epc_c:'Bunching', borderline_good_epc_e:'Bunching',
+  energy_efficiency_c_gap:'Efficiency Gap', energy_efficiency_e_gap:'Efficiency Gap'
+};
+function familyFor(outcome){
+  // First try outcome metadata from bundle if available
+  // (the bundle CSV-from-R may have outcome_family columns; fall back to our static map)
+  return OUTCOME_FAMILIES_DEFAULT[outcome] || 'Other';
+}
+
+function renderSignTable(){
+  // Only show outcomes that exist in current data
+  const present = new Set(STATE.pairs.map(p => p.outcome).filter(Boolean));
+  if (!present.size) Object.keys(WORSE_SIGN_DEFAULT).forEach(o => present.add(o));
+  const outcomes = [...present];
+  outcomes.sort((a,b) => {
+    const fa = familyFor(a), fb = familyFor(b);
+    if (fa !== fb) return fa.localeCompare(fb);
+    return a.localeCompare(b);
+  });
+  const grouped = {};
+  for (const o of outcomes) {
+    const f = familyFor(o);
+    (grouped[f] = grouped[f] || []).push(o);
+  }
+  let html = '<thead><tr><th>Outcome</th><th>Code</th><th>Definition</th><th>Default</th><th>Higher is</th></tr></thead><tbody>';
+  for (const fam of Object.keys(grouped).sort()) {
+    html += `<tr class="sc-fam"><td colspan="5">${fam}</td></tr>`;
+    for (const o of grouped[fam]) {
+      const cur = STATE.worse_sign[o] ?? 0;
+      const def = WORSE_SIGN_DEFAULT[o] ?? 0;
+      const cls = cur > 0 ? 'worse' : (cur < 0 ? 'better' : 'neutral');
+      const txt = cur > 0 ? '+ → worse' : (cur < 0 ? '− → worse' : 'neutral');
+      const defTxt = def > 0 ? '+ worse' : (def < 0 ? '− worse' : 'neutral');
+      html += `<tr><td>${olabel(o)}</td>` +
+              `<td style="font-family:monospace;color:var(--dim);font-size:10px">${o}</td>` +
+              `<td style="color:var(--muted);font-size:10px">${OUTCOME_DEFINITION[o]||''}</td>` +
+              `<td style="color:var(--dim);font-size:10px">${defTxt}</td>` +
+              `<td><span class="sign-pill ${cls}" data-o="${o}" title="Click to cycle">${txt}</span></td></tr>`;
+    }
+  }
+  html += '</tbody>';
+  $('#sc-table').innerHTML = html;
+  $$('#sc-table .sign-pill').forEach(p => p.addEventListener('click', e => {
+    const o = e.target.dataset.o;
+    const cur = STATE.worse_sign[o] ?? 0;
+    const next = cur === 0 ? 1 : (cur === 1 ? -1 : 0);
+    STATE.worse_sign[o] = next;
+    updateSignStat();
+    renderSignTable();
+    refreshAll();
+  }));
+  updateSignStat();
+}
+function updateSignStat(){
+  const overrides = Object.keys(STATE.worse_sign).filter(k => (STATE.worse_sign[k]||0) !== (WORSE_SIGN_DEFAULT[k]||0));
+  $('#sc-stat').textContent = overrides.length ? `(${overrides.length} override${overrides.length>1?'s':''})` : '';
+}
+$('#sc-reset').addEventListener('click', () => {
+  STATE.worse_sign = {...WORSE_SIGN_DEFAULT};
+  renderSignTable(); refreshAll();
+});
+
+// =============================================================
+// SIGN-FLIP TAB
+// =============================================================
+
+const PPD_CORES = new Set(['ppd', 'ppd_counciltax']);
+function sfFilteredPairs(){
+  const f = STATE.sf_filters;
+  const maxAbs = (Number.isFinite(f.maxcoef) ? +f.maxcoef : Infinity);
+  const famSet = (Array.isArray(f.fam) && f.fam.length) ? new Set(f.fam) : null;
+  const outSet = (Array.isArray(f.outcome) && f.outcome.length) ? new Set(f.outcome) : null;
+  return STATE.pairs.filter(r => {
+    if (!r || r.coef_no_year == null || r.coef_year == null) return false;
+    if (f.model && r.model !== f.model) return false;
+    if (f.treat && r.treatment_short_id !== f.treat) return false;
+    if (famSet && !famSet.has(r.outcome_family)) return false;
+    if (outSet && !outSet.has(r.outcome)) return false;
+    if (f.cls && r.pair_class !== f.cls) return false;
+    if (f.tb !== '' && f.tb != null && +r.has_tax_band !== +f.tb) return false;
+    if (f.rc && (r.regression_core||'') !== f.rc) return false;
+    if (f.mc && ((r.matching_core||'(none)') !== f.mc)) return false;
+    if (f.ppd_core === '1' && !PPD_CORES.has(r.regression_core||'')) return false;
+    if (f.ppd_core === '0' &&  PPD_CORES.has(r.regression_core||'')) return false;
+    if (Number.isFinite(maxAbs)) {
+      const a = Math.max(Math.abs(+r.coef_no_year||0), Math.abs(+r.coef_year||0));
+      if (a > maxAbs) return false;
+    }
+    return true;
+  });
+}
+
+function populateSfFilters(){
+  if (!STATE.pairs.length) return;
+  const ok = STATE.pairs.filter(r => r && r.coef_no_year != null);
+  function fillSel(id, vals, formatter, allLabel){
+    const sel = $('#'+id);
+    const cur = sel.value;
+    sel.innerHTML = `<option value="">${allLabel}</option>` +
+      vals.map(v => `<option value="${v}">${formatter(v)}</option>`).join('');
+    if (vals.includes(cur)) sel.value = cur;
+  }
+  // (fillMulti removed — replaced by checkbox-dropdown helper at bottom)
+  const models  = uniq(ok.map(r => r.model)).filter(Boolean).sort();
+  const treats  = uniq(ok.map(r => r.treatment_short_id)).filter(Boolean)
+                    .sort((a,b) => (TREAT_ORDER.indexOf(a)+999) - (TREAT_ORDER.indexOf(b)+999));
+  const fams    = uniq(ok.map(r => r.outcome_family)).filter(Boolean).sort();
+  const outs    = uniq(ok.map(r => r.outcome)).filter(Boolean).sort();
+  const classes = PAIR_CLASS_ORDER.filter(c => ok.some(r => r.pair_class === c));
+  const rcs     = uniq(ok.map(r => r.regression_core)).filter(Boolean).sort();
+  const mcs     = uniq(ok.map(r => r.matching_core || '(none)')).filter(Boolean).sort();
+  fillSel('sf-model',  models, v => v, '— any —');
+  fillSel('sf-treat',  treats, v => `${v} (${tlabel(v)})`, '— any —');
+  setupCheckboxDropdown('sf-fam-cb', fams, v => v, STATE.sf_filters.fam, sel => {
+    STATE.sf_filters.fam = sel; renderSignflipTab();
+  }, 'family');
+  setupCheckboxDropdown('sf-outcome-cb', outs, v => `${v}${OUTCOME_LABEL[v]?' — '+OUTCOME_LABEL[v]:''}`, STATE.sf_filters.outcome, sel => {
+    STATE.sf_filters.outcome = sel; renderSignflipTab();
+  }, 'outcome');
+  fillSel('sf-class',  classes, v => `${v} — ${PAIR_CLASS_LABEL[v]||''}`, '— any —');
+  fillSel('sf-rc',     rcs,    v => v, '— any —');
+  fillSel('sf-mc',     mcs,    v => v, '— any —');
+  // maxcoef slider: derive bound from data extent
+  let maxAbs = 0;
+  for (const r of ok) {
+    const a = Math.max(Math.abs(+r.coef_no_year||0), Math.abs(+r.coef_year||0));
+    if (a > maxAbs) maxAbs = a;
+  }
+  STATE.sf_maxcoef_max = maxAbs || 1;
+  // Re-paint readout based on slider position
+  const sliderEl = $('#sf-maxcoef');
+  const cur = +sliderEl.value;
+  if (cur >= 100 || !Number.isFinite(STATE.sf_filters.maxcoef)) {
+    STATE.sf_filters.maxcoef = Infinity;
+    $('#sf-maxcoef-val').textContent = '∞';
+  } else {
+    $('#sf-maxcoef-val').textContent = STATE.sf_filters.maxcoef.toFixed(3);
+  }
+  // Populate ppd-core dropdown — already statically declared, no fill needed.
+  // Fill rcs / mcs already handled above.
+  // Init reg/match/ppd-core values from STATE
+  if (STATE.sf_filters.rc) $('#sf-rc').value = STATE.sf_filters.rc;
+  if (STATE.sf_filters.mc) $('#sf-mc').value = STATE.sf_filters.mc;
+  if (STATE.sf_filters.ppd_core) $('#sf-ppd-core').value = STATE.sf_filters.ppd_core;
+}
+
+['sf-model','sf-treat','sf-class','sf-tb','sf-rc','sf-mc','sf-ppd-core'].forEach(id => {
+  document.addEventListener('change', e => {
+    if (e.target.id !== id) return;
+    const key = id.replace('sf-','');
+    const map = {tb:'tb', class:'cls', rc:'rc', mc:'mc', 'ppd-core':'ppd_core'};
+    STATE.sf_filters[map[key] || key] = e.target.value;
+    renderSignflipTab();
+  });
+});
+// (sf-fam / sf-outcome wired via setupCheckboxDropdown in populateSfFilters)
+$('#sf-maxcoef').addEventListener('input', e => {
+  const v = +e.target.value;
+  if (v >= 100) {
+    STATE.sf_filters.maxcoef = Infinity;
+    $('#sf-maxcoef-val').textContent = '∞';
+  } else {
+    // Map 0..100 to (0, sf_maxcoef_max] via squared scale for finer control near 0
+    const t = v / 100;
+    STATE.sf_filters.maxcoef = STATE.sf_maxcoef_max * t * t;
+    $('#sf-maxcoef-val').textContent = STATE.sf_filters.maxcoef.toFixed(3);
+  }
+  renderSignflipTab();
+});
+$('#sf-reset').addEventListener('click', () => {
+  STATE.sf_filters = {model:'', treat:'', fam:[], outcome:[], cls:'', tb:'', rc:'', mc:'', ppd_core:'', maxcoef:Infinity};
+  STATE.sf_cell_treat = STATE.sf_cell_outcome = null;
+  ['sf-model','sf-treat','sf-class','sf-tb','sf-rc','sf-mc','sf-ppd-core'].forEach(id => {
+    const s = $('#'+id); if (s.options.length) s.selectedIndex = 0;
+  });
+  $('#sf-maxcoef').value = 100; $('#sf-maxcoef-val').textContent = '∞';
+  renderSignflipTab();
+});
+
+// =============================================================
+// Checkbox-dropdown helper
+// =============================================================
+function setupCheckboxDropdown(id, items, formatter, currentArr, onChange, label){
+  const root = $('#'+id);
+  if (!root) return;
+  const btn  = root.querySelector('button');
+  const menu = root.querySelector('.menu');
+  const sel  = new Set(currentArr || []);
+
+  // Render menu
+  function render(){
+    menu.innerHTML = '';
+    const actions = document.createElement('div');
+    actions.className = 'menu-actions';
+    const search = document.createElement('input');
+    search.type = 'search'; search.placeholder = `Filter ${label}…`;
+    const all = document.createElement('button'); all.textContent = 'Select all';
+    const none = document.createElement('button'); none.textContent = 'Clear';
+    actions.appendChild(all); actions.appendChild(none);
+    menu.appendChild(actions);
+    menu.appendChild(search);
+    const list = document.createElement('div');
+    items.forEach(v => {
+      const lab = document.createElement('label');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.value = v; cb.checked = sel.has(v);
+      cb.addEventListener('change', () => {
+        if (cb.checked) sel.add(v); else sel.delete(v);
+        updateBtn(); onChange([...sel]);
+      });
+      const span = document.createElement('span');
+      span.textContent = formatter(v);
+      lab.appendChild(cb); lab.appendChild(span);
+      lab.dataset.search = (formatter(v) + ' ' + v).toLowerCase();
+      list.appendChild(lab);
+    });
+    menu.appendChild(list);
+    search.addEventListener('input', () => {
+      const q = search.value.trim().toLowerCase();
+      [...list.children].forEach(el => {
+        el.style.display = !q || el.dataset.search.includes(q) ? '' : 'none';
+      });
+    });
+    all.addEventListener('click', e => {
+      e.stopPropagation();
+      [...list.children].forEach(el => {
+        if (el.style.display !== 'none') {
+          const cb = el.querySelector('input');
+          cb.checked = true; sel.add(cb.value);
+        }
+      });
+      updateBtn(); onChange([...sel]);
+    });
+    none.addEventListener('click', e => {
+      e.stopPropagation();
+      sel.clear();
+      [...list.children].forEach(el => { el.querySelector('input').checked = false; });
+      updateBtn(); onChange([...sel]);
+    });
+  }
+  function updateBtn(){
+    const n = sel.size;
+    if (n === 0) btn.textContent = '— any —';
+    else if (n === 1) btn.textContent = formatter([...sel][0]);
+    else btn.textContent = `${n} selected`;
+  }
+  // Toggle
+  btn.onclick = e => {
+    e.stopPropagation();
+    document.querySelectorAll('.cbdrop.open').forEach(d => { if (d !== root) d.classList.remove('open'); });
+    root.classList.toggle('open');
+  };
+  render();
+  updateBtn();
+}
+// Close all open checkbox dropdowns when clicking outside
+document.addEventListener('click', e => {
+  document.querySelectorAll('.cbdrop.open').forEach(d => {
+    if (!d.contains(e.target)) d.classList.remove('open');
+  });
+});
+$('#sf-hm-metric').addEventListener('change', e => { STATE.sf_hm_metric = e.target.value; renderSfHeatmap(); });
+$('#sf-detail-mode').addEventListener('change', e => { STATE.sf_detail_mode = e.target.value; renderSfDetail(); });
+$('#sf-detail-search').addEventListener('input', e => { STATE.sf_detail_search = e.target.value.trim().toLowerCase(); renderSfDetail(); });
+$('#sf-detail-clear').addEventListener('click', () => { STATE.sf_cell_treat = STATE.sf_cell_outcome = null; renderSfDetail(); });
+
+function renderSignflipTab(){
+  if (!STATE.pairs.length) {
+    $('#sf-empty').style.display = '';
+    $('#sf-content').style.display = 'none';
+    return;
+  }
+  $('#sf-empty').style.display = 'none';
+  $('#sf-content').style.display = '';
+  populateSfFilters();
+  renderSfKPIs();
+  renderSfStackbar();
+  renderSfHeatmap();
+  renderSfScatter();
+  renderSfDetail();
+}
+
+function computeSfCounts(rows){
+  const c = {
+    n: rows.length, flipped:0, flipped_to_worse:0,
+    credible_flip:0, credible_flip_to_worse:0,
+    gain_sig_to_worse:0, gain_sig_to_better:0,
+    lose_sig_from_worse:0, lose_sig_from_better:0,
+    sig_no_year:0, sig_year:0,
+    by_class: Object.fromEntries(PAIR_CLASS_ORDER.map(k => [k,0]))
+  };
+  for (const r of rows) {
+    const d = derivePair(r);
+    if (+r.sign_flipped === 1) c.flipped++;
+    if (d.sign_flipped_to_worse) c.flipped_to_worse++;
+    if (+r.credible_flip === 1) c.credible_flip++;
+    if (d.credible_flip_to_worse) c.credible_flip_to_worse++;
+    if (d.gain_sig_to_worse)  c.gain_sig_to_worse++;
+    if (d.gain_sig_to_better) c.gain_sig_to_better++;
+    if (d.lose_sig_from_worse)  c.lose_sig_from_worse++;
+    if (d.lose_sig_from_better) c.lose_sig_from_better++;
+    if (+r.sig_no_year === 1) c.sig_no_year++;
+    if (+r.sig_year    === 1) c.sig_year++;
+    if (r.pair_class && (r.pair_class in c.by_class)) c.by_class[r.pair_class]++;
+  }
+  return c;
+}
+
+function renderSfKPIs(){
+  const rows = sfFilteredPairs();
+  const c = computeSfCounts(rows);
+  const total = c.n || 1;
+  const cards = [
+    {l:'Total pairs', v:fmtInt(c.n)},
+    {l:'Sign-flipped (any)', v:fmtInt(c.flipped), p:c.flipped/total},
+    {l:'Flipped to worse', v:fmtInt(c.flipped_to_worse), p:c.flipped_to_worse/total, cls:'worse'},
+    {l:'Credible flip (both sig)', v:fmtInt(c.credible_flip), p:c.credible_flip/total, cls:'hilite'},
+    {l:'Credible flip → worse', v:fmtInt(c.credible_flip_to_worse), p:c.credible_flip_to_worse/total, cls:'worse'},
+    {l:'Gain-sig → worse', v:fmtInt(c.gain_sig_to_worse), p:c.gain_sig_to_worse/total, cls:'worse'},
+    {l:'Gain-sig → better', v:fmtInt(c.gain_sig_to_better), p:c.gain_sig_to_better/total, cls:'better'},
+    {l:'Lose-sig from worse', v:fmtInt(c.lose_sig_from_worse), p:c.lose_sig_from_worse/total},
+    {l:'Lose-sig from better', v:fmtInt(c.lose_sig_from_better), p:c.lose_sig_from_better/total}
+  ];
+  $('#sf-kpi').innerHTML = cards.map(k =>
+    `<div class="kpi ${k.cls||''}"><div class="v">${k.v}${k.p!=null?`<span class="pct">(${fmtPct(k.p)})</span>`:''}</div><div class="l">${k.l}</div></div>`
+  ).join('');
+  const f = STATE.sf_filters;
+  const parts = [];
+  if (f.model) parts.push(`model=${f.model}`);
+  if (f.treat) parts.push(`treatment=${f.treat}`);
+  if (Array.isArray(f.fam) && f.fam.length)         parts.push(`family ∈ {${f.fam.join(', ')}}`);
+  if (Array.isArray(f.outcome) && f.outcome.length) parts.push(`outcome ∈ {${f.outcome.length>3?f.outcome.length+' selected':f.outcome.join(', ')}}`);
+  if (f.cls)   parts.push(`class=${f.cls}`);
+  if (f.tb !== '') parts.push(`tax_band=${f.tb}`);
+  $('#sf-headline-scope').textContent = parts.length ? '— ' + parts.join(', ') : '';
+}
+
+function renderSfStackbar(){
+  const rows = sfFilteredPairs();
+  const c = computeSfCounts(rows);
+  const total = c.n || 1;
+  const segs = PAIR_CLASS_ORDER.map(k => ({k, n:c.by_class[k]||0}));
+  $('#sf-stackbar').innerHTML = segs.filter(s => s.n>0).map(s => {
+    const pct = (100*s.n/total).toFixed(1);
+    return `<div title="${PAIR_CLASS_LABEL[s.k]}: ${s.n} (${pct}%)" style="background:${PAIR_CLASS_COLOUR[s.k]};width:${pct}%">${pct>=4?pct+'%':''}</div>`;
+  }).join('');
+  $('#sf-stack-legend').innerHTML = segs.map(s =>
+    `<span><span class="swatch" style="background:${PAIR_CLASS_COLOUR[s.k]}"></span>${PAIR_CLASS_LABEL[s.k]} <span style="color:var(--dim)">(${s.n})</span></span>`
+  ).join('');
+}
+
+function aggregateByCell(rows){
+  const m = new Map();
+  for (const r of rows) {
+    const k = r.treatment_short_id + '||' + r.outcome;
+    let v = m.get(k);
+    if (!v) {
+      v = {treat:r.treatment_short_id, outcome:r.outcome, family:r.outcome_family,
+           n_pairs:0, n_flipped:0, n_flipped_to_worse:0, n_credible_flip:0,
+           n_credible_flip_to_worse:0,
+           n_gain_sig_to_worse:0, n_gain_sig_to_better:0,
+           n_lose_sig_from_worse:0, n_lose_sig_from_better:0,
+           n_both_sig_same:0, n_neither_sig:0};
+      m.set(k, v);
+    }
+    const d = derivePair(r);
+    v.n_pairs++;
+    if (+r.sign_flipped===1) v.n_flipped++;
+    if (d.sign_flipped_to_worse) v.n_flipped_to_worse++;
+    if (+r.credible_flip===1) v.n_credible_flip++;
+    if (d.credible_flip_to_worse) v.n_credible_flip_to_worse++;
+    if (d.gain_sig_to_worse)  v.n_gain_sig_to_worse++;
+    if (d.gain_sig_to_better) v.n_gain_sig_to_better++;
+    if (d.lose_sig_from_worse)  v.n_lose_sig_from_worse++;
+    if (d.lose_sig_from_better) v.n_lose_sig_from_better++;
+    if (r.pair_class === 'both_sig_same_sign') v.n_both_sig_same++;
+    if (r.pair_class === 'neither_sig')        v.n_neither_sig++;
+  }
+  for (const v of m.values()) {
+    const N = v.n_pairs || 1;
+    v.frac_flipped              = v.n_flipped              / N;
+    v.frac_flipped_to_worse     = v.n_flipped_to_worse     / N;
+    v.frac_gain_sig_to_worse    = v.n_gain_sig_to_worse    / N;
+    v.frac_gain_sig_to_better   = v.n_gain_sig_to_better   / N;
+    v.frac_lose_sig_from_worse  = v.n_lose_sig_from_worse  / N;
+    v.frac_lose_sig_from_better = v.n_lose_sig_from_better / N;
+  }
+  return [...m.values()];
+}
+
+function renderSfHeatmap(){
+  const rows = sfFilteredPairs();
+  const cells = aggregateByCell(rows);
+  if (!cells.length) {
+    $('#sf-heatmap').innerHTML = '<p class="help-text">No data for current filters.</p>';
+    return;
+  }
+  const metric = STATE.sf_hm_metric;
+  const treats = uniq(cells.map(c => c.treat))
+    .sort((a,b) => (TREAT_ORDER.indexOf(a)+999) - (TREAT_ORDER.indexOf(b)+999));
+  const outcomes = uniq(cells.map(c => c.outcome)).sort();
+  const idx = new Map(cells.map(c => [c.treat+'||'+c.outcome, c]));
+  let mx = 0;
+  for (const c of cells) { const v = +c[metric]; if (Number.isFinite(v) && Math.abs(v) > mx) mx = Math.abs(v); }
+  const isFrac = metric.startsWith('frac');
+
+  const headerCells = treats.map(t =>
+    `<th title="${tlabel(t)}">${t}<div style="font-size:9px;color:var(--dim);font-weight:400">${tlabel(t)}</div></th>`
+  ).join('');
+  let html = `<table class="hm"><thead><tr><th>Outcome</th>${headerCells}</tr></thead><tbody>`;
+  for (const o of outcomes) {
+    html += `<tr><td title="${olabel(o)}">${olabel(o)}<div style="font-size:9px;color:var(--dim);font-weight:400">${o}</div></td>`;
+    for (const t of treats) {
+      const c = idx.get(t+'||'+o);
+      if (!c) { html += `<td class="zero">·</td>`; continue; }
+      const v = +c[metric];
+      if (!Number.isFinite(v) || v === 0) { html += `<td class="zero" data-t="${t}" data-o="${o}">·</td>`; continue; }
+      const t01 = mx ? Math.min(1, Math.abs(v)/mx) : 0;
+      const bg = `rgba(220,38,38,${(0.15 + 0.55*t01).toFixed(2)})`;
+      const txt = isFrac ? fmtPct(v,1) : fmtInt(v);
+      html += `<td data-t="${t}" data-o="${o}" style="background:${bg};color:#fff" title="${tlabel(t)} × ${olabel(o)} — ${metric}=${isFrac?fmtPct(v,2):v}, n_pairs=${c.n_pairs}">${txt}</td>`;
+    }
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  $('#sf-heatmap').innerHTML = html;
+  $$('#sf-heatmap td[data-t]').forEach(td => td.addEventListener('click', () => {
+    STATE.sf_cell_treat = td.dataset.t;
+    STATE.sf_cell_outcome = td.dataset.o;
+    renderSfDetail();
+    document.querySelector('#sf-detail').scrollIntoView({behavior:'smooth', block:'start'});
+  }));
+}
+
+function renderSfScatter(){
+  const rows = sfFilteredPairs();
+  const svg = d3.select('#sf-scatter');
+  svg.selectAll('*').remove();
+  if (!rows.length) return;
+  const W = Math.min(1100, document.querySelector('#sf-scatter').parentElement.clientWidth - 20);
+  const H = 460;
+  const margin = {top:14, right:24, bottom:42, left:54};
+  svg.attr('width', W).attr('height', H);
+  const xs = rows.map(r => +r.coef_no_year).filter(Number.isFinite);
+  const ys = rows.map(r => +r.coef_year).filter(Number.isFinite);
+  if (!xs.length) return;
+  const ext = d3.extent([...xs, ...ys]);
+  const pad = (ext[1]-ext[0]) * 0.05 || 1;
+  const dom = [Math.min(ext[0]-pad, -Math.abs(ext[0]/10)), Math.max(ext[1]+pad, Math.abs(ext[1]/10))];
+  const x = d3.scaleLinear().domain(dom).range([margin.left, W-margin.right]).nice();
+  const y = d3.scaleLinear().domain(dom).range([H-margin.bottom, margin.top]).nice();
+
+  // Clip the points group so they don't escape the plotting area when zoomed.
+  svg.append('defs').append('clipPath').attr('id','sf-scatter-clip')
+    .append('rect').attr('x',margin.left).attr('y',margin.top)
+    .attr('width', W-margin.left-margin.right).attr('height', H-margin.top-margin.bottom);
+
+  const gGrid = svg.append('g');
+  const gPts  = svg.append('g').attr('clip-path','url(#sf-scatter-clip)');
+  const gAxes = svg.append('g');
+
+  gGrid.append('g').attr('class','grid').attr('transform',`translate(0,${H-margin.bottom})`)
+    .call(d3.axisBottom(x).ticks(8).tickSize(-(H-margin.top-margin.bottom)).tickFormat(''));
+  gGrid.append('g').attr('class','grid').attr('transform',`translate(${margin.left},0)`)
+    .call(d3.axisLeft(y).ticks(8).tickSize(-(W-margin.left-margin.right)).tickFormat(''));
+
+  // Reference lines (in points group so they zoom with points)
+  const refs = gPts.append('g');
+  refs.append('line').attr('x1',x(0)).attr('x2',x(0)).attr('y1',margin.top).attr('y2',H-margin.bottom).attr('stroke','#475569').attr('stroke-dasharray','3 3');
+  refs.append('line').attr('y1',y(0)).attr('y2',y(0)).attr('x1',margin.left).attr('x2',W-margin.right).attr('stroke','#475569').attr('stroke-dasharray','3 3');
+  refs.append('line').attr('x1',x(dom[0])).attr('y1',y(dom[0])).attr('x2',x(dom[1])).attr('y2',y(dom[1])).attr('stroke','#3b82f6').attr('stroke-opacity',.4).attr('stroke-dasharray','5 5');
+
+  const xAx = d3.axisBottom(x).ticks(8);
+  const yAx = d3.axisLeft(y).ticks(8);
+  const gx = gAxes.append('g').attr('class','axis').attr('transform',`translate(0,${H-margin.bottom})`).call(xAx);
+  const gy = gAxes.append('g').attr('class','axis').attr('transform',`translate(${margin.left},0)`).call(yAx);
+  gAxes.append('text').attr('x',(W-margin.right+margin.left)/2).attr('y',H-8).attr('text-anchor','middle').attr('fill','var(--muted)').text('coef (no year+price)');
+  gAxes.append('text').attr('transform',`translate(14,${(H-margin.bottom+margin.top)/2})rotate(-90)`).attr('text-anchor','middle').attr('fill','var(--muted)').text('coef (year+price)');
+  gAxes.append('text').attr('x', margin.left+4).attr('y', margin.top+10)
+    .attr('fill','var(--dim)').attr('font-size',10)
+    .text(`${rows.length} pair(s) · scroll/drag to zoom · double-click resets`);
+
+  const enriched = rows.filter(r => Number.isFinite(+r.coef_no_year) && Number.isFinite(+r.coef_year))
+                      .map(r => ({...r, _d: derivePair(r)}));
+  const baseR = d => d._d.credible_flip_to_worse ? 2.6 : (+d.credible_flip===1 ? 2 : 1.4);
+  const dots = gPts.append('g').selectAll('circle').data(enriched).enter().append('circle')
+    .attr('cx', d => x(+d.coef_no_year)).attr('cy', d => y(+d.coef_year))
+    .attr('r', baseR)
+    .attr('fill', d => PAIR_CLASS_COLOUR[d.pair_class] || '#64748b')
+    .attr('opacity', d => +d.credible_flip===1 ? 0.92 : 0.55)
+    .attr('stroke', d => d._d.credible_flip_to_worse ? '#fff' : 'none')
+    .attr('stroke-width', 0.6);
+  dots.on('mouseenter', (ev,d) => {
+    showTip(`<div><b>${tlabel(d.treatment_short_id)}</b> &times; <b>${olabel(d.outcome)}</b></div>
+      <div style="color:var(--muted);font-size:10px">${d.model}</div>
+      <div style="margin-top:4px"><span class="k">no-year coef</span> <b>${fmt(d.coef_no_year)}</b> (p=${fmtP(d.p_no_year)}) ${stars(d.p_no_year)}</div>
+      <div><span class="k">year+price coef</span> <b>${fmt(d.coef_year)}</b> (p=${fmtP(d.p_year)}) ${stars(d.p_year)}</div>
+      <div style="margin-top:4px;color:${PAIR_CLASS_COLOUR[d.pair_class]}">${PAIR_CLASS_LABEL[d.pair_class]||d.pair_class}${d._d.credible_flip_to_worse?' &middot; <span style="color:var(--red)">→ worse</span>':''}</div>
+      <div style="color:var(--dim);font-size:10px">core=${d.regression_core||''} match=${d.matching_core||'(none)'} tax_band=${d.has_tax_band}</div>`, ev);
+  }).on('mousemove', moveTip).on('mouseleave', hideTip);
+
+  // Zoom/pan: scaleExtent allows extreme close-up so binary-outcome coefs (0.001-0.01) are inspectable.
+  const zoom = d3.zoom().scaleExtent([0.5, 5000])
+    .on('zoom', ev => {
+      const t = ev.transform;
+      const newX = t.rescaleX(x);
+      const newY = t.rescaleY(y);
+      gx.call(xAx.scale(newX));
+      gy.call(yAx.scale(newY));
+      
+      // Keep dots visually constant size across zoom levels by NOT scaling the group
+      dots.attr('cx', d => newX(+d.coef_no_year))
+          .attr('cy', d => newY(+d.coef_year));
+      
+      refs.selectAll('line').attr('stroke-width', 1);
+      const dom0 = newX.domain();
+      const refSelection = refs.selectAll('line').nodes();
+      if(refSelection.length >= 3) {
+         d3.select(refSelection[0]).attr('x1', newX(0)).attr('x2', newX(0));
+         d3.select(refSelection[1]).attr('y1', newY(0)).attr('y2', newY(0));
+         d3.select(refSelection[2]).attr('x1', newX(dom[0])).attr('y1', newY(dom[0])).attr('x2', newX(dom[1])).attr('y2', newY(dom[1]));
+      }
+      const xd = dom0;
+      gAxes.select('text.zoom-info').remove();
+      gAxes.append('text').attr('class','zoom-info')
+        .attr('x', W-margin.right-4).attr('y', margin.top+10)
+        .attr('text-anchor','end').attr('fill','var(--dim)').attr('font-size',10)
+        .text(`zoom ${t.k.toFixed(1)}× · x ∈ [${xd[0].toExponential(1)}, ${xd[1].toExponential(1)}]`);
+    });
+  svg.call(zoom).on('dblclick.zoom', () => svg.transition().duration(250).call(zoom.transform, d3.zoomIdentity));
+}
+
+function renderSfDetail(){
+  const all = sfFilteredPairs();
+  let rows = all;
+  if (STATE.sf_cell_treat) rows = rows.filter(r => r.treatment_short_id === STATE.sf_cell_treat && r.outcome === STATE.sf_cell_outcome);
+  rows = rows.map(r => ({...r, _d: derivePair(r)}));
+  if (STATE.sf_detail_mode === 'flagged') rows = rows.filter(r => r.pair_class && r.pair_class !== 'neither_sig');
+  if (STATE.sf_detail_mode === 'credible') rows = rows.filter(r => +r.credible_flip === 1);
+  if (STATE.sf_detail_mode === 'credible_worse') rows = rows.filter(r => r._d.credible_flip_to_worse);
+  const q = STATE.sf_detail_search;
+  if (q) rows = rows.filter(r => searchableHaystack(r).includes(q));
+  rows.sort((a,b) => {
+    const sa = (a._d.credible_flip_to_worse?2:0)+(+a.credible_flip===1?1:0);
+    const sb = (b._d.credible_flip_to_worse?2:0)+(+b.credible_flip===1?1:0);
+    if (sb !== sa) return sb - sa;
+    return Math.abs(+b.coef_year||0) - Math.abs(+a.coef_year||0);
+  });
+
+  const SHOW = 500;
+  const slice = rows.slice(0, SHOW);
+  const headers = ['Treat','Outcome','Family','Model','Reg core','Match core','TB','coef (no yr)','p','coef (yr)','p','Class','Δ','% Δ'];
+  let html = '<thead><tr>' + headers.map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>';
+  for (const r of slice) {
+    const cls = r._d.credible_flip_to_worse ? 'cred-worse'
+              : (+r.credible_flip===1 && !r._d.sign_year_worse ? 'cred-better' : '');
+    html += `<tr class="${cls}">` +
+      `<td><span style="font-family:monospace">${r.treatment_short_id||''}</span><div style="font-size:9px;color:var(--dim)">${tlabel(r.treatment_short_id)||''}</div></td>` +
+      `<td>${olabel(r.outcome||'')}</td>` +
+      `<td style="color:var(--muted)">${r.outcome_family||''}</td>` +
+      `<td style="color:var(--muted);font-size:10px">${r.model||''}</td>` +
+      `<td>${r.regression_core||''}</td>` +
+      `<td>${r.matching_core||'(none)'}</td>` +
+      `<td>${r.has_tax_band ?? ''}</td>` +
+      `<td class="num ${(+r.coef_no_year>=0)?'pos':'neg'}">${fmt(r.coef_no_year)}${stars(r.p_no_year)}</td>` +
+      `<td class="num">${fmtP(r.p_no_year)}</td>` +
+      `<td class="num ${(+r.coef_year>=0)?'pos':'neg'}">${fmt(r.coef_year)}${stars(r.p_year)}</td>` +
+      `<td class="num">${fmtP(r.p_year)}</td>` +
+      `<td style="color:${PAIR_CLASS_COLOUR[r.pair_class]||'var(--muted)'}">${r.pair_class||''}</td>` +
+      `<td class="num">${fmt(r.coef_delta)}</td>` +
+      `<td class="num">${Number.isFinite(+r.pct_change)?fmtPct(r.pct_change):''}</td>` +
+      `</tr>`;
+  }
+  html += '</tbody>';
+  $('#sf-detail').innerHTML = html;
+  let scope = `${rows.length} pair(s)`;
+  if (STATE.sf_cell_treat) {
+    scope += ` &mdash; cell ${STATE.sf_cell_treat} × ${olabel(STATE.sf_cell_outcome)}`;
+    $('#sf-detail-clear').style.display = '';
+  } else {
+    $('#sf-detail-clear').style.display = 'none';
+  }
+  if (rows.length > SHOW) scope += ` (showing first ${SHOW})`;
+  $('#sf-detail-scope').innerHTML = scope ? `— ${scope}` : '';
+  $('#sf-detail-count').textContent = `${rows.length} pair(s) match current filter.` + (rows.length>SHOW?` Table is capped at ${SHOW} rows; refine filters to narrow.`:'');
+}
+
+// =============================================================
+// CLUSTERING TAB
+// =============================================================
+function clHasContent(){
+  return Object.keys(STATE.trees).length > 0 ||
+         STATE.dendrogram != null ||
+         STATE.clusters.length > 0 ||
+         Object.keys(STATE.cptables).length > 0 ||
+         Object.keys(STATE.importance).length > 0;
+}
+
+function clTargets(){
+  const set = new Set();
+  Object.keys(STATE.trees).forEach(k => set.add(k.replace(/_(full|pruned)$/, '')));
+  Object.keys(STATE.cptables).forEach(t => set.add(t));
+  Object.keys(STATE.importance).forEach(t => set.add(t));
+  return [...set].sort((a,b) => {
+    const order = ['worse_for_tenants','sig_dir3','sign_flip','ppd_direction','ppd_lose_sig'];
+    const ai = order.indexOf(a), bi = order.indexOf(b);
+    if (ai>=0 && bi>=0) return ai-bi;
+    if (ai>=0) return -1;
+    if (bi>=0) return 1;
+    return a.localeCompare(b);
+  });
+}
+function targetLabel(t){
+  if (t==='worse_for_tenants') return 'A. Worse-for-tenants (row level)';
+  if (t==='sig_dir3')          return 'B. Significance direction — 3-class';
+  if (t==='sign_flip')         return 'C. Sign-flip (pair level)';
+  if (t==='ppd_direction')     return 'D. Adding year+price widens worse (pair level)';
+  if (t==='ppd_lose_sig')      return 'E. Adding year+price loses significance (pair level)';
+  const m = t.match(/^(worse_for_tenants|sign_flip)_(.+)$/);
+  if (m) {
+    const base = {worse_for_tenants:'A',sign_flip:'C'}[m[1]];
+    const fam = m[2].replace(/_/g,' ');
+    return `${base}. ${m[1].replace(/_/g,' ')} — ${fam}`;
+  }
+  return t;
+}
+
+function populateClTargetSelect(){
+  const targets = clTargets();
+  const tset = new Set(targets);
+  const cur = STATE.cl_focus;
+
+  // Discover available focus options across ALL bases (so the dropdown is the
+  // full universe), then mark each option as "(no tree)" if it's missing for
+  // the currently selected base.
+  const base = STATE.cl_base;
+  // Per-family focus trees only exist for worse_for_tenants and sign_flip.
+  const allFamilies = new Set();
+  for (const t of targets) {
+    for (const b of ['worse_for_tenants','sign_flip']) {
+      if (t.startsWith(b + '_') && t !== b) allFamilies.add(t.slice(b.length+1).replace(/_/g,' '));
+    }
+  }
+  for (const p of (STATE.pairs || [])) {
+    if (p.outcome_family) allFamilies.add(p.outcome_family);
+  }
+  // For the current base, which family trees exist?
+  const families = new Set();
+  for (const f of allFamilies) {
+    if (tset.has(`${base}_${slugify(f)}`)) families.add(f);
+  }
+  const familiesMissing = [...allFamilies].filter(f => !families.has(f)).sort();
+
+  // Build focus dropdown — show every family, disable those without a fitted tree for the current base.
+  const focusSel = $('#cl-focus');
+  const opts = ['<option value="">— all combined —</option>'];
+  if (allFamilies.size) {
+    opts.push('<optgroup label="By outcome family">');
+    for (const f of [...allFamilies].sort()) {
+      const has = families.has(f);
+      opts.push(`<option value="family:${f}"${has?'':' disabled'}>${f}${has?'':' (no tree)'}</option>`);
+    }
+    opts.push('</optgroup>');
+  }
+  focusSel.innerHTML = opts.join('');
+
+  // Reset to "all combined" if the user's current focus has no tree under the new base.
+  if (!tset.has(clTargetName())) STATE.cl_focus = '';
+  focusSel.value = STATE.cl_focus;
+
+  // Resolve the actual target name and resync info line
+  const resolved = clTargetName();
+  if (tset.has(resolved)) {
+    $('#cl-target-info').textContent = `target = ${resolved}`;
+  } else {
+    $('#cl-target-info').textContent = `target ${resolved} not found — ${familiesMissing.length} family option(s) without tree`;
+  }
+}
+$('#cl-base').addEventListener('change', e => {
+  STATE.cl_base = e.target.value;
+  STATE.cl_collapsed = new Set();
+  updateClSliderRanges(); renderClusteringTab();
+});
+$('#cl-focus').addEventListener('change', e => {
+  STATE.cl_focus = e.target.value;
+  STATE.cl_collapsed = new Set();
+  updateClSliderRanges();
+  renderClHeadline();
+  renderClusteringTab();
+});
+$('#cl-view').addEventListener('change', e => { STATE.cl_view = e.target.value; STATE.cl_collapsed = new Set(); renderClusteringTab(); });
+$('#cl-leaves-only').addEventListener('change', e => { STATE.cl_leaves_only = e.target.checked; renderClTree(); });
+$('#cl-expand-all').addEventListener('click', () => { STATE.cl_collapsed = new Set(); renderClTree(); });
+$('#cl-collapse-depth').addEventListener('click', () => {
+  const tree = currentTreeData();
+  if (!tree || !tree.root) return;
+  STATE.cl_collapsed = new Set();
+  const stack = [{node: tree.root, depth: 0}];
+  while (stack.length) {
+    const {node, depth} = stack.pop();
+    if (depth >= 2 && !node.leaf) STATE.cl_collapsed.add(node.node_id);
+    if (node.children) for (const c of node.children) stack.push({node: c, depth: depth+1});
+  }
+  renderClTree();
+});
+
+// Sliders
+function fmtCp(cp){
+  if (!Number.isFinite(cp) || cp === 0) return '0';
+  // up to 6 decimals, trim trailing zeros (but keep at least 4 decimals when small)
+  if (cp >= 0.001) return cp.toFixed(4).replace(/0+$/,'').replace(/\.$/,'');
+  return cp.toFixed(6).replace(/0+$/,'').replace(/\.$/,'');
+}
+function syncCpDisplay(cp){
+  $('#cl-cp-val').textContent = 'cp=' + fmtCp(cp);
+  // Sync the number input (avoid triggering its own listener)
+  const inp = $('#cl-cp-input'); if (inp && document.activeElement !== inp) inp.value = fmtCp(cp);
+  // Sync slider position (square-mapped)
+  const sl = $('#cl-cp-slider'); if (sl && document.activeElement !== sl) {
+    const t = cpBounds.max > 0 ? Math.sqrt(Math.min(cp / cpBounds.max, 1)) : 0;
+    sl.value = Math.round(1000 * t);
+  }
+}
+$('#cl-cp-slider').addEventListener('input', e => {
+  const cp = sliderToCp(+e.target.value);
+  STATE.cl_cp_thresh = cp;
+  syncCpDisplay(cp);
+  renderClTree();
+  renderClCp();   // keep the "you are here" marker on the CV curve in sync with the slider
+});
+$('#cl-cp-input').addEventListener('input', e => {
+  const cp = Math.max(0, +e.target.value || 0);
+  STATE.cl_cp_thresh = cp;
+  // Update display + slider, but don't overwrite the number input itself
+  $('#cl-cp-val').textContent = 'cp=' + fmtCp(cp);
+  const sl = $('#cl-cp-slider');
+  if (sl) {
+    const t = cpBounds.max > 0 ? Math.sqrt(Math.min(cp / cpBounds.max, 1)) : 0;
+    sl.value = Math.round(1000 * t);
+  }
+  renderClTree();
+  renderClCp();   // keep the CV-curve marker in sync when typing a cp threshold
+});
+$('#cl-depth-slider').addEventListener('input', e => {
+  STATE.cl_max_depth = +e.target.value;
+  setCtl('cl-depth', +e.target.value);
+  renderClTree();
+});
+$('#cl-minn-slider').addEventListener('input', e => {
+  STATE.cl_min_n = +e.target.value;
+  setCtl('cl-minn', +e.target.value);
+  renderClTree();
+});
+$('#cl-maxleaves-slider').addEventListener('input', e => {
+  STATE.cl_max_leaves = +e.target.value;
+  setCtl('cl-maxleaves', e.target.value);
+  renderClTree();
+});
+$('#cl-purity-slider').addEventListener('input', e => {
+  STATE.cl_purity = +e.target.value / 100;
+  $('#cl-purity-val').textContent = e.target.value + '%';
+  renderClTree();
+});
+$('#cl-prune-reset').addEventListener('click', () => {
+  STATE.cl_cp_thresh = 0; STATE.cl_max_depth = 20; STATE.cl_min_n = 0;
+  STATE.cl_max_leaves = 80; STATE.cl_purity = 0;
+  $('#cl-cp-slider').value = 0;
+  if ($('#cl-cp-input')) $('#cl-cp-input').value = 0;
+  $('#cl-cp-val').textContent = 'cp=0';
+  $('#cl-depth-slider').value = 20; if ($('#cl-depth-input')) $('#cl-depth-input').value = 20;
+  $('#cl-minn-slider').value = 0;   if ($('#cl-minn-input')) $('#cl-minn-input').value = 0;
+  $('#cl-maxleaves-slider').value = 80; if ($('#cl-maxleaves-input')) $('#cl-maxleaves-input').value = 80;
+  $('#cl-purity-slider').value = 0; if ($('#cl-purity-input')) $('#cl-purity-input').value = 0;
+  renderClTree();
+});
+$('#cl-reload').addEventListener('click', () => {
+  renderClusteringTab();
+});
+
+// Cut-height slider: 0 (no merging — N clusters) to max fusion height (single cluster).
+// Maps slider 0..1000 → [0, maxH] linearly. Use input event for live re-render.
+const cutHeightBounds = {max: 1};
+function sliderToCut(v){ return cutHeightBounds.max * (v / 1000); }
+$('#cl-cut-slider').addEventListener('input', e => {
+  STATE.cl_use_k_override = false;
+  STATE.cl_cut_height = sliderToCut(+e.target.value);
+  setCtl('cl-cut', STATE.cl_cut_height.toFixed(3),
+         STATE.cl_cut_height === 0 ? '0 (N clusters)' : STATE.cl_cut_height.toFixed(3));
+  renderClDendrogram(); renderClClusterTable(); renderClScatter();
+});
+$('#cl-k-slider').addEventListener('input', e => {
+  STATE.cl_k = +e.target.value;
+  STATE.cl_use_k_override = true;
+  setCtl('cl-k', e.target.value);
+  renderClDendrogram(); renderClClusterTable(); renderClScatter();
+});
+$('#cl-log-height').addEventListener('change', e => { STATE.cl_log_height = e.target.checked; renderClDendrogram(); });
+$('#cl-leaf-font').addEventListener('input', e => {
+  STATE.cl_leaf_font = +e.target.value;
+  $('#cl-leaf-font-val').textContent = e.target.value;
+  renderClDendrogram();
+});
+
+// Number-input textboxes -> drive the paired slider + re-render. These inputs
+// previously had no listeners, so typing in them did nothing. Bidirectional now.
+function bindCtlInput(base, stateKey, render, transform){
+  const inp = $('#' + base + '-input'), sl = $('#' + base + '-slider');
+  if (!inp) return;
+  inp.addEventListener('input', e => {
+    const raw = +e.target.value;
+    if (!Number.isFinite(raw)) return;
+    STATE[stateKey] = transform ? transform(raw) : raw;
+    if (sl && document.activeElement !== sl) {
+      const lo = +sl.min || 0, hi = +sl.max || raw;
+      sl.value = Math.max(lo, Math.min(hi, raw));
+    }
+    render();
+  });
+}
+bindCtlInput('cl-depth', 'cl_max_depth', renderClTree);
+bindCtlInput('cl-minn', 'cl_min_n', renderClTree);
+bindCtlInput('cl-maxleaves', 'cl_max_leaves', renderClTree);
+bindCtlInput('cl-purity', 'cl_purity', renderClTree, v => v / 100);
+// Cut-height input: numeric Ward distance; map onto the 0..1000 slider and
+// re-render the dendrogram-driven panels.
+$('#cl-cut-input') && $('#cl-cut-input').addEventListener('input', e => {
+  const v = Math.max(0, +e.target.value || 0);
+  STATE.cl_use_k_override = false;
+  STATE.cl_cut_height = v;
+  const sl = $('#cl-cut-slider');
+  if (sl && document.activeElement !== sl) {
+    sl.value = cutHeightBounds.max > 0 ? Math.round(1000 * Math.min(v / cutHeightBounds.max, 1)) : 0;
+  }
+  setTxt('#cl-cut-val', v === 0 ? '0 (N clusters)' : v.toFixed(3));
+  renderClDendrogram(); renderClClusterTable(); renderClScatter();
+});
+// K input: number of clusters; mirror to the K slider.
+$('#cl-k-input') && $('#cl-k-input').addEventListener('input', e => {
+  const v = Math.max(1, Math.round(+e.target.value || 1));
+  STATE.cl_k = v;
+  STATE.cl_use_k_override = true;
+  const sl = $('#cl-k-slider');
+  if (sl && document.activeElement !== sl) sl.value = Math.max(+sl.min || 1, Math.min(+sl.max || v, v));
+  renderClDendrogram(); renderClClusterTable(); renderClScatter();
+});
+// (cluster scatter axis/size selectors removed — replaced by class/coords/cluster-filter selectors handled inside renderClScatter)
+
+function updateClSliderRanges(){
+  // cp slider maps log-uniformly to [0, max_cp_in_cptable]
+  const cp = STATE.cptables[clTargetName()];
+  let maxCp = 0;
+  if (cp && cp.length) {
+    for (const r of cp) { const v = +(r.CP || r.cp); if (Number.isFinite(v) && v > maxCp) maxCp = v; }
+  }
+  // Stash on the function as bounds
+  cpBounds.max = maxCp || 1;
+}
+const cpBounds = {max: 1};
+function sliderToCp(v){
+  // 0..1000 → 0..max via square mapping for finer control near 0
+  const t = v / 1000;
+  return cpBounds.max * t * t;
+}
+
+function renderClusteringTab(){
+  if (!clHasContent()) {
+    $('#cl-empty').style.display = '';
+    $('#cl-content').style.display = 'none';
+    return;
+  }
+  $('#cl-empty').style.display = 'none';
+  $('#cl-content').style.display = '';
+  populateClTargetSelect();
+  updateClSliderRanges();
+  // Set sensible step for the number input based on current cp range
+  const cpInp = $('#cl-cp-input');
+  if (cpInp) {
+    cpInp.max = cpBounds.max;
+    cpInp.step = cpBounds.max > 0.01 ? 0.0001 : 0.000001;
+  }
+  syncCpDisplay(STATE.cl_cp_thresh);
+  // K slider max from dendrogram leaf count
+  if (STATE.dendrogram && STATE.dendrogram.labels) {
+    const N = STATE.dendrogram.labels.length;
+    const maxK = Math.max(1, N);
+    $('#cl-k-slider').max = maxK;
+    if (STATE.cl_k > maxK) STATE.cl_k = maxK;
+    $('#cl-k-slider').value = STATE.cl_k;
+    setCtl('cl-k', STATE.cl_k);
+    // Cut-height slider
+    const heights = (STATE.dendrogram.height || []).map(Number);
+    const maxH = heights.length ? heights[heights.length-1] * 1.05 : 1;
+    cutHeightBounds.max = maxH;
+    if (STATE.cl_cut_height == null) STATE.cl_cut_height = (heights[Math.max(0, N-1-STATE.cl_k)] || 0);
+    if (STATE.cl_cut_height > maxH) STATE.cl_cut_height = maxH;
+    $('#cl-cut-slider').value = Math.round(1000 * STATE.cl_cut_height / maxH);
+    setCtl('cl-cut', STATE.cl_cut_height.toFixed(3),
+           STATE.cl_cut_height === 0 ? '0 (N clusters)' : STATE.cl_cut_height.toFixed(3));
+  }
+  // Max-leaves slider max from full tree
+  const data = currentTreeData();
+  if (data && data.root) {
+    const fullLeaves = (function count(n){ if (n.leaf) return 1; let s=0; for (const c of n.children||[]) s += count(c); return s; })(data.root);
+    $('#cl-maxleaves-slider').max = Math.max(2, fullLeaves);
+    if (STATE.cl_max_leaves > fullLeaves) STATE.cl_max_leaves = fullLeaves;
+    $('#cl-maxleaves-slider').value = STATE.cl_max_leaves;
+    setCtl('cl-maxleaves', STATE.cl_max_leaves);
+  }
+  renderClHeadline();
+  renderClTree();
+  renderClCp();
+  renderClImp();
+  renderClDendrogram();
+  renderClScatter();
+  renderClClusterTable();
+}
+
+// ---- Cross-tabulation panel — does adding year+price change the offshore sign? ----
+// "Does adding year + price (PPD covariates) flip the sign of the offshore coefficient?"
+//
+// Two views, both scoped to the focused outcome / family:
+//   1) Cross-tab of sign(coef) × has_ppd over rows of spec_features.
+//   2) Per-treatment paired bars: share-positive without PPD vs with PPD,
+//      computed from signflip pairs (which actually pair same-spec rows).
+function clHeadlineFilters(){
+  const sigMode = STATE.cl_headline_sig;
+  const focus   = STATE.cl_focus || '';
+  const useFocus = !!focus;
+  const treatGroup = STATE.cl_headline_treats || 'all';
+  const treatSet = HEADLINE_TREAT_GROUPS[treatGroup] || null;  // null = all
+  const scopeLabel = (useFocus ? focus.replace(/^outcome:/,'').replace(/^family:/,'') : 'all outcomes')
+                     + ' · ' + (treatSet ? `${treatGroup} treatments` : 'all treatments');
+  return {sigMode, useFocus, focus, treatSet, treatGroup, scopeLabel};
+}
+function clHeadlineMatchRow(r, useFocus, focus, treatSet){
+  if (treatSet && !treatSet.has(r.treatment_short_id)) return false;
+  if (!useFocus) return true;
+  if (focus.startsWith('outcome:')) return r.outcome === focus.slice(8);
+  if (focus.startsWith('family:'))  return r.outcome_family === focus.slice(7);
+  return true;
+}
+
+function renderClHeadline(){
+  const {sigMode, useFocus, focus, treatSet, treatGroup, scopeLabel} = clHeadlineFilters();
+  $('#cl-headline-scope').textContent = `· ${scopeLabel}`;
+
+  // ---- Cross-tab from spec_features ----
+  const features = STATE.features || [];
+  let frows = features.filter(r => clHeadlineMatchRow(r, useFocus, focus, treatSet));
+  if (sigMode === 'sig_either' || sigMode === 'sig_both') {
+    // Each spec_features row is a single observation; "either/both" applies at pair level.
+    // For the cross-tab, sig_either = is_sig=1; sig_both = treat the row as a pair member,
+    // we approximate by using is_sig=1 (most conservative single-row reading).
+    frows = frows.filter(r => +r.is_sig === 1);
+  }
+
+  // Cross-tab: rows = sign_pos (negative=0 / positive=1), cols = has_ppd (0 / 1)
+  const xt = {0:{0:0,1:0}, 1:{0:0,1:0}};
+  for (const r of frows) {
+    const s = +r.sign_pos === 1 ? 1 : 0;
+    const p = +r.has_ppd  === 1 ? 1 : 0;
+    xt[s][p]++;
+  }
+  const total = xt[0][0]+xt[0][1]+xt[1][0]+xt[1][1] || 1;
+  const colTot = {0: xt[0][0]+xt[1][0], 1: xt[0][1]+xt[1][1]};
+  const rowTot = {0: xt[0][0]+xt[0][1], 1: xt[1][0]+xt[1][1]};
+  const sharePosNoPpd = colTot[0] ? xt[1][0]/colTot[0] : NaN;
+  const sharePosWithPpd = colTot[1] ? xt[1][1]/colTot[1] : NaN;
+  const ppdShift = (Number.isFinite(sharePosNoPpd) && Number.isFinite(sharePosWithPpd))
+    ? (sharePosWithPpd - sharePosNoPpd) : NaN;
+
+  const tbl = $('#cl-headline-xtab');
+  const cell = (n,frac,role) => `<td class="num" style="background:${role};color:#fff">${n}<div style="font-size:9px;opacity:.85">${(frac*100).toFixed(1)}%</div></td>`;
+  // Colour by row-share: red if positive-coef cell is the bigger share of its column, green if negative-coef cell is.
+  const c00 = colTot[0] ? xt[0][0]/colTot[0] : 0; // share of negative w/o PPD
+  const c10 = colTot[0] ? xt[1][0]/colTot[0] : 0; // share of positive w/o PPD
+  const c01 = colTot[1] ? xt[0][1]/colTot[1] : 0;
+  const c11 = colTot[1] ? xt[1][1]/colTot[1] : 0;
+  const colorCell = (n, share, isPositiveRow) => {
+    const tint = Math.max(0.15, Math.min(0.85, share));
+    const r = isPositiveRow ? `rgba(220,38,38,${tint})` : `rgba(22,163,74,${tint})`;
+    return `<td class="num" style="background:${r};color:#fff;text-align:center;padding:7px 10px">
+      <div style="font-weight:700;font-size:14px">${n}</div>
+      <div style="font-size:9px;opacity:.9">${(share*100).toFixed(1)}% of col</div>
+    </td>`;
+  };
+  let html = `<thead><tr><th></th><th class="num">no PPD<br/><span style="font-size:9px;color:var(--muted)">(year+price absent)</span></th><th class="num">with PPD<br/><span style="font-size:9px;color:var(--muted)">(year+price added)</span></th><th class="num">row total</th></tr></thead><tbody>`;
+  html += `<tr><td><b style="color:#dc2626">positive coef</b><div style="font-size:9px;color:var(--muted)">sign_pos = 1</div></td>`
+        + colorCell(xt[1][0], c10, true) + colorCell(xt[1][1], c11, true)
+        + `<td class="num">${rowTot[1]} <div style="font-size:9px;color:var(--muted)">${(rowTot[1]/total*100).toFixed(1)}%</div></td></tr>`;
+  html += `<tr><td><b style="color:#16a34a">negative coef</b><div style="font-size:9px;color:var(--muted)">sign_pos = 0</div></td>`
+        + colorCell(xt[0][0], c00, false) + colorCell(xt[0][1], c01, false)
+        + `<td class="num">${rowTot[0]} <div style="font-size:9px;color:var(--muted)">${(rowTot[0]/total*100).toFixed(1)}%</div></td></tr>`;
+  html += `<tr style="border-top:1px solid var(--border)"><td><span style="color:var(--muted)">col total</span></td>`
+        + `<td class="num">${colTot[0]}</td><td class="num">${colTot[1]}</td><td class="num">${total}</td></tr>`;
+  html += `</tbody>`;
+  tbl.innerHTML = html;
+
+  // Callout
+  const sigSuffix = sigMode === 'sig_either' ? ' (significant rows only)' : (sigMode === 'sig_both' ? ' (significant rows only — pair-version uses pairs panel)' : '');
+  const callout = $('#cl-headline-callout');
+  if (!Number.isFinite(ppdShift)) {
+    callout.innerHTML = `<span style="color:var(--muted)">Not enough data in selected scope.</span>`;
+  } else {
+    const shiftPct = (ppdShift*100).toFixed(1);
+    const dir = ppdShift > 0 ? 'increases' : (ppdShift < 0 ? 'reduces' : 'does not change');
+    const colour = ppdShift > 0 ? '#dc2626' : (ppdShift < 0 ? '#3b82f6' : 'var(--muted)');
+    callout.innerHTML = `Adding year + price <b style="color:${colour}">${dir}</b> the share of positive-coef specs by `
+      + `<b style="color:${colour}">${(Math.abs(ppdShift)*100).toFixed(1)}pp</b> &middot; `
+      + `<span style="color:var(--muted)">${(sharePosNoPpd*100).toFixed(1)}% → ${(sharePosWithPpd*100).toFixed(1)}%</span>`
+      + `<div style="margin-top:4px;color:var(--dim);font-size:10px">Scope: ${scopeLabel}${sigSuffix} &middot; n=${total} spec rows</div>`;
+  }
+
+  // ---- Per-treatment paired bars from signflip_pairs ----
+  // For each treatment in scope, compute share with positive coef under no-PPD and under with-PPD,
+  // using the pair-level table (one pair = same spec, swapped only on year+price).
+  let prows = (STATE.pairs || []).filter(r => clHeadlineMatchRow(r, useFocus, focus, treatSet));
+  if (sigMode === 'sig_either') prows = prows.filter(r => +r.sig_no_year === 1 || +r.sig_year === 1);
+  if (sigMode === 'sig_both')   prows = prows.filter(r => +r.sig_no_year === 1 && +r.sig_year === 1);
+
+  const byTreat = new Map();
+  for (const p of prows) {
+    const t = p.treatment_short_id || '';
+    if (!byTreat.has(t)) byTreat.set(t, {n:0, pos_no:0, pos_yes:0});
+    const b = byTreat.get(t); b.n++;
+    if (+p.coef_no_year > 0) b.pos_no++;
+    if (+p.coef_year    > 0) b.pos_yes++;
+  }
+  const treatRows = [...byTreat.entries()]
+    .filter(([,b]) => b.n > 0)
+    .map(([t,b]) => ({
+      treat: t,
+      n: b.n,
+      shareNo: b.pos_no / b.n,
+      shareYes: b.pos_yes / b.n,
+      delta: (b.pos_yes - b.pos_no) / b.n
+    }));
+  // Sort by treatment-order list, fallback alphabetic
+  treatRows.sort((a,b) => {
+    const ai = TREAT_ORDER.indexOf(a.treat); const bi = TREAT_ORDER.indexOf(b.treat);
+    return (ai<0?99:ai) - (bi<0?99:bi);
+  });
+
+  const svg = d3.select('#cl-headline-bars'); svg.selectAll('*').remove();
+  if (!treatRows.length) {
+    svg.attr('width', 600).attr('height', 80);
+    svg.append('text').attr('x',16).attr('y',40).attr('fill','var(--muted)').attr('font-size',12)
+      .text('No pairs in selected scope.');
+    return;
+  }
+  const Wparent = document.querySelector('#cl-headline-bars').parentElement.clientWidth - 12;
+  const W = Math.max(540, Wparent);
+  const margin = {top:16, right:140, bottom:30, left:80};
+  const rowH = 26;
+  const H = margin.top + margin.bottom + treatRows.length * rowH;
+  svg.attr('width', W).attr('height', H);
+  const x = d3.scaleLinear().domain([0,1]).range([margin.left, W-margin.right]);
+  const g = svg.append('g');
+  // Grid + axis (top)
+  g.append('g').attr('class','grid').attr('transform',`translate(0,${margin.top-2})`)
+    .call(d3.axisBottom(x).ticks(5).tickSize(-(H-margin.top-margin.bottom+2)).tickFormat(''));
+  g.append('g').attr('class','axis').attr('transform',`translate(0,${margin.top-2})`)
+    .call(d3.axisBottom(x).ticks(5).tickFormat(d3.format('.0%')));
+  g.append('text').attr('x',(margin.left+W-margin.right)/2).attr('y', H-6)
+    .attr('text-anchor','middle').attr('fill','var(--muted)').attr('font-size',10)
+    .text('share of pairs with positive coefficient');
+  // Reference at 50%
+  g.append('line').attr('x1', x(0.5)).attr('x2', x(0.5))
+    .attr('y1', margin.top).attr('y2', H-margin.bottom)
+    .attr('stroke','#475569').attr('stroke-dasharray','2 3');
+
+  treatRows.forEach((r,i) => {
+    const yT = margin.top + i*rowH;
+    const yc = yT + rowH/2;
+    // Treatment label (full name + short)
+    g.append('text').attr('x', margin.left-8).attr('y', yc-2).attr('text-anchor','end')
+      .attr('fill','var(--ink)').attr('font-size',11).text(r.treat);
+    g.append('text').attr('x', margin.left-8).attr('y', yc+10).attr('text-anchor','end')
+      .attr('fill','var(--muted)').attr('font-size',9).text(TREAT_LABEL[r.treat]||'');
+    // Connecting line
+    g.append('line').attr('x1', x(r.shareNo)).attr('x2', x(r.shareYes))
+      .attr('y1', yc).attr('y2', yc).attr('stroke', r.delta < 0 ? '#3b82f6' : (r.delta > 0 ? '#dc2626' : '#475569'))
+      .attr('stroke-width', 1.5).attr('opacity', 0.55);
+    // Without-PPD dot
+    g.append('circle').attr('cx', x(r.shareNo)).attr('cy', yc).attr('r', 5)
+      .attr('fill','#a78bfa').attr('stroke','#fff').attr('stroke-width',0.5);
+    // With-PPD dot
+    g.append('circle').attr('cx', x(r.shareYes)).attr('cy', yc).attr('r', 5)
+      .attr('fill','#f97316').attr('stroke','#fff').attr('stroke-width',0.5);
+    // Delta annotation at right
+    const dStr = (r.delta>0?'+':'') + (r.delta*100).toFixed(0) + 'pp';
+    const dCol = r.delta < 0 ? '#3b82f6' : (r.delta > 0 ? '#dc2626' : 'var(--muted)');
+    g.append('text').attr('x', W-margin.right+10).attr('y', yc-2)
+      .attr('fill', dCol).attr('font-size',11).attr('font-weight',600).text(dStr);
+    g.append('text').attr('x', W-margin.right+10).attr('y', yc+10)
+      .attr('fill', 'var(--muted)').attr('font-size',9).text(`n=${r.n}`);
+  });
+
+  // Top legend
+  const leg = svg.append('g').attr('transform', `translate(${margin.left+4},${margin.top-12})`);
+  leg.append('circle').attr('cx',0).attr('cy',0).attr('r',4).attr('fill','#a78bfa');
+  leg.append('text').attr('x',8).attr('y',3).attr('fill','var(--ink)').attr('font-size',10).text('without PPD');
+  leg.append('circle').attr('cx',110).attr('cy',0).attr('r',4).attr('fill','#f97316');
+  leg.append('text').attr('x',118).attr('y',3).attr('fill','var(--ink)').attr('font-size',10).text('with PPD (year+price)');
+}
+
+$('#cl-headline-sig').addEventListener('change', e => { STATE.cl_headline_sig = e.target.value; renderClHeadline(); });
+$('#cl-headline-treats').addEventListener('change', e => { STATE.cl_headline_treats = e.target.value; renderClHeadline(); });
+
+// ---- rpart tree reconstruction ----
+function buildRpartTree(json){
+  if (!json || !json.frame || !json.frame.length) return null;
+  const frame = json.frame;
+  const splits = json.splits || [];
+  const csplit = json.csplit;
+  const xlevels = json.xlevels || {};
+  const ylevels = json.ylevels || ['0','1'];
+  let fi = 0, si = 0;
+  function recurse(){
+    if (fi >= frame.length) return null;
+    const f = frame[fi++];
+    const node = {
+      node_id: +f.node_id, var: f.var, n: +f.n, dev: +f.dev, yval: f.yval,
+      yval2: Array.isArray(f.yval2) ? f.yval2.map(Number) : null,
+      complexity: +f.complexity, ncompete: +f.ncompete, nsurrogate: +f.nsurrogate,
+      leaf: false, children: []
+    };
+    if (f.var === '<leaf>' || f.var === undefined) {
+      node.leaf = true;
+      node.predClass = ylevels[(+f.yval)-1] ?? String(f.yval);
+      if (node.yval2 && node.yval2.length >= 4) {
+        const k = ylevels.length;
+        node.classCounts = node.yval2.slice(0, k);
+        node.classProbs  = node.yval2.slice(k, 2*k);
+      }
+      return node;
+    }
+    const totalSplits = 1 + (+f.ncompete||0) + (+f.nsurrogate||0);
+    node.primary    = splits[si];
+    node.competes   = splits.slice(si+1, si+1+(+f.ncompete||0));
+    node.surrogates = splits.slice(si+1+(+f.ncompete||0), si+totalSplits);
+    si += totalSplits;
+    node.label      = formatSplitLabel(node.primary, csplit, xlevels);
+    node.leftLabel  = formatSplitLabel(node.primary, csplit, xlevels, true);
+    node.rightLabel = formatSplitLabel(node.primary, csplit, xlevels, false);
+    if (node.yval2 && node.yval2.length >= 4) {
+      const k = ylevels.length;
+      node.classCounts = node.yval2.slice(0, k);
+      node.classProbs  = node.yval2.slice(k, 2*k);
+    }
+    node.predClass = ylevels[(+f.yval)-1] ?? String(f.yval);
+    const left = recurse(), right = recurse();
+    if (left) node.children.push(left);
+    if (right) node.children.push(right);
+    return node;
+  }
+  const root = recurse();
+  function depthPass(n,d=0){ n.depth=d; for (const c of n.children||[]) depthPass(c,d+1); }
+  if (root) depthPass(root);
+  return {root, ylevels, frame, splits, csplit, xlevels};
+}
+
+function formatSplitLabel(split, csplit, xlevels, leftBranch){
+  if (!split) return '';
+  const v = split.var_name;
+  const ncat = +split.ncat;
+  const idx = +split.index;
+  if (ncat === -1) return leftBranch === undefined ? `${v} < ${fmt(idx)}` : (leftBranch ? `${v} < ${fmt(idx)}` : `${v} ≥ ${fmt(idx)}`);
+  if (ncat === 1)  return leftBranch === undefined ? `${v} ≥ ${fmt(idx)}` : (leftBranch ? `${v} ≥ ${fmt(idx)}` : `${v} < ${fmt(idx)}`);
+  const levels = xlevels[v] || [];
+  let row = null;
+  if (Array.isArray(csplit)) {
+    if (csplit.length && Array.isArray(csplit[0])) row = csplit[idx-1];
+    else row = csplit;
+  }
+  if (!row) return `${v} ∈ ?`;
+  const left=[], right=[];
+  for (let i = 0; i < ncat; i++) {
+    const lev = levels[i] != null ? levels[i] : `lvl${i+1}`;
+    if (row[i] === 1) left.push(lev);
+    else if (row[i] === 3) right.push(lev);
+  }
+  if (leftBranch === undefined) return `${v} ∈ {${left.slice(0,3).join(', ')}${left.length>3?'…':''}}`;
+  const set = leftBranch ? left : right;
+  const txt = set.length<=3 ? set.join(',') : set.slice(0,2).join(',')+`… (+${set.length-2})`;
+  return `${v} ∈ {${txt}}`;
+}
+
+function currentTreeData(){
+  const key = clTargetName() + '_' + STATE.cl_view;
+  if (!STATE.trees[key]) return null;
+  if (!STATE.trees[key].__built) {
+    STATE.trees[key].__built = buildRpartTree(STATE.trees[key]);
+  }
+  return STATE.trees[key].__built;
+}
+
+// Client-side prune: returns a deep-copied root with subtrees collapsed by
+// any combination of: cp threshold, max depth, min n, max leaves, purity.
+function pruneTreeClient(root, opts){
+  const {cp = 0, maxDepth = 999, minN = 0, maxLeaves = Infinity, purity = 0} = opts || {};
+  function nodeMaxProb(n){
+    if (!n.classProbs || !n.classProbs.length) return 1;
+    let m = 0; for (const p of n.classProbs) if (+p > m) m = +p;
+    return m;
+  }
+  function clone(n, d){
+    const copy = {
+      node_id:n.node_id, var:n.var, n:n.n, leaf:n.leaf, depth:d,
+      yval:n.yval, predClass:n.predClass, complexity:n.complexity,
+      classCounts:n.classCounts, classProbs:n.classProbs,
+      label:n.label, leftLabel:n.leftLabel, rightLabel:n.rightLabel,
+      primary:n.primary, surrogates:n.surrogates, children:[]
+    };
+    const truncate = !n.leaf && (
+      d >= maxDepth ||
+      (Number.isFinite(+n.complexity) && +n.complexity < cp) ||
+      (Number.isFinite(+n.n) && +n.n < minN) ||
+      (purity > 0 && nodeMaxProb(n) < purity)
+    );
+    if (truncate) {
+      copy.leaf = true; copy.children = []; copy.var = '<leaf>';
+    } else if (!n.leaf && n.children) {
+      copy.children = n.children.map(c => clone(c, d+1));
+    }
+    return copy;
+  }
+  const out = clone(root, 0);
+  // Max-leaves post-pass: while too many leaves, collapse the internal node with
+  // the lowest complexity (rpart's "weakest split") until leaf count ≤ maxLeaves.
+  function collectInternals(n, acc){
+    if (!n.leaf) { acc.push(n); for (const c of n.children) collectInternals(c, acc); }
+  }
+  function leafCount(n){ if (n.leaf) return 1; let s=0; for (const c of n.children) s += leafCount(c); return s; }
+  if (Number.isFinite(maxLeaves)) {
+    while (leafCount(out) > maxLeaves) {
+      const internals = []; collectInternals(out, internals);
+      if (!internals.length) break;
+      internals.sort((a,b) => (+a.complexity||0) - (+b.complexity||0));
+      // pick the lowest-complexity internal that is *not* the root if possible (to keep at least one split)
+      const target = internals.find(n => n !== out) || internals[0];
+      target.leaf = true; target.children = []; target.var = '<leaf>';
+    }
+  }
+  return out;
+}
+
+function renderClTree(){
+  const data = currentTreeData();
+  const svg = d3.select('#cl-tree');
+  svg.selectAll('*').remove();
+  const meta = $('#cl-tree-meta');
+  const info = $('#cl-prune-info');
+  if (!data || !data.root) {
+    const tname = clTargetName();
+    meta.innerHTML = tname
+      ? `<span style="color:var(--yellow)">no tree fit for <code>${tname}</code> (${STATE.cl_view}) — outcome may have had too few sig-worse positives at fitting time</span>`
+      : '';
+    info.textContent = '';
+    // Render an inline message in the SVG area
+    const Wparent = document.querySelector('#cl-tree').parentElement.clientWidth - 20;
+    svg.attr('width', Math.max(600, Wparent)).attr('height', 120);
+    svg.append('text').attr('x', 24).attr('y', 60)
+      .attr('fill','var(--muted)').attr('font-size',13)
+      .text(`No decision tree was fit for ${tname || '(unknown target)'}.`);
+    svg.append('text').attr('x', 24).attr('y', 84)
+      .attr('fill','var(--dim)').attr('font-size',11)
+      .text('Try a different focus, switch to "all combined", or pick a different base (A/B/C/D).');
+    return;
+  }
+  const root0 = data.root;
+  let pruned = pruneTreeClient(root0, {
+    cp: STATE.cl_cp_thresh, maxDepth: STATE.cl_max_depth, minN: STATE.cl_min_n,
+    maxLeaves: STATE.cl_max_leaves, purity: STATE.cl_purity
+  });
+  
+  // Bootstrap rendering: If the carried-over parameters prune the tree into a root stump, 
+  // but the tree actually has splits, automatically dial down the CP threshold to get at least one split in.
+  if (pruned.leaf && !root0.leaf && STATE.cl_cp_thresh > 0) {
+    const rootCp = +root0.complexity || 0.001;
+    STATE.cl_cp_thresh = Math.max(0, rootCp - 0.0001);
+    syncCpDisplay(STATE.cl_cp_thresh);
+    pruned = pruneTreeClient(root0, {
+      cp: STATE.cl_cp_thresh, maxDepth: STATE.cl_max_depth, minN: STATE.cl_min_n,
+      maxLeaves: Math.max(2, STATE.cl_max_leaves), purity: STATE.cl_purity
+    });
+  }
+
+  function visit(node, parentVisible){
+    const collapsed = STATE.cl_collapsed.has(node.node_id);
+    node._collapsed = collapsed;
+    node._visible = parentVisible;
+    if (parentVisible && !collapsed) for (const c of node.children||[]) visit(c, true);
+    else for (const c of node.children||[]) visit(c, false);
+  }
+  visit(pruned, true);
+
+  function shape(node){
+    if (node._collapsed || !node.children || !node.children.length) return {...node, children:[]};
+    return {...node, children: node.children.map(shape)};
+  }
+  const h = d3.hierarchy(shape(pruned));
+  const Wparent = document.querySelector('#cl-tree').parentElement.clientWidth - 20;
+  const W = Math.max(900, Math.min(Wparent, 2400));
+  const H = Math.max(420, h.descendants().length * 32);
+  svg.attr('width', W).attr('height', H);
+  const margin = {top:24, right:140, bottom:24, left:140};
+  const layout = d3.tree().size([H - margin.top - margin.bottom, W - margin.left - margin.right]);
+  layout(h);
+  const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+  const linkGen = d3.linkHorizontal().x(d => d.y).y(d => d.x);
+  g.append('g').selectAll('path').data(h.links()).enter()
+    .append('path').attr('class','link').attr('d', linkGen);
+
+  g.append('g').selectAll('text.edge').data(h.links()).enter()
+    .append('text').attr('class','edge')
+    .attr('x', d => (d.source.y + d.target.y)/2)
+    .attr('y', d => (d.source.x + d.target.x)/2 - 4)
+    .attr('text-anchor','middle').attr('fill','var(--dim)').attr('font-size',9)
+    .text((d) => {
+      const idx = d.source.children ? d.source.children.indexOf(d.target) : -1;
+      const node = d.source.data;
+      if (!node.primary) return '';
+      return idx === 0 ? node.leftLabel : node.rightLabel;
+    });
+
+  // Tree leaf colour: respect WORSE_SIGN where the target tree relates to "worse" outcomes.
+  // For *_worse / significant_worse / credible_flip targets, predClass=1 means "worse-for-tenants positive".
+  function leafFill(d){
+    const pc = d.data.predClass;
+    if (pc === '1') return 'var(--red)';
+    if (pc === '0') return 'var(--green)';
+    return 'var(--accent2)';
+  }
+
+  const nodes = g.append('g').selectAll('g.node').data(h.descendants()).enter()
+    .append('g').attr('class', d => 'node ' + (d.children ? 'node--internal' : 'node--leaf') + (d.data._collapsed ? ' node--collapsed' : ''))
+    .attr('transform', d => `translate(${d.y},${d.x})`);
+  nodes.append('circle').attr('r', d => d.data.leaf ? 6 : 7)
+    .attr('fill', d => {
+      if (d.data._collapsed) return 'var(--accent)';
+      if (d.data.leaf) return leafFill(d);
+      const probs = d.data.classProbs;
+      if (probs && probs.length >= 2) {
+        const p1 = probs[1];
+        const r = Math.round(34 + (220-34)*p1);
+        const g_ = Math.round(197 - (197-38)*p1);
+        return `rgb(${r},${g_},100)`;
+      }
+      return 'var(--panel2)';
+    });
+
+  nodes.filter(d => !d.data.leaf).on('click', (ev,d) => {
+    if (STATE.cl_collapsed.has(d.data.node_id)) STATE.cl_collapsed.delete(d.data.node_id);
+    else STATE.cl_collapsed.add(d.data.node_id);
+    renderClTree();
+  });
+
+  nodes.filter(d => !d.data.leaf && !d.data._collapsed).append('text')
+    .attr('y', -12).attr('text-anchor','middle')
+    .attr('font-size', 11).attr('fill','var(--ink)')
+    .text(d => d.data.label || d.data.var);
+
+  nodes.filter(d => d.data.leaf || d.data._collapsed).append('text')
+    .attr('y', 22).attr('text-anchor','middle').attr('fill','var(--ink)').attr('font-size',10)
+    .text(d => `${d.data.predClass} (n=${d.data.n})`);
+  nodes.filter(d => d.data.leaf || d.data._collapsed).append('text')
+    .attr('y', 34).attr('text-anchor','middle').attr('fill','var(--muted)').attr('font-size',9)
+    .text(d => d.data.classProbs ? `p1=${(+d.data.classProbs[1]).toFixed(2)}` : '');
+
+  if (STATE.cl_leaves_only) {
+    nodes.filter(d => !d.data.leaf && !d.data._collapsed).style('display','none');
+  }
+
+  nodes.on('mouseenter', (ev,d) => {
+    const n = d.data;
+    let html = `<div><b>${n.leaf ? 'Leaf' : 'Internal'}</b> &middot; node ${n.node_id}</div>`;
+    if (n.label) html += `<div style="color:var(--accent2)">${n.label}</div>`;
+    html += `<div class="row"><span class="k">n</span> <b>${n.n}</b></div>`;
+    if (Number.isFinite(+n.complexity)) html += `<div class="row"><span class="k">complexity</span> ${(+n.complexity).toExponential(2)}</div>`;
+    if (n.classCounts) html += `<div class="row"><span class="k">counts</span> ${n.classCounts.map(Math.round).join(' / ')}</div>`;
+    if (n.classProbs)  html += `<div class="row"><span class="k">p(class)</span> ${n.classProbs.map(v=>(+v).toFixed(3)).join(' / ')}</div>`;
+    if (n.predClass != null) html += `<div class="row"><span class="k">predicts</span> <b>${n.predClass}</b></div>`;
+    if (n.surrogates && n.surrogates.length) {
+      html += `<div style="margin-top:4px;color:var(--muted)">surrogates:</div>`;
+      html += n.surrogates.slice(0,3).map(s => `<div style="font-size:10px;color:var(--dim)">${formatSplitLabel(s, data.csplit, data.xlevels)}</div>`).join('');
+    }
+    showTip(html, ev);
+  }).on('mousemove', moveTip).on('mouseleave', hideTip);
+
+  const totalLeaves = h.leaves().length;
+  const totalInternal = h.descendants().length - totalLeaves;
+  meta.innerHTML = `&middot; ${totalLeaves} leaves, ${totalInternal} internal nodes`;
+  info.innerHTML = `cp ≥ ${fmtCp(STATE.cl_cp_thresh)}, depth ≤ ${STATE.cl_max_depth}, n ≥ ${STATE.cl_min_n}, leaves ≤ ${STATE.cl_max_leaves}, purity ≥ ${(100*STATE.cl_purity).toFixed(0)}% (full tree: ${countNodes(root0)})`;
+}
+
+function countNodes(n){
+  let leaves = 0, internal = 0;
+  (function walk(x){ if (x.leaf) leaves++; else { internal++; for (const c of x.children||[]) walk(c); } })(n);
+  return `${leaves} leaves / ${internal} internal`;
+}
+
+function renderClCp(){
+  const svg = d3.select('#cl-cp');
+  svg.selectAll('*').remove();
+  const W = Math.min(900, document.querySelector('#cl-cp').parentElement.clientWidth - 20);
+  // Show an in-panel message instead of a silent blank when there is nothing to plot.
+  const msg = (t) => {
+    svg.attr('width', Math.max(420, W)).attr('height', 90);
+    svg.append('text').attr('x', 16).attr('y', 48).attr('fill','var(--muted)').attr('font-size', 12).text(t);
+  };
+  const cp = STATE.cptables[clTargetName()];
+  if (!cp || !cp.length) { msg('No CV / cp table for this target — nothing to prune.'); return; }
+  const data = cp.filter(r => Number.isFinite(+r.nsplit) && Number.isFinite(+r.xerror))
+                 .map(r => ({...r, CP: +(r.CP || r.cp)}));
+  if (!data.length) { msg('CV table has no usable rows.'); return; }
+  const nsExtent = d3.extent(data, d => +d.nsplit);
+  if (data.length < 2 || nsExtent[0] === nsExtent[1]) {
+    msg('Tree is a root stump (no splits) — no CV pruning path to show.'); return;
+  }
+  const H = 320;
+  const margin = {top:14, right:24, bottom:42, left:54};
+  svg.attr('width', W).attr('height', H);
+  const x = d3.scaleLinear().domain(nsExtent).range([margin.left, W-margin.right]).nice();
+  const yValsAll = data.flatMap(d => [+d.xerror+(+d.xstd||0), +d.xerror-(+d.xstd||0), +d.rel_error]);
+  const y = d3.scaleLinear().domain(d3.extent(yValsAll)).range([H-margin.bottom, margin.top]).nice();
+  const g = svg.append('g');
+  g.append('g').attr('class','grid').attr('transform',`translate(0,${H-margin.bottom})`)
+    .call(d3.axisBottom(x).ticks(8).tickSize(-(H-margin.top-margin.bottom)).tickFormat(''));
+  g.append('g').attr('class','grid').attr('transform',`translate(${margin.left},0)`)
+    .call(d3.axisLeft(y).ticks(6).tickSize(-(W-margin.left-margin.right)).tickFormat(''));
+  g.append('g').attr('class','axis').attr('transform',`translate(0,${H-margin.bottom})`).call(d3.axisBottom(x).ticks(8));
+  g.append('g').attr('class','axis').attr('transform',`translate(${margin.left},0)`).call(d3.axisLeft(y));
+  g.append('text').attr('x',(W-margin.right+margin.left)/2).attr('y',H-8).attr('text-anchor','middle').attr('fill','var(--muted)').text('nsplit');
+  g.append('text').attr('transform',`translate(14,${(H-margin.bottom+margin.top)/2})rotate(-90)`).attr('text-anchor','middle').attr('fill','var(--muted)').text('error');
+
+  const area = d3.area().x(d => x(+d.nsplit)).y0(d => y((+d.xerror)+(+d.xstd||0))).y1(d => y((+d.xerror)-(+d.xstd||0)));
+  g.append('path').datum(data).attr('d', area).attr('fill','rgba(96,165,250,.15)');
+  const lineX = d3.line().x(d => x(+d.nsplit)).y(d => y(+d.xerror));
+  g.append('path').datum(data).attr('d', lineX).attr('fill','none').attr('stroke','var(--accent2)').attr('stroke-width',2);
+  const lineRel = d3.line().x(d => x(+d.nsplit)).y(d => y(+d.rel_error));
+  g.append('path').datum(data).attr('d', lineRel).attr('fill','none').attr('stroke','var(--orange)').attr('stroke-width',1.4).attr('stroke-dasharray','4 3');
+  g.append('g').selectAll('circle').data(data).enter().append('circle')
+    .attr('cx', d => x(+d.nsplit)).attr('cy', d => y(+d.xerror)).attr('r',3.5).attr('fill','var(--accent2)');
+
+  const minIdx = data.reduce((bi,d,i,a) => +d.xerror < +a[bi].xerror ? i : bi, 0);
+  const thresh = +data[minIdx].xerror + (+data[minIdx].xstd || 0);
+  g.append('line').attr('x1',margin.left).attr('x2',W-margin.right).attr('y1',y(thresh)).attr('y2',y(thresh)).attr('stroke','var(--yellow)').attr('stroke-dasharray','4 4');
+  g.append('text').attr('x',W-margin.right-4).attr('y',y(thresh)-4).attr('text-anchor','end').attr('fill','var(--yellow)').attr('font-size',10).text('1-SE threshold');
+  const bestIdx = data.findIndex(d => +d.xerror <= thresh);
+  if (bestIdx >= 0) {
+    const d = data[bestIdx];
+    g.append('circle').attr('cx', x(+d.nsplit)).attr('cy', y(+d.xerror)).attr('r', 6).attr('fill','none').attr('stroke','var(--yellow)').attr('stroke-width',2);
+    g.append('text').attr('x', x(+d.nsplit)+8).attr('y', y(+d.xerror)-8).attr('fill','var(--yellow)').attr('font-size',10).text(`pruned: nsplit=${d.nsplit}, cp=${fmt(d.CP)}`);
+  }
+  // Highlight where the current cp threshold sits on the curve. At cp=0 (default)
+  // no row satisfies CP<=0 — but that IS the full tree, i.e. the last/least-pruned
+  // row (max nsplit). Resolve that explicitly so the marker is always visible.
+  {
+    const closest = STATE.cl_cp_thresh > 0
+      ? data.find(d => +d.CP <= STATE.cl_cp_thresh)
+      : data.reduce((b,d) => +d.nsplit > +b.nsplit ? d : b, data[0]); // cp=0 → full tree (max nsplit)
+    if (closest) {
+      g.append('circle').attr('cx', x(+closest.nsplit)).attr('cy', y(+closest.xerror)).attr('r', 8).attr('fill','none').attr('stroke','var(--green)').attr('stroke-width',2).attr('stroke-dasharray','3 2');
+      g.append('text').attr('x', x(+closest.nsplit)+10).attr('y', y(+closest.xerror)+18).attr('fill','var(--green)').attr('font-size',10)
+        .text(STATE.cl_cp_thresh > 0 ? `slider cp=${fmtCp(STATE.cl_cp_thresh)}` : 'slider cp=0 (full tree)');
+    }
+  }
+  g.append('text').attr('x', margin.left+4).attr('y', margin.top+2).attr('fill','var(--accent2)').attr('font-size',10).text('xerror (CV) ± xstd');
+  g.append('text').attr('x', margin.left+4).attr('y', margin.top+15).attr('fill','var(--orange)').attr('font-size',10).text('rel_error (training)');
+}
+
+function renderClImp(){
+  const svg = d3.select('#cl-imp');
+  svg.selectAll('*').remove();
+  const imp = STATE.importance[clTargetName()];
+  if (!imp || !imp.length) return;
+  const data = imp.filter(d => Number.isFinite(+d.importance) && +d.importance > 0)
+                  .map(d => ({variable:d.variable, importance:+d.importance}))
+                  .sort((a,b) => b.importance - a.importance);
+  if (!data.length) return;
+  const total = data.reduce((s,d) => s+d.importance, 0) || 1;
+  data.forEach(d => d.share = d.importance / total);
+  const W = Math.min(900, document.querySelector('#cl-imp').parentElement.clientWidth - 20);
+  const rowH = 22;
+  const margin = {top:8, right:60, bottom:8, left:170};
+  const H = margin.top + margin.bottom + data.length * rowH;
+  svg.attr('width', W).attr('height', H);
+  const x = d3.scaleLinear().domain([0, d3.max(data, d => d.share)]).range([margin.left, W-margin.right]);
+  const g = svg.append('g');
+  data.forEach((d,i) => {
+    const yy = margin.top + i*rowH;
+    g.append('rect').attr('x', margin.left).attr('y', yy+3).attr('width', x(d.share)-margin.left).attr('height', rowH-6).attr('fill','var(--accent2)').attr('opacity',.85);
+    g.append('text').attr('x', margin.left-6).attr('y', yy+rowH/2+4).attr('text-anchor','end').attr('fill','var(--ink)').attr('font-size',11).text(d.variable);
+    g.append('text').attr('x', x(d.share)+4).attr('y', yy+rowH/2+4).attr('fill','var(--muted)').attr('font-size',10).text(fmtPct(d.share,1));
+  });
+}
+
+// ---- Dendrogram with client-side cutreeK ----
+function cutreeK(merge, N, K){
+  // merge: array of [a,b]; negative = leaf, positive = step
+  const labels = new Array(N);
+  for (let i = 0; i < N; i++) labels[i] = -(i+1);
+  const nMerges = Math.max(0, N - K);
+  for (let k = 0; k < nMerges; k++) {
+    const [a,b] = merge[k];
+    const newLabel = k + 1;
+    for (let i = 0; i < N; i++) {
+      if (labels[i] === a || labels[i] === b) labels[i] = newLabel;
+    }
+  }
+  // Renumber 1..K
+  const seen = new Map();
+  let nextId = 1;
+  const result = new Array(N);
+  for (let i = 0; i < N; i++) {
+    if (!seen.has(labels[i])) seen.set(labels[i], nextId++);
+    result[i] = seen.get(labels[i]);
+  }
+  return result;
+}
+
+function renderClDendrogram(){
+  const svg = d3.select('#cl-dend');
+  svg.selectAll('*').remove();
+  const dd = STATE.dendrogram;
+  if (!dd || !dd.merge || !dd.order || !dd.height) return;
+  const labels = dd.labels || [];
+  const order  = (dd.order || []).map(Number);
+  const height = (dd.height || []).map(Number);
+  const N = labels.length;
+  if (N < 2) return;
+
+  let pairs;
+  if (Array.isArray(dd.merge[0])) pairs = dd.merge.map(r => r.map(Number));
+  else {
+    const half = dd.merge.length / 2;
+    pairs = [];
+    for (let i = 0; i < half; i++) pairs.push([+dd.merge[i], +dd.merge[i+half]]);
+  }
+
+  const leafX = new Array(N);
+  order.forEach((leafIdx, pos) => { leafX[leafIdx-1] = pos; });
+
+  const mergeX = new Array(pairs.length);
+  function nodeX(ref){ if (ref < 0) return leafX[(-ref)-1]; return mergeX[ref-1]; }
+  function nodeY(ref){ if (ref < 0) return 0; return height[ref-1]; }
+  for (let k = 0; k < pairs.length; k++) {
+    mergeX[k] = (nodeX(pairs[k][0]) + nodeX(pairs[k][1])) / 2;
+  }
+
+  // Recompute clustering — use K override if user set it, otherwise derive K from cut height.
+  let K;
+  if (STATE.cl_use_k_override || STATE.cl_cut_height == null) {
+    K = STATE.cl_k;
+  } else {
+    // K = number of merges with height > cut_height + 1 (one per cut). Equivalently:
+    // count merges with height <= cut_height = N - K. Cap K to [1, N].
+    let merged = 0;
+    for (const h of height) if (+h <= STATE.cl_cut_height) merged++;
+    K = Math.max(1, Math.min(N, N - merged));
+    STATE.cl_k = K;
+    if($('#cl-k-slider')) $('#cl-k-slider').value = K;
+    if($('#cl-k-input')) $('#cl-k-input').value = K;
+  }
+  const PAL = ['#377EB8','#4DAF4A','#E41A1C','#984EA3','#FF7F00','#A65628','#F781BF','#999999','#66C2A5','#FC8D62','#8DA0CB','#E78AC3'];
+  const palette = K <= 8 && dd.palette && dd.palette.length >= Math.min(K,8) ? dd.palette.concat(PAL) : PAL;
+  const leafCluster = cutreeK(pairs, N, K);
+
+  // Sign per leaf
+  const leafSign = new Array(N).fill('zero');
+  if (Array.isArray(dd.row_sign)) {
+    const map = new Map(dd.row_sign.map(l => [String(l.leaf_label), l.sign || (l.median_coef>0?'positive':l.median_coef<0?'negative':'zero')]));
+    labels.forEach((lab,i) => { if (map.has(lab)) leafSign[i] = map.get(lab); });
+  } else if (Array.isArray(dd.leaves)) {
+    const map = new Map(dd.leaves.map(l => [String(l.leaf_label), +l.median_coef]));
+    labels.forEach((lab,i) => {
+      const v = map.get(lab);
+      if (v != null) leafSign[i] = v > 0 ? 'positive' : (v < 0 ? 'negative' : 'zero');
+    });
+  }
+
+  const Wparent = document.querySelector('#cl-dend').parentElement.clientWidth - 20;
+  const W = Math.max(900, Math.min(Wparent, 2400));
+  const margin = {top:24, right:24, bottom:200, left:60};
+  const innerW = W - margin.left - margin.right;
+  const innerH = 380;
+  const H = innerH + margin.top + margin.bottom;
+  svg.attr('width', W).attr('height', H);
+  const xScale = d3.scaleLinear().domain([-0.5, N-0.5]).range([0, innerW]);
+  const maxH = d3.max(height) * 1.05;
+  const yScale = STATE.cl_log_height
+    ? d3.scaleSymlog().domain([0, maxH]).range([innerH, 0])
+    : d3.scaleLinear().domain([0, maxH]).range([innerH, 0]);
+  const g = svg.append('g').attr('transform',`translate(${margin.left},${margin.top})`);
+
+  g.append('g').attr('class','axis').call(d3.axisLeft(yScale).ticks(5));
+  g.append('text').attr('transform',`translate(-44,${innerH/2})rotate(-90)`).attr('text-anchor','middle').attr('fill','var(--muted)').text('Ward distance' + (STATE.cl_log_height?' (symlog)':''));
+
+  // Cut line: prefer the explicit cut-height when not in K-override mode, else derive from K.
+  const cutH = (!STATE.cl_use_k_override && STATE.cl_cut_height != null)
+    ? STATE.cl_cut_height
+    : (() => { const kCut = N - K; return (kCut > 0 && kCut < pairs.length) ? (height[kCut-1] + height[kCut]) / 2 : 0; })();
+  if (cutH > 0) {
+    g.append('line').attr('x1',0).attr('x2',innerW).attr('y1',yScale(cutH)).attr('y2',yScale(cutH))
+      .attr('stroke','var(--yellow)').attr('stroke-dasharray','5 4').attr('stroke-width',1.5);
+    g.append('text').attr('x', innerW-4).attr('y', yScale(cutH)-4).attr('text-anchor','end').attr('fill','var(--yellow)').attr('font-size',10).text(`cut=${cutH.toFixed(3)} → K=${K}`);
+  } else {
+    g.append('text').attr('x', innerW-4).attr('y', 12).attr('text-anchor','end').attr('fill','var(--yellow)').attr('font-size',10).text(`cut=0 → K=${K} (N=${N} clusters)`);
+  }
+
+  const segs = [];
+  for (let kStep = 0; kStep < pairs.length; kStep++) {
+    const [a,b] = pairs[kStep];
+    const h = height[kStep];
+    const xa = nodeX(a), xb = nodeX(b);
+    const ya = nodeY(a), yb = nodeY(b);
+    segs.push({x1:xa, y1:ya, x2:xa, y2:h});
+    segs.push({x1:xb, y1:yb, x2:xb, y2:h});
+    segs.push({x1:xa, y1:h, x2:xb, y2:h});
+  }
+  g.append('g').selectAll('line').data(segs).enter().append('line')
+    .attr('x1', d => xScale(d.x1)).attr('y1', d => yScale(d.y1))
+    .attr('x2', d => xScale(d.x2)).attr('y2', d => yScale(d.y2))
+    .attr('stroke','var(--ink)').attr('stroke-width',1).attr('opacity',.85);
+
+  // Cluster bands at bottom
+  const bandY = innerH + 6, bandH = 8;
+  for (let pos = 0; pos < N; pos++) {
+    const xm = xScale(pos);
+    const idx = order[pos] - 1;
+    const c = leafCluster[idx];
+    g.append('rect').attr('x', xm-6).attr('y', bandY).attr('width', 12).attr('height', bandH)
+      .attr('fill', c ? palette[(c-1) % palette.length] : '#444');
+  }
+  // Sign squares
+  for (let pos = 0; pos < N; pos++) {
+    const xm = xScale(pos);
+    const idx = order[pos] - 1;
+    const s = leafSign[idx];
+    const fill = s === 'positive' ? '#dc2626' : (s === 'negative' ? '#3b82f6' : '#64748b');
+    g.append('rect').attr('x', xm-4).attr('y', innerH-2).attr('width', 8).attr('height', 4).attr('fill', fill);
+  }
+
+  // Leaf labels
+  const lf = STATE.cl_leaf_font || 10;
+  const labG = g.append('g');
+  for (let pos = 0; pos < N; pos++) {
+    const xm = xScale(pos);
+    const idx = order[pos] - 1;
+    const lab = labels[idx];
+    labG.append('text')
+      .attr('transform', `translate(${xm},${innerH + bandH + 18}) rotate(-60)`)
+      .attr('text-anchor','end').attr('fill','var(--muted)')
+      .style('font-size', lf + 'px')   // inline style overrides the shared `svg.dend text{font:11px}` CSS rule
+      .text(lab);
+  }
+
+  // Cluster legend
+  const counts = {};
+  leafCluster.forEach(c => { counts[c] = (counts[c]||0)+1; });
+  const legG = svg.append('g').attr('transform',`translate(${margin.left},${H-22})`);
+  Object.keys(counts).sort((a,b)=>+a-+b).forEach((c,i) => {
+    const lx = i*150;
+    legG.append('rect').attr('x',lx).attr('y',0).attr('width',12).attr('height',12).attr('fill', palette[(c-1) % palette.length]);
+    legG.append('text').attr('x', lx+18).attr('y', 10).attr('fill','var(--muted)').attr('font-size',11).text(`Cluster ${c} (n=${counts[c]})`);
+  });
+
+  // Stash leafCluster on STATE so the cluster table can use the live K
+  STATE.cl_live_clusters = labels.map((lab,i) => ({leaf_label:lab, cluster_id:leafCluster[i]}));
+}
+
+// ---- Cluster table ----
+$('#cl-cluster-filter').addEventListener('change', e => { STATE.cl_cluster_filter = e.target.value; renderClClusterTable(); });
+$('#cl-cluster-search').addEventListener('input', e => { STATE.cl_cluster_search = e.target.value.trim().toLowerCase(); renderClClusterTable(); });
+
+// ---- Cluster scatter — coef without PPD vs with PPD, coloured by cluster ----
+function renderClScatter(){
+  const svg = d3.select('#cl-scatter-cluster');
+  svg.selectAll('*').remove();
+  if (!STATE.pairs.length || !STATE.cl_live_clusters || !STATE.cl_live_clusters.length) return;
+  const PAL = ['#377EB8','#4DAF4A','#E41A1C','#984EA3','#FF7F00','#A65628','#F781BF','#999999','#66C2A5','#FC8D62','#8DA0CB','#E78AC3'];
+  const dd = STATE.dendrogram;
+  const palette = (dd && dd.palette && dd.palette.length >= 4) ? dd.palette.concat(PAL) : PAL;
+
+  // Build cluster lookup by (treatment, outcome)
+  const clusterByLeaf = new Map(STATE.cl_live_clusters.map(c => [c.leaf_label, +c.cluster_id]));
+  // Update cluster-filter dropdown
+  const clusterIds = uniq(STATE.cl_live_clusters.map(c => +c.cluster_id)).sort((a,b)=>a-b);
+  const cfSel = $('#cl-scatter-cluster-filter');
+  if (cfSel) {
+    const cur = cfSel.value;
+    cfSel.innerHTML = '<option value="">all</option>' + clusterIds.map(c => `<option value="${c}">Cluster ${c}</option>`).join('');
+    if (cur && clusterIds.includes(+cur)) cfSel.value = cur;
+  }
+
+  // Map pairs to enriched points
+  const useStd = ($('#cl-scatter-coords') && $('#cl-scatter-coords').value === 'standardised');
+  const xField = useStd ? 'std_no_year' : 'coef_no_year';
+  const yField = useStd ? 'std_year'    : 'coef_year';
+  const classFilter = ($('#cl-scatter-class') && $('#cl-scatter-class').value) || '';
+  const cfilter = ($('#cl-scatter-cluster-filter') && $('#cl-scatter-cluster-filter').value) || '';
+
+  let pairs = STATE.pairs.filter(r => r[xField] != null && r[yField] != null && Number.isFinite(+r[xField]) && Number.isFinite(+r[yField]))
+    .map(r => {
+      const leaf = `${r.treatment_short_id} | ${r.outcome}`;
+      return {...r, leaf_label: leaf, cluster_id: clusterByLeaf.get(leaf)};
+    })
+    .filter(p => p.cluster_id != null);
+  if (classFilter) pairs = pairs.filter(p => p.pair_class === classFilter);
+  if (cfilter)     pairs = pairs.filter(p => +p.cluster_id === +cfilter);
+  if (!pairs.length) return;
+
+  const Wparent = document.querySelector('#cl-scatter-cluster').parentElement.clientWidth - 20;
+  const W = Math.max(900, Math.min(Wparent, 1300));
+  const H = 520;
+  const margin = {top:18, right:140, bottom:48, left:60};
+  svg.attr('width', W).attr('height', H);
+
+  const xs = pairs.map(p => +p[xField]);
+  const ys = pairs.map(p => +p[yField]);
+  const ext = d3.extent([...xs, ...ys]);
+  const pad = (ext[1]-ext[0]) * 0.05 || 1;
+  const dom = [Math.min(ext[0]-pad, 0), Math.max(ext[1]+pad, 0)];
+  const x = d3.scaleLinear().domain(dom).range([margin.left, W-margin.right]).nice();
+  const y = d3.scaleLinear().domain(dom).range([H-margin.bottom, margin.top]).nice();
+
+  // Layered groups (so axes/grid stay still during zoom)
+  const gGrid = svg.append('g');
+  const gPts  = svg.append('g').attr('clip-path','url(#cl-scatter-clip)');
+  const gAxes = svg.append('g');
+  const gLeg  = svg.append('g');
+
+  // Clip
+  svg.append('defs').append('clipPath').attr('id','cl-scatter-clip')
+    .append('rect').attr('x',margin.left).attr('y',margin.top)
+    .attr('width', W-margin.left-margin.right).attr('height', H-margin.top-margin.bottom);
+
+  // Grid
+  gGrid.append('g').attr('class','grid').attr('transform',`translate(0,${H-margin.bottom})`)
+    .call(d3.axisBottom(x).ticks(8).tickSize(-(H-margin.top-margin.bottom)).tickFormat(''));
+  gGrid.append('g').attr('class','grid').attr('transform',`translate(${margin.left},0)`)
+    .call(d3.axisLeft(y).ticks(8).tickSize(-(W-margin.left-margin.right)).tickFormat(''));
+
+  // Reference lines (in points group so they zoom with points)
+  const refs = gPts.append('g');
+  refs.append('line').attr('x1',x(0)).attr('x2',x(0)).attr('y1',margin.top).attr('y2',H-margin.bottom).attr('stroke','#475569').attr('stroke-dasharray','3 3');
+  refs.append('line').attr('x1',margin.left).attr('x2',W-margin.right).attr('y1',y(0)).attr('y2',y(0)).attr('stroke','#475569').attr('stroke-dasharray','3 3');
+  refs.append('line').attr('x1',x(dom[0])).attr('y1',y(dom[0])).attr('x2',x(dom[1])).attr('y2',y(dom[1])).attr('stroke','#3b82f6').attr('stroke-opacity',.4).attr('stroke-dasharray','5 5');
+
+  // Axes (drawn last, on top)
+  const xAx = d3.axisBottom(x).ticks(8);
+  const yAx = d3.axisLeft(y).ticks(8);
+  const gx = gAxes.append('g').attr('class','axis').attr('transform',`translate(0,${H-margin.bottom})`).call(xAx);
+  const gy = gAxes.append('g').attr('class','axis').attr('transform',`translate(${margin.left},0)`).call(yAx);
+  gAxes.append('text').attr('x',(W-margin.right+margin.left)/2).attr('y',H-8).attr('text-anchor','middle').attr('fill','var(--muted)').text(useStd ? 'std coef (no PPD)' : 'coef (no PPD)');
+  gAxes.append('text').attr('transform',`translate(14,${(H-margin.bottom+margin.top)/2})rotate(-90)`).attr('text-anchor','middle').attr('fill','var(--muted)').text(useStd ? 'std coef (with PPD)' : 'coef (with PPD)');
+
+  // Points
+  const pts = gPts.append('g').selectAll('circle').data(pairs).enter().append('circle')
+    .attr('cx', d => x(+d[xField])).attr('cy', d => y(+d[yField]))
+    .attr('r', d => +d.credible_flip===1 ? 5 : (+d.sign_flipped===1 ? 4 : 3))
+    .attr('fill', d => palette[(d.cluster_id-1) % palette.length])
+    .attr('opacity', 0.7)
+    .attr('stroke', d => +d.credible_flip===1 ? '#fff' : '#0a0f1a').attr('stroke-width', 0.8);
+  pts.on('mouseenter', (ev,d) => {
+    showTip(`<div><b>${tlabel(d.treatment_short_id)}</b> &times; <b>${olabel(d.outcome)}</b></div>
+      <div style="color:var(--muted);font-size:10px">${d.model}</div>
+      <div class="row"><span class="k">no-PPD</span> <b>${fmt(d[xField])}</b> p=${fmtP(d.p_no_year)} ${stars(d.p_no_year)}</div>
+      <div class="row"><span class="k">with PPD</span> <b>${fmt(d[yField])}</b> p=${fmtP(d.p_year)} ${stars(d.p_year)}</div>
+      <div class="row"><span class="k">cluster</span> <b style="color:${palette[(d.cluster_id-1)%palette.length]}">${d.cluster_id}</b></div>
+      <div style="margin-top:4px;color:${PAIR_CLASS_COLOUR[d.pair_class]||'var(--muted)'}">${PAIR_CLASS_LABEL[d.pair_class]||d.pair_class}</div>
+      <div style="color:var(--dim);font-size:10px">core=${d.regression_core||''} match=${d.matching_core||'(none)'} tax_band=${d.has_tax_band}</div>`, ev);
+  }).on('mousemove', moveTip).on('mouseleave', hideTip);
+
+  // Cluster legend with counts
+  const clusterCount = {};
+  for (const p of pairs) clusterCount[p.cluster_id] = (clusterCount[p.cluster_id]||0) + 1;
+  const lg = gLeg.attr('transform', `translate(${W-margin.right+8},${margin.top})`);
+  Object.keys(clusterCount).sort((a,b)=>+a-+b).forEach((c,i) => {
+    const yy = i*18;
+    lg.append('rect').attr('x',0).attr('y',yy).attr('width',12).attr('height',12).attr('fill',palette[(+c-1)%palette.length]);
+    lg.append('text').attr('x',18).attr('y',yy+10).attr('fill','var(--muted)').attr('font-size',10).text(`Cluster ${c} (${clusterCount[c]})`);
+  });
+
+  // d3-zoom — pan + scroll-wheel zoom; double-click reset. Extreme close-up enabled for binary-outcome coefs.
+  const zoom = d3.zoom().scaleExtent([0.5, 5000])
+    .on('zoom', ev => {
+      const t = ev.transform;
+      const newX = t.rescaleX(x);
+      const newY = t.rescaleY(y);
+      gx.call(xAx.scale(newX));
+      gy.call(yAx.scale(newY));
+      
+      // Keep dots visually constant size across zoom levels by NOT scaling the group
+      pts.attr('cx', d => newX(+d[xField]))
+         .attr('cy', d => newY(+d[yField]));
+
+      refs.selectAll('line').attr('stroke-width', 1);
+      const dom0 = newX.domain();
+      const refSelection = refs.selectAll('line').nodes();
+      if(refSelection.length >= 3) {
+         d3.select(refSelection[0]).attr('x1', newX(0)).attr('x2', newX(0));
+         d3.select(refSelection[1]).attr('y1', newY(0)).attr('y2', newY(0));
+         d3.select(refSelection[2]).attr('x1', newX(dom[0])).attr('y1', newY(dom[0])).attr('x2', newX(dom[1])).attr('y2', newY(dom[1]));
+      }
+      const xd = dom0;
+      gAxes.select('text.zoom-info').remove();
+      gAxes.append('text').attr('class','zoom-info')
+        .attr('x', W-margin.right-4).attr('y', margin.top+10)
+        .attr('text-anchor','end').attr('fill','var(--dim)').attr('font-size',10)
+        .text(`zoom ${t.k.toFixed(1)}× · x ∈ [${xd[0].toExponential(1)}, ${xd[1].toExponential(1)}]`);
+    });
+  svg.call(zoom).on('dblclick.zoom', () => svg.transition().duration(250).call(zoom.transform, d3.zoomIdentity));
+
+  // Add helper text
+  gAxes.append('text').attr('x', margin.left+4).attr('y', margin.top+10)
+    .attr('fill','var(--dim)').attr('font-size',10)
+    .text(`${pairs.length} pair(s) · scroll/drag to zoom · double-click resets`);
+}
+
+// Cluster-scatter listeners
+$('#cl-scatter-class')?.addEventListener('change', renderClScatter);
+$('#cl-scatter-coords')?.addEventListener('change', renderClScatter);
+$('#cl-scatter-cluster-filter')?.addEventListener('change', renderClScatter);
+
+function renderClClusterTable(){
+  // Prefer live clusters from K-slider; fall back to saved cluster_membership
+  let rows;
+  if (STATE.cl_live_clusters && STATE.clusters && STATE.clusters.length) {
+    const lookupCoef = new Map(STATE.clusters.map(r => [r.leaf_label || (r.treatment_short_id+' | '+r.outcome), +r.median_coef]));
+    rows = STATE.cl_live_clusters.map(c => {
+      const parts = c.leaf_label.split(/\s*\|\s*/);
+      return {
+        cluster_id: c.cluster_id,
+        treatment_short_id: parts[0],
+        outcome: parts[1],
+        median_coef: lookupCoef.get(c.leaf_label),
+        leaf_label: c.leaf_label
+      };
+    });
+  } else {
+    rows = STATE.clusters || [];
+  }
+  if (!rows.length) {
+    $('#cl-cluster-table').innerHTML = '<thead><tr><th>—</th></tr></thead>';
+    return;
+  }
+  const ids = uniq(rows.map(r => r.cluster_id)).sort((a,b)=>+a-+b);
+  const sel = $('#cl-cluster-filter');
+  sel.innerHTML = '<option value="">all</option>' + ids.map(c => `<option value="${c}">Cluster ${c}</option>`).join('');
+  if (STATE.cl_cluster_filter && ids.includes(+STATE.cl_cluster_filter)) sel.value = STATE.cl_cluster_filter;
+
+  let dat = rows.slice();
+  if (STATE.cl_cluster_filter) dat = dat.filter(r => String(r.cluster_id) === STATE.cl_cluster_filter);
+  if (STATE.cl_cluster_search) {
+    const q = STATE.cl_cluster_search;
+    dat = dat.filter(r => {
+      const t = String(r.treatment_short_id||'').toLowerCase();
+      const o = String(r.outcome||'').toLowerCase();
+      const tl = (TREAT_LABEL[r.treatment_short_id]||'').toLowerCase();
+      const ol = (OUTCOME_LABEL[r.outcome]||'').toLowerCase();
+      return t.includes(q) || o.includes(q) || tl.includes(q) || ol.includes(q);
+    });
+  }
+  dat.sort((a,b) => (+a.cluster_id - +b.cluster_id) || ((+a.median_coef||0) - (+b.median_coef||0)));
+  let html = '<thead><tr><th>Cluster</th><th>Treatment</th><th>Outcome</th><th class="num">Median std coef</th><th>Sign</th></tr></thead><tbody>';
+  for (const r of dat) {
+    const v = +r.median_coef;
+    const signCol = v > 0 ? 'var(--red)' : (v < 0 ? 'var(--accent2)' : 'var(--muted)');
+    html += `<tr><td>${r.cluster_id}</td><td>${r.treatment_short_id} <span style="color:var(--dim);font-size:10px">${tlabel(r.treatment_short_id)||''}</span></td><td>${olabel(r.outcome||r.outcome_var||'')}</td><td class="num" style="color:${signCol}">${fmt(v)}</td><td style="color:${signCol}">${v>0?'+':v<0?'−':''}</td></tr>`;
+  }
+  html += '</tbody>';
+  $('#cl-cluster-table').innerHTML = html;
+}
+
+// =============================================================
+// EXPORT
+// =============================================================
+function downloadBlob(blob, name){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); document.body.removeChild(a); }, 0);
+}
+function csvEscape(v){
+  if (v==null) return '';
+  const s = String(v);
+  if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+function exportRowsAsCsv(rows, name){
+  if (!rows || !rows.length) { setStatus('Nothing to export'); return; }
+  const cols = [...rows.reduce((set, r) => { Object.keys(r).forEach(k => set.add(k)); return set; }, new Set())];
+  const lines = [cols.join(',')];
+  for (const r of rows) lines.push(cols.map(c => csvEscape(r[c])).join(','));
+  downloadBlob(new Blob([lines.join('\r\n')], {type:'text/csv;charset=utf-8'}), name);
+}
+function exportSvg(svgEl, name){
+  if (!svgEl) { setStatus('Nothing to export'); return; }
+  // Inline computed styles so the SVG renders standalone
+  const clone = svgEl.cloneNode(true);
+  // wrap in xml namespace
+  clone.setAttribute('xmlns','http://www.w3.org/2000/svg');
+  // Inject a style block matching CSS variables
+  const styleEl = document.createElementNS('http://www.w3.org/2000/svg','style');
+  styleEl.textContent = `
+    * { font-family: 'Segoe UI', sans-serif; }
+    text { fill: #e5e7eb; }
+    .axis text { fill: #9ca3af; font-size: 10px; }
+    .axis path, .axis line { stroke: #334155; }
+    .grid line { stroke: #1f2a3f; stroke-dasharray: 2 2; }
+    .link { fill: none; stroke: #334155; stroke-width: 1.4px; }
+  `;
+  clone.insertBefore(styleEl, clone.firstChild);
+  const xml = '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' + new XMLSerializer().serializeToString(clone);
+  downloadBlob(new Blob([xml], {type:'image/svg+xml;charset=utf-8'}), name);
+}
+
+const exportMenu = $('#exportMenu');
+$('#exportBtn').addEventListener('click', e => { e.stopPropagation(); exportMenu.classList.toggle('open'); });
+document.addEventListener('click', e => { if (!exportMenu.contains(e.target)) exportMenu.classList.remove('open'); });
+
+const suffix = () => `${STATE.geo||'X'}${STATE.wc?'_wc':''}${STATE.core?'_core':''}`;
+
+$$('#exportMenu .menu button[data-act]').forEach(b => b.addEventListener('click', () => {
+  const act = b.dataset.act;
+  exportMenu.classList.remove('open');
+  switch (act) {
+    case 'export-pairs': {
+      const rows = sfFilteredPairs().map(r => {
+        const d = derivePair(r);
+        return {...r, ...d, _custom_signs: JSON.stringify(STATE.worse_sign)};
+      });
+      exportRowsAsCsv(rows, `signflip_pairs_filtered_${suffix()}.csv`);
+      break;
+    }
+    case 'export-heatmap': {
+      const cells = aggregateByCell(sfFilteredPairs());
+      exportRowsAsCsv(cells, `signflip_heatmap_${STATE.sf_hm_metric}_${suffix()}.csv`);
+      break;
+    }
+    case 'export-detail': {
+      // Same logic as renderSfDetail but as data
+      let rows = sfFilteredPairs();
+      if (STATE.sf_cell_treat) rows = rows.filter(r => r.treatment_short_id === STATE.sf_cell_treat && r.outcome === STATE.sf_cell_outcome);
+      rows = rows.map(r => ({...r, ...derivePair(r)}));
+      if (STATE.sf_detail_mode === 'flagged') rows = rows.filter(r => r.pair_class && r.pair_class !== 'neither_sig');
+      if (STATE.sf_detail_mode === 'credible') rows = rows.filter(r => +r.credible_flip === 1);
+      if (STATE.sf_detail_mode === 'credible_worse') rows = rows.filter(r => r.credible_flip_to_worse);
+      const q = STATE.sf_detail_search;
+      if (q) rows = rows.filter(r => searchableHaystack(r).includes(q));
+      exportRowsAsCsv(rows, `signflip_detail_${suffix()}.csv`);
+      break;
+    }
+    case 'export-scatter': exportSvg($('#sf-scatter'), `scatter_${suffix()}.svg`); break;
+    case 'export-tree':    exportSvg($('#cl-tree'), `tree_${clTargetName()}_${STATE.cl_view}_${suffix()}.svg`); break;
+    case 'export-cp':      exportSvg($('#cl-cp'),   `cp_${clTargetName()}_${suffix()}.svg`); break;
+    case 'export-imp':     exportSvg($('#cl-imp'),  `importance_${clTargetName()}_${suffix()}.svg`); break;
+    case 'export-dend':    exportSvg($('#cl-dend'), `dendrogram_K${STATE.cl_k}_${suffix()}.svg`); break;
+    case 'export-clusters': {
+      // Live cluster_id from K slider
+      const rows = (STATE.cl_live_clusters || []).map(c => {
+        const parts = c.leaf_label.split(/\s*\|\s*/);
+        const lookup = new Map((STATE.clusters||[]).map(r => [r.leaf_label || (r.treatment_short_id+' | '+r.outcome), +r.median_coef]));
+        return {cluster_id:c.cluster_id, treatment_short_id:parts[0], outcome:parts[1], median_coef:lookup.get(c.leaf_label), leaf_label:c.leaf_label};
+      });
+      exportRowsAsCsv(rows, `cluster_membership_K${STATE.cl_k}_${suffix()}.csv`);
+      break;
+    }
+    case 'export-bundle': {
+      const strip = o => { const c={...o}; delete c.__built; return c; };
+      const treesOut = {};
+      for (const k of Object.keys(STATE.trees)) {
+        const m = k.match(/^(.+)_(full|pruned)$/); if (!m) continue;
+        (treesOut[m[1]] = treesOut[m[1]] || {})[m[2]] = strip(STATE.trees[k]);
+      }
+      for (const t of Object.keys(STATE.cptables))   (treesOut[t] = treesOut[t] || {}).cptable    = STATE.cptables[t];
+      for (const t of Object.keys(STATE.importance)) (treesOut[t] = treesOut[t] || {}).importance = STATE.importance[t];
+      const bundle = {
+        meta: STATE.bundle_meta || {geography:STATE.geo, core_only:STATE.core, within_corporate:STATE.wc, generated:new Date().toISOString(), n_pairs:STATE.pairs.length, snapshot:true},
+        pairs: STATE.pairs, features: STATE.features, clusters: STATE.clusters,
+        dendrogram: STATE.dendrogram,
+        trees: treesOut,
+        worse_sign: STATE.worse_sign
+      };
+      downloadBlob(new Blob([JSON.stringify(bundle)], {type:'application/json'}), `vintage_bundle_snapshot_${suffix()}.json`);
+      break;
+    }
+    case 'export-signs': {
+      const rows = Object.keys(STATE.worse_sign).sort().map(o => ({
+        outcome: o, label: olabel(o), family: familyFor(o),
+        worse_sign_default: WORSE_SIGN_DEFAULT[o] ?? 0,
+        worse_sign_current: STATE.worse_sign[o] ?? 0,
+        is_override: (STATE.worse_sign[o] ?? 0) !== (WORSE_SIGN_DEFAULT[o] ?? 0)
+      }));
+      exportRowsAsCsv(rows, `sign_convention_${suffix()}.csv`);
+      break;
+    }
+  }
+}));
+
+// =============================================================
+// Refresh
+// =============================================================
+// Isolate each renderer: a chart whose first pass throws (e.g. a tree pruned to a
+// root stump by carried-over CP — see the "Bootstrap rendering" block) must not
+// abort the renderers that follow it (the dendrogram is drawn after the tree).
+function safeRender(fn, label){
+  try { fn(); } catch (e) { console.error('render error in ' + label, e); }
+}
+function refreshAll(){
+  safeRender(renderSignTable, 'signTable');
+  safeRender(renderSignflipTab, 'signflip');
+  safeRender(renderClusteringTab, 'clustering');
+  safeRender(updateBadges, 'badges');
+}
+
+safeRender(renderSignTable, 'signTable');
+safeRender(renderSignflipTab, 'signflip');
+safeRender(renderClusteringTab, 'clustering');
+safeRender(updateBadges, 'badges');
+
+// Self-contained mode: if a bundle was baked in at compile time, load it now so
+// the page renders immediately with no upload. Otherwise behave as the uploader.
+if (window.__VINTAGE_BUNDLE__) {
+  try {
+    handleParsed({kind:'bundle'}, 'embedded_bundle.json', window.__VINTAGE_BUNDLE__);
+    finishIngest();
+    // Show the bundle build time so you can confirm you're viewing the latest
+    // compile (file:// caches aggressively — hard-refresh if this looks old).
+    const gen = (window.__VINTAGE_BUNDLE__.meta && window.__VINTAGE_BUNDLE__.meta.generated) || '?';
+    setStatus('Self-contained build — bundle generated ' + gen);
+  } catch (err) {
+    console.error('Embedded bundle load failed:', err);
+    showErr('Embedded bundle failed to load: ' + err.message);
+    setStatus('Embedded bundle failed to load: ' + err.message);
+  }
+} else {
+  setStatus('Ready — drag a vintage_bundle_*.json onto the page to begin');
+}
+</script>
+</body>
+</html>

@@ -320,26 +320,30 @@ const WORSE_SIGN_DEFAULT = {
   energy_consumption_current_property:1, el_mean_consumption_k_wh:1,
   gas_mean_consumption_k_wh:1, energy_consumption_gap:-1,
   energy_consumption_gap_property:-1, energy_efficiency_potential_gap:1,
-  bad_epc:1, energy_efficiency_bad_epc_gap:-1,
-  energy_efficiency_worse_epc_gap:-1, borderline_good_epc:1, borderline_better_epc:1
+  bad_epc_c:1, bad_epc_e:1, energy_efficiency_bad_epc_gap:-1,
+  energy_efficiency_worse_epc_gap:-1, energy_efficiency_c_gap:-1, energy_efficiency_e_gap:-1,
+  borderline_good_epc:1, borderline_better_epc:1, borderline_good_epc_c:1, borderline_good_epc_e:1
 };
 const WORSE_SIGN = {...WORSE_SIGN_DEFAULT};
 
 const OUTCOME_LABELS = {
-  bad_epc:'Bad EPC', current_energy_efficiency:'EPC Score',
+  bad_epc_c:'Bad EPC (< C)', current_energy_efficiency:'EPC Score',
   energy_consumption_current:'Energy/m\u00B2', energy_consumption_current_property:'Energy/property',
   el_mean_consumption_k_wh:'Electricity (postcode)', gas_mean_consumption_k_wh:'Gas (postcode)',
   energy_consumption_gap:'Consump. Gap', energy_consumption_gap_property:'Consump. Gap (prop)',
   energy_efficiency_potential_gap:'EPC Gap',
   energy_efficiency_bad_epc_gap:'Dist. to C', energy_efficiency_worse_epc_gap:'Dist. to Band',
-  borderline_good_epc:'Borderline C', borderline_better_epc:'Borderline Band'
+  energy_efficiency_c_gap:'Dist. to C', energy_efficiency_e_gap:'Dist. to E',
+  bad_epc_e:'Bad EPC (< E)',
+  borderline_good_epc:'Borderline C', borderline_better_epc:'Borderline Band',
+  borderline_good_epc_c:'Borderline C', borderline_good_epc_e:'Borderline E'
 };
-const HEADLINE_OUTCOMES = ['bad_epc'];
+const HEADLINE_OUTCOMES = ['bad_epc_c'];
 const OUTCOME_GROUPS = [
   {id:'energy',label:'Energy Use & Efficiency (H1)',outcomes:['current_energy_efficiency','energy_consumption_current','energy_consumption_current_property','el_mean_consumption_k_wh','gas_mean_consumption_k_wh']},
   {id:'gap',label:'Efficiency Gap (H1)',outcomes:['energy_consumption_gap','energy_consumption_gap_property','energy_efficiency_potential_gap']},
-  {id:'compliance',label:'Regulatory Compliance (H2)',outcomes:['energy_efficiency_bad_epc_gap','energy_efficiency_worse_epc_gap']},
-  {id:'bunching',label:'Bunching / Strategic Behaviour (H3)',outcomes:['borderline_good_epc','borderline_better_epc']}
+  {id:'compliance',label:'Regulatory Compliance (H2)',outcomes:['bad_epc_e','energy_efficiency_bad_epc_gap','energy_efficiency_worse_epc_gap','energy_efficiency_c_gap','energy_efficiency_e_gap']},
+  {id:'bunching',label:'Bunching / Strategic Behaviour (H3)',outcomes:['borderline_good_epc','borderline_better_epc','borderline_good_epc_c','borderline_good_epc_e']}
 ];
 const OUTCOME_ORDER = [...HEADLINE_OUTCOMES, ...OUTCOME_GROUPS.flatMap(g=>g.outcomes)];
 

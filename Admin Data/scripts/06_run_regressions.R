@@ -111,12 +111,14 @@ valid_core_pairs <- list(
 
 # Outcome Variables -------------------------------------------------------
 outcome_variables <- c(
-  "bad_epc", "current_energy_efficiency",
+  "bad_epc_c", "bad_epc_e", "current_energy_efficiency",
   "energy_consumption_current", "energy_consumption_current_property",
   "el_mean_consumption_k_wh", "gas_mean_consumption_k_wh", "energy_consumption_gap",
   "energy_consumption_gap_property", "energy_efficiency_potential_gap",
   "energy_efficiency_bad_epc_gap", "energy_efficiency_worse_epc_gap",
-  "borderline_good_epc", "borderline_better_epc"
+  "energy_efficiency_c_gap", "energy_efficiency_e_gap",
+  "borderline_good_epc", "borderline_better_epc",
+  "borderline_good_epc_c", "borderline_good_epc_e"
 )
 
 
@@ -185,6 +187,27 @@ message("  Applying treatment definitions...")
 EPC_matched_combined <- define_treatments(EPC_matched_combined)
 setkey(EPC_matched_combined, uprn)
 message(sprintf("  Defined %d treatment variables.", length(analysis_configs)))
+
+# Derive bad-EPC outcomes at the two regulatory bounds (C = incoming MEES cutoff 69,
+# E = present minimum cutoff 39). Computed here from current_energy_efficiency so results
+# regenerate with no parquet rebuild; mirrors construction in scripts 03/04. NA-safe.
+if ("current_energy_efficiency" %in% names(EPC_matched_combined)) {
+  cee <- EPC_matched_combined[["current_energy_efficiency"]]
+  EPC_matched_combined[, bad_epc_c := fifelse(is.na(cee), NA_real_, as.numeric(cee < 69))]
+  EPC_matched_combined[, bad_epc_e := fifelse(is.na(cee), NA_real_, as.numeric(cee < 39))]
+  EPC_matched_combined[, energy_efficiency_c_gap := cee - 68]
+  EPC_matched_combined[, energy_efficiency_e_gap := cee - 38]
+  # Bunching just above each regulatory cutoff (global SD bandwidth)
+  global_half_sd <- readRDS(file.path(PROCESSED_DATA_DIR, "global_epc_stats.rds"))$global_half_sd
+  EPC_matched_combined[, borderline_good_epc_c := fifelse(
+    is.na(cee), NA_real_, as.numeric(cee > 69 & cee <= 69 + global_half_sd))]
+  EPC_matched_combined[, borderline_good_epc_e := fifelse(
+    is.na(cee), NA_real_, as.numeric(cee > 39 & cee <= 39 + global_half_sd))]
+  rm(cee)
+  message("  Derived bad-EPC C/E regulatory-bound outcomes.")
+} else {
+  message("  WARNING: current_energy_efficiency not loaded; skipped bad-EPC C/E derivation.")
+}
 
 # Drop treatment-definition input columns (no longer needed; saves ~300-600 MB)
 treatment_input_cols <- c("source", "tenure_2", "coarse_proprietorship",
@@ -333,8 +356,10 @@ load_matched_pairs <- function(config, matching_core, spec_config) {
 
 # Hypothesis tag lookup ---------------------------------------------------
 get_hypothesis_tag <- function(treatment_short_id, outcome) {
-  if (outcome == "bad_epc")                                             return("H2")
-  if (outcome %in% c("borderline_good_epc", "borderline_better_epc")) return("H3")
+  if (outcome %in% c("bad_epc_c", "bad_epc_e",
+                     "energy_efficiency_c_gap", "energy_efficiency_e_gap")) return("H2")
+  if (outcome %in% c("borderline_good_epc", "borderline_better_epc",
+                     "borderline_good_epc_c", "borderline_good_epc_e"))     return("H3")
   if (treatment_short_id == "frfp")                                    return("H1a")
   if (treatment_short_id %in% c("np", "uknp", "frnp", "thnp"))        return("H1b")
   # Within-corporate treatments
@@ -424,6 +449,26 @@ if (file.exists(output_csv_path)) {
   existing <- tryCatch(fread(output_csv_path), error = function(e) data.table())
   if (nrow(existing) > 0 &&
       all(c("model", "spec", "matching_core", "regression_core") %in% names(existing))) {
+
+    # --- Pass 0: Schema migration — invalidate results predating new outcomes ---
+    # Multi-outcome feols computes all outcomes per treatment in a single call, so
+    # outcomes added in a later version can only appear by recomputing each
+    # regression. If NONE of the required new outcomes are present anywhere in the
+    # existing file, that file predates the outcome set: purge all rows so this run
+    # recomputes and produces them. Self-limiting — once recomputed the outcomes are
+    # present, so it never triggers again (no purge-retry loop). This is what lets a
+    # re-run pick up bad_epc_c/e etc. without manually deleting the results CSV.
+    schema_required_outcomes <- c("bad_epc_c", "bad_epc_e",
+                                  "energy_efficiency_c_gap", "energy_efficiency_e_gap",
+                                  "borderline_good_epc_c", "borderline_good_epc_e")
+    if ("outcome" %in% names(existing) &&
+        length(intersect(schema_required_outcomes,
+                         unique(as.character(existing[["outcome"]])))) == 0L) {
+      message(sprintf("  Crash-resume: existing results predate the bad-EPC C/E outcomes; purging %d rows for a full recompute.",
+                      nrow(existing)))
+      existing <- existing[0L]
+      fwrite(results_schema, output_csv_path)
+    }
 
     # --- Pass 1: Remove retriable error rows (keep treatment_dropped) ----------
     # "error" rows are transient (may succeed on retry after code fix).

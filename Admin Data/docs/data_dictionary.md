@@ -25,7 +25,12 @@ Defined in `scripts/treatment_definitions.R`.
 - `treat_foreign_for_profit`: Foreign for-profit vs private rental
 
 ### Outcome Variables
-- `bad_epc`: Binary indicator for poor energy rating (D, E, F, G)
+- `bad_epc_c`: **Main** bad-EPC indicator — 1 if below EPC C (`current_energy_efficiency < 69`), the **incoming** MEES regulatory bound.
+- `bad_epc_e`: Binary, 1 if below EPC E (score < 39) — the **present** regulatory minimum.
+- `energy_efficiency_c_gap`: Efficiency-score distance to the C cutoff (`current_energy_efficiency - 68`). Alias of `energy_efficiency_bad_epc_gap`.
+- `energy_efficiency_e_gap`: Efficiency-score distance to the E cutoff (`current_energy_efficiency - 38`).
+- `borderline_good_epc_c`: Binary, 1 if just above the C cutoff (bunching at incoming MEES bound). Alias of `borderline_good_epc`.
+- `borderline_good_epc_e`: Binary, 1 if just above the E cutoff (bunching at present regulatory minimum).
 - `current_energy_rating`: Energy efficiency rating (A-G scale)
 
 ### Matching Variables

@@ -231,22 +231,28 @@ message(sprintf("  Narrative summary written: %s (%d rows)", basename(narrative_
 
 ## Outcome metadata (static, written once per geography)
 outcome_metadata <- data.table(
-  outcome = c("bad_epc", "current_energy_efficiency",
+  outcome = c("bad_epc_c", "bad_epc_e", "current_energy_efficiency",
               "energy_consumption_current", "energy_consumption_current_property",
               "el_mean_consumption_k_wh", "gas_mean_consumption_k_wh",
               "energy_consumption_gap", "energy_consumption_gap_property",
               "energy_efficiency_potential_gap",
               "energy_efficiency_bad_epc_gap", "energy_efficiency_worse_epc_gap",
-              "borderline_good_epc", "borderline_better_epc"),
-  outcome_family = c("Regulatory Compliance", "Energy Efficiency",
+              "energy_efficiency_c_gap", "energy_efficiency_e_gap",
+              "borderline_good_epc", "borderline_better_epc",
+              "borderline_good_epc_c", "borderline_good_epc_e"),
+  outcome_family = c("Regulatory Compliance", "Regulatory Compliance",
+                     "Energy Efficiency",
                      "Energy Use", "Energy Use",
                      "Realised Energy", "Realised Energy",
                      "Efficiency Gap", "Efficiency Gap",
                      "Efficiency Gap",
                      "Efficiency Gap", "Efficiency Gap",
+                     "Efficiency Gap", "Efficiency Gap",
+                     "Bunching", "Bunching",
                      "Bunching", "Bunching"),
-  hypothesis_primary = c("H2", "H1", "H1", "H1", "H1", "H1",
-                         "H1", "H1", "H1", "H2", "H2", "H3", "H3")
+  hypothesis_primary = c("H2", "H2", "H1", "H1", "H1", "H1", "H1",
+                         "H1", "H1", "H1", "H2", "H2", "H2", "H2",
+                         "H3", "H3", "H3", "H3")
 )
 fwrite(outcome_metadata, file.path(SUMMARY_TABLES_DIR, "outcome_metadata.csv"))
 message("  Outcome metadata written: outcome_metadata.csv")

@@ -302,7 +302,7 @@ write_tex(lines, "tab_gap_analysis.tex")
 tab4_treats <- c("ps", "np", "th", "frfp", "fp")
 
 tab4 <- unique(dt[model == PSM_SUB & spec == "Baseline" & matching_core == "base" &
-             outcome == "bad_epc" &
+             outcome == "bad_epc_c" &
              treatment_short_id %in% tab4_treats & status == "ok",
            .(treatment_short_id, coef, standardised_coef, p_value, nobs)],
            by = "treatment_short_id")
@@ -339,7 +339,7 @@ lines <- c(lines,
            "\\vspace{4pt}",
            "\\footnotesize",
            "\\textit{Notes:} PSM with subclass FE, LA geography, Baseline spec, base core.",
-           "Outcome: \\texttt{bad\\_epc} (= 1 if EPC band $\\leq$ D, i.e.\\ SAP score $\\leq$ 68).",
+           "Outcome: \\texttt{bad\\_epc\\_c} (= 1 if below EPC C, i.e.\\ SAP score $<$ 69) --- the incoming MEES bound.",
            "Coefficients in percentage points (coef $\\times$ 100).",
            "Negative = treated properties are \\textit{less} likely to have a bad EPC.",
            "$^{***}p<0.001$; $^{**}p<0.01$; $^{*}p<0.05$.",
@@ -531,7 +531,7 @@ write_tex(lines, "tab_h5_hierarchy.tex")
 # ---------------------------------------------------------------------------
 # Table 8: bad_epc robustness across all spec x core
 # ---------------------------------------------------------------------------
-tab8 <- unique(dt[model == PSM_SUB & outcome == "bad_epc" &
+tab8 <- unique(dt[model == PSM_SUB & outcome == "bad_epc_c" &
              treatment_short_id == "fp" & status == "ok",
            .(spec, matching_core, coef, p_value, nobs)],
            by = c("spec", "matching_core"))
@@ -567,7 +567,7 @@ lines <- c(lines,
            "\\vspace{4pt}",
            "\\footnotesize",
            "\\textit{Notes:} PSM with subclass FE, LA geography.",
-           "Treatment: for-profit (all). Outcome: \\texttt{bad\\_epc}.",
+           "Treatment: for-profit (all). Outcome: \\texttt{bad\\_epc\\_c} (below EPC C).",
            "All spec $\\times$ core combinations shown.",
            "$^{***}p<0.001$; $^{**}p<0.01$; $^{*}p<0.05$.",
            "Source: \\texttt{results\\_enriched\\_LA.csv}.",
@@ -575,5 +575,105 @@ lines <- c(lines,
            "\\end{table}")
 
 write_tex(lines, "tab_h2_bad_epc_robust.tex")
+
+# ---------------------------------------------------------------------------
+# Table 4e: bad_epc_e coefficients (present regulatory bound, below EPC E)
+# ---------------------------------------------------------------------------
+tab4e_treats <- c("ps", "np", "th", "frfp", "fp")
+
+tab4e <- unique(dt[model == PSM_SUB & spec == "Baseline" & matching_core == "base" &
+             outcome == "bad_epc_e" &
+             treatment_short_id %in% tab4e_treats & status == "ok",
+           .(treatment_short_id, coef, standardised_coef, p_value, nobs)],
+           by = "treatment_short_id")
+
+tab4e[, label := treat_labels[treatment_short_id]]
+tab4e <- tab4e[match(tab4e_treats, treatment_short_id)]
+tab4e[, coef_pp := coef * 100]
+
+lines <- c(
+  "\\begin{table}[htbp]",
+  "\\centering",
+  "\\caption{Below-E EPC Prevalence by Ownership Type}",
+  "\\label{tab:h2_bad_epc_e}",
+  "\\begin{tabular}{lrrrr}",
+  "\\toprule",
+  "Treatment & Coef (pp) & Std.\\ coef & $p$-value & $N$ \\\\",
+  "\\midrule"
+)
+for (i in seq_len(nrow(tab4e))) {
+  r <- tab4e[i]
+  lines <- c(lines, sprintf("%s & %s%s & %s & %s & %s \\\\",
+                            r$label,
+                            fmt_coef(r$coef_pp, 1),
+                            fmt_stars(r$p_value),
+                            fmt_std(r$standardised_coef),
+                            fmt_p(r$p_value),
+                            fmt_n(r$nobs)))
+}
+lines <- c(lines,
+           "\\bottomrule",
+           "\\end{tabular}",
+           "\\begin{minipage}{0.9\\textwidth}",
+           "\\vspace{4pt}",
+           "\\footnotesize",
+           "\\textit{Notes:} PSM with subclass FE, LA geography, Baseline spec, base core.",
+           "Outcome: \\texttt{bad\\_epc\\_e} (= 1 if below EPC E, i.e.\\ SAP score $<$ 39) --- the present regulatory minimum.",
+           "Coefficients in percentage points (coef $\\times$ 100).",
+           "Negative = treated properties are \\textit{less} likely to fall below E.",
+           "$^{***}p<0.001$; $^{**}p<0.01$; $^{*}p<0.05$.",
+           "Source: \\texttt{results\\_enriched\\_LA.csv}.",
+           "\\end{minipage}",
+           "\\end{table}")
+
+write_tex(lines, "tab_h2_bad_epc_e.tex")
+
+# ---------------------------------------------------------------------------
+# Table 8e: bad_epc_e robustness across all spec x core
+# ---------------------------------------------------------------------------
+tab8e <- unique(dt[model == PSM_SUB & outcome == "bad_epc_e" &
+             treatment_short_id == "fp" & status == "ok",
+           .(spec, matching_core, coef, p_value, nobs)],
+           by = c("spec", "matching_core"))
+
+tab8e[, coef_pp := coef * 100]
+tab8e <- tab8e[order(match(spec, c("Baseline", "Council Tax", "Price Paid", "Council Tax + Price Paid")),
+                   match(matching_core, c("base", "council_tax", "ppd", "ppd_counciltax")))]
+
+lines <- c(
+  "\\begin{table}[htbp]",
+  "\\centering",
+  "\\caption{For-Profit Below-E EPC: Robustness Across Specifications}",
+  "\\label{tab:h2_bad_epc_e_robust}",
+  "\\begin{tabular}{llrrr}",
+  "\\toprule",
+  "Specification & Core & Coef (pp) & $p$-value & $N$ \\\\",
+  "\\midrule"
+)
+for (i in seq_len(nrow(tab8e))) {
+  r <- tab8e[i]
+  lines <- c(lines, sprintf("%s & %s & %s%s & %s & %s \\\\",
+                            r$spec,
+                            gsub("_", "\\\\_", r$matching_core),
+                            fmt_coef(r$coef_pp, 2),
+                            fmt_stars(r$p_value),
+                            fmt_p(r$p_value),
+                            fmt_n(r$nobs)))
+}
+lines <- c(lines,
+           "\\bottomrule",
+           "\\end{tabular}",
+           "\\begin{minipage}{0.9\\textwidth}",
+           "\\vspace{4pt}",
+           "\\footnotesize",
+           "\\textit{Notes:} PSM with subclass FE, LA geography.",
+           "Treatment: for-profit (all). Outcome: \\texttt{bad\\_epc\\_e} (below EPC E).",
+           "All spec $\\times$ core combinations shown.",
+           "$^{***}p<0.001$; $^{**}p<0.01$; $^{*}p<0.05$.",
+           "Source: \\texttt{results\\_enriched\\_LA.csv}.",
+           "\\end{minipage}",
+           "\\end{table}")
+
+write_tex(lines, "tab_h2_bad_epc_e_robust.tex")
 
 cat("\n=== All tables generated ===\n")

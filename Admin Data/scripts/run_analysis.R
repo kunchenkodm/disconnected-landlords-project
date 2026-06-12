@@ -18,7 +18,7 @@ RSCRIPT_BIN <- file.path(R.home("bin"), "Rscript")
 
 # What to run ---------------------------------------------------------------
 # Set to FALSE to skip a phase entirely.
-RUN_MATCHING    <- as.logical(Sys.getenv("RUN_MATCHING",    unset = "TRUE"))
+RUN_MATCHING    <- as.logical(Sys.getenv("RUN_MATCHING",    unset = "FALSE"))
 RUN_REGRESSIONS <- as.logical(Sys.getenv("RUN_REGRESSIONS", unset = "TRUE"))
 RUN_BALANCE     <- as.logical(Sys.getenv("RUN_BALANCE",     unset = "TRUE"))
 RUN_ENRICHMENT  <- as.logical(Sys.getenv("RUN_ENRICHMENT",  unset = "TRUE"))
@@ -29,7 +29,7 @@ RUN_WITHIN_CORPORATE <- as.logical(Sys.getenv("RUN_WITHIN_CORPORATE", unset = "F
 # FALSE (default): skip already-completed steps (crash-resume mode).
 # TRUE: delete existing outputs before running, forcing a full rerun.
 OVERWRITE_MATCHING    <- FALSE
-OVERWRITE_REGRESSIONS <- TRUE
+OVERWRITE_REGRESSIONS <- FALSE
 
 
 # Run configuration -------------------------------------------------------
@@ -48,7 +48,7 @@ on.exit({
 }, add = TRUE)
 
 # Geography queue.
-geo_levels <- c("ITL3","LA","ITL2")
+geo_levels <- c("LA")
 
 # Parallel worker counts for matching (script 05). Not used by script 06.
 workers_per_geo <- c(LA = 4L, ITL3 = 3L, ITL2 = 2L, ITL1 = 1L)

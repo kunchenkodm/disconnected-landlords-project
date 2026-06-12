@@ -215,6 +215,27 @@ for (i in seq_along(la_files)) {
     default = 0
   )]
 
+  ## Bad-EPC indicators at the two regulatory bounds (NA-safe)
+  # bad_epc_c (main definition) = below C, the incoming MEES bound (cutoff 69);
+  # bad_epc_e = below E, the present regulatory minimum (cutoff 39).
+  dt[, bad_epc_c := fcase(is.na(current_energy_efficiency), NA_real_,
+                          current_energy_efficiency < 69, 1, default = 0)]
+  dt[, bad_epc_e := fcase(is.na(current_energy_efficiency), NA_real_,
+                          current_energy_efficiency < 39, 1, default = 0)]
+
+  # Efficiency gap to each regulatory threshold (alias of energy_efficiency_bad_epc_gap for C)
+  dt[, energy_efficiency_c_gap := current_energy_efficiency - 68]
+  dt[, energy_efficiency_e_gap := current_energy_efficiency - 38]
+
+  # Bunching just above each regulatory cutoff (global SD bandwidth; alias of borderline_good_epc for C)
+  dt[, borderline_good_epc_c := borderline_good_epc]
+  dt[, borderline_good_epc_e := fcase(
+    current_energy_efficiency > 39 &
+      current_energy_efficiency <= 39 + global_half_sd, 1,
+    is.na(current_energy_efficiency), NA_real_,
+    default = 0
+  )]
+
   # Clean up helper columns
   dt[, c("lower_cutoff", "half_sd") := NULL]
 
