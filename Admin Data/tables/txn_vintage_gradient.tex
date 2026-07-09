@@ -1,0 +1,31 @@
+\begin{table}[htbp]
+\centering
+\caption{EPC-Score Penalty by Time Since Last Transaction}
+\label{tab:txn_vintage}
+\small
+\begin{tabular}{lrrrrr}
+\toprule
+Years since sale & For-profit & Foreign FP & Tax haven & TH for-profit & Non-profit \\
+\midrule
+0-1 & -0.40*** (0.08) & +0.67 (0.49) & +0.57 (0.49) & +0.65 (0.51) & +1.15*** (0.29) \\
+2-4 & +0.40*** (0.08) & +0.77 (0.48) & +0.97* (0.46) & +0.98* (0.46) & +1.47*** (0.33) \\
+5-9 & +0.25** (0.09) & -0.01 (0.31) & +0.15 (0.33) & +0.11 (0.33) & +2.34*** (0.26) \\
+10-14 & +0.31*** (0.06) & +0.42 (0.27) & +0.39 (0.27) & +0.36 (0.27) & +2.50*** (0.21) \\
+15+ & +0.43*** (0.07) & +0.41 (0.34) & +0.53 (0.33) & +0.49 (0.34) & +1.85*** (0.15) \\
+\bottomrule
+\end{tabular}
+\begin{minipage}{0.95\textwidth}
+\vspace{4pt}
+\footnotesize
+\textit{Notes:} Mean matched-pair difference in EPC score (treated $-$ control)
+by years between the property's most recent sale and its EPC lodgement.
+Price Paid specification, ppd matching core: pairs exact-match on both
+\texttt{lodgement\_year} and \texttt{ppd\_year\_transfer}, so the vintage is
+constant within pair. LA-clustered SEs in parentheses.
+$^{***}p<0.001$; $^{**}p<0.01$; $^{*}p<0.05$.
+\textbf{Descriptive:} selection into transaction timing is not random; this is a
+gradient shape, not identification of retrofit dynamics. Sales postdating the EPC
+are excluded (share reported in \texttt{txn\_vintage\_gradient\_LA.csv}).
+Source: script 06d.
+\end{minipage}
+\end{table}

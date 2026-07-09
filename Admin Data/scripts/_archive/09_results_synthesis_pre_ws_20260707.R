@@ -1280,53 +1280,6 @@ for (i in seq_len(nrow(geo_rec))) {
 }
 h("</table>")
 
-# --- Section: Matching Attrition Funnel (PI feedback, attrition workstream) ---
-h("<h2>9b. Matching Attrition Funnel</h2>")
-attrition_funnels <- rbindlist(lapply(geo_levels, function(g) {
-  path <- file.path(SUMMARY_TABLES_DIR, paste0("attrition_funnel_", g, wc_suffix, ".csv"))
-  if (!file.exists(path)) return(NULL)
-  dtf <- fread(path, na.strings = c("NA", ""))
-  dtf[, geography := g]
-  dtf
-}), fill = TRUE)
-
-if (nrow(attrition_funnels) > 0L) {
-  h("<p class='section-note'>Treated-unit and LA survival through the matching funnel ",
-    "(raw eligible &rarr; complete cases &rarr; size gate &rarr; matched &rarr; caliper 0.2 &rarr; caliper 0.1), ",
-    "pooled across geographic units. Source: attrition_funnel_&lt;GEO&gt;.csv (script 05b). ",
-    "Showing the spec matched to each core (Baseline/base and Price Paid/ppd).</p>")
-  af_show <- attrition_funnels[(matching_core == "base" & spec == "Baseline") |
-                                 (matching_core == "ppd" & spec == "Price Paid")]
-  af_show[, treat_idx := match(treatment_short_id, treat_order)]
-  setorder(af_show, geography, matching_core, treat_idx, na.last = TRUE)
-  af_show[, treat_idx := NULL]
-  h("<div style='overflow-x:auto;'><table>")
-  h("<tr><th>Geo</th><th>Treatment</th><th>Core</th>",
-    "<th>Raw treated</th><th>Complete cases</th><th>Gate passed</th><th>Matched</th>",
-    "<th>Cal 0.2</th><th>Cal 0.1</th><th>Match rate</th>",
-    "<th>LAs start</th><th>LAs matched</th><th>LAs regression</th></tr>")
-  fmt_int <- function(x) ifelse(is.na(x), "&mdash;", formatC(x, format = "d", big.mark = ","))
-  for (i in seq_len(nrow(af_show))) {
-    r <- af_show[i]
-    h("<tr><td>", r$geography, "</td><td>", r$treatment_short_id, "</td><td>", r$matching_core, "</td>")
-    h("<td>", fmt_int(r$n_treated_raw), "</td>")
-    h("<td>", fmt_int(r$n_treated_complete_case), "</td>")
-    h("<td>", fmt_int(r$n_treated_gate_passed), "</td>")
-    h("<td>", fmt_int(r$n_matched_treated), "</td>")
-    h("<td>", fmt_int(r$n_matched_treated_cal02), "</td>")
-    h("<td>", fmt_int(r$n_matched_treated_cal01), "</td>")
-    h("<td>", fmt_or_na(r$match_rate), "</td>")
-    h("<td>", fmt_int(r$n_las_input), "</td>")
-    h("<td>", fmt_int(r$n_las_matched), "</td>")
-    h("<td>", fmt_int(r$n_las_regression), "</td>")
-    h("</tr>")
-  }
-  h("</table></div>")
-} else {
-  h("<p class='section-note'>No attrition_funnel CSVs found. Run 05b_compute_balance.R ",
-    "(RUN_BALANCE phase) to produce the funnel.</p>")
-}
-
 # --- Section: Cross-Geography Consistency ---
 h("<h2>10. Cross-Geography Sign Consistency</h2>")
 n_agree <- sum(sign_mat$all_agree == 1L, na.rm = TRUE)

@@ -374,12 +374,9 @@ for (gi in seq_len(n_geo)) {
 
         # Post-hoc caliper counts (funnel stages 5-6): distance <= 0.2 / 0.1
         # mirrors the PS<=0.2 / PS<=0.1 filters in 06_run_regressions.R.
-        # Use matched_uprns (deduplicated, same convention as n_matched_treated
-        # above) so a UPRN with multiple lodgements is counted once, not once
-        # per lodgement — keeps the funnel monotone.
-        n_matched_cal02 <- as.integer(sum(matched_uprns$distance <= 0.2, na.rm = TRUE))
-        n_matched_cal01 <- as.integer(sum(matched_uprns$distance <= 0.1, na.rm = TRUE))
-        tv_join <- merge(matched_uprns,
+        n_matched_cal02 <- as.integer(sum(matched$distance <= 0.2, na.rm = TRUE))
+        n_matched_cal01 <- as.integer(sum(matched$distance <= 0.1, na.rm = TRUE))
+        tv_join <- merge(matched[, .(uprn, distance)],
                          before[, .(uprn, tv = get(treatment_var))], by = "uprn")
         n_matched_treated_cal02 <- as.integer(
           sum(tv_join$distance <= 0.2 & tv_join$tv == 1L, na.rm = TRUE))

@@ -1,0 +1,244 @@
+\documentclass[11pt]{article}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage[sc]{mathpazo}
+\usepackage{setspace}
+\usepackage[table]{xcolor}
+\usepackage[colorlinks,linkcolor={black!50!black},citecolor={blue!50!black},urlcolor={blue!80!black}]{hyperref}
+
+\title{Task 4: Foreign Non-Profits and Tax-Haven Owners \\
+\large Descriptive Profiles, Outliers, and Case Studies}
+\author{Disconnected Landlords Project}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent Descriptive deep-dive into two ownership groups flagged in the PI
+feedback: foreign-incorporated non-profit proprietors and tax-haven
+incorporated proprietors of privately rented housing in England and Wales.
+We characterise the universe (counts by local authority, jurisdiction of
+incorporation, and region), identify the largest proprietors and outlier
+properties, and develop a shortlist of case studies from public-register
+data. All named entities are registered companies from the public CCOD/OCOD
+registers; no individual beneficial owners are identified.
+\end{abstract}
+
+\section{Data and definitions}
+
+Groups are defined exactly as the corresponding regression treatments
+(\texttt{treatment\_definitions.R}):
+\begin{itemize}
+  \item \textbf{Foreign non-profit} (\texttt{frnp}): proprietorship category
+    Non-Profit/Community Organisations, incorporated outside the United Kingdom.
+  \item \textbf{Tax-haven non-profit} (\texttt{thnp}): non-profit category,
+    incorporated in an IMF-list tax-haven jurisdiction.
+  \item \textbf{Tax haven, all} (\texttt{th}): any proprietor incorporated in a
+    tax-haven jurisdiction, with sub-classes British (Crown dependencies and
+    overseas territories), European, Caribbean, and other.
+\end{itemize}
+The reference group is the standard control: privately rented properties with
+unknown ownership (not in CCOD/OCOD). Properties are deduplicated by UPRN;
+title-to-UPRN expansion means title counts and property counts are reported
+separately. Produced by \texttt{scripts/08b\_offshore\_nonprofit\_profiles.R},
+outputs in \texttt{output/offshore\_profiles/}.
+
+\section{Universe}
+
+Across England the register links 181{,}952 domestic properties to a
+tax-haven-incorporated or foreign-incorporated proprietor: 174{,}947 to a
+tax-haven company (group \texttt{th}), of which 10{,}777 sit under a foreign
+non-profit (\texttt{frnp}) and 3{,}772 under a tax-haven non-profit
+(\texttt{thnp}). The non-profit groups overlap the tax-haven group by
+construction (a Jersey housing society is both foreign and a tax haven), so the
+three counts are not additive.
+
+The universe is overwhelmingly held through the British Crown Dependencies and
+Overseas Territories: 167{,}996 properties (92 percent) are incorporated in a
+``british'' haven, led by Guernsey (76{,}691), Jersey (56{,}714), the British
+Virgin Islands (19{,}746) and the Isle of Man (11{,}790). This concentration is
+an artefact of who uses these jurisdictions: the Channel Islands are the home of
+the large ground-rent freehold vehicles (see below), while the classic
+wealth-holding havens supply a much smaller but distinctive tail.
+
+A clear efficiency gradient runs across jurisdictions. The Channel Islands
+freehold stock is efficient and new (Guernsey mean EPC 78, 11 percent below band
+C; Jersey 77, 14 percent), because these owners hold only the freehold reversion
+of modern leasehold flats. The opaque wealth havens hold older, far less
+efficient prime and period stock: the British Virgin Islands (mean 72, 28
+percent below C), Isle of Man (72, 30 percent), Gibraltar (67, 49 percent),
+Panama (66, 48 percent) and the Seychelles (68, 43 percent). Aggregated by
+class, ``british''-incorporated properties are 16 percent below band C against
+40 percent for ``caribbean'' and 37 percent for ``european'' incorporations. The
+foreign non-profit tail is dominated by Luxembourg (5{,}384 properties, mean EPC
+78), reflecting institutional student and build-to-rent vehicles rather than
+wealth holding.
+
+\input{tables/offshore_universe_jurisdiction}
+
+\section{Largest proprietors}
+
+\input{tables/offshore_top_proprietors}
+
+Ownership is extraordinarily concentrated at the top, and the largest holders
+are all Channel Islands ground-rent freehold vehicles. The ten largest
+proprietors are led by Abacus Land~4 (Guernsey, 18{,}870 properties), Adriatic
+Land~3 (Guernsey, 14{,}490), Abacus Land~1 Holdco~1 (Jersey, 12{,}613) and
+Pennine Trustees (Jersey, 11{,}216), followed by a string of further Adriatic
+Land vehicles (numbers 11, 5, 12 and 9). These are freehold-reversion investment
+companies rather than occupier-landlords: they hold the ground rents beneath
+modern leasehold flats, which is why their portfolios are large, geographically
+dispersed (each spans hundreds of local authorities) and comparatively efficient
+(mean EPC 76 to 82, only 4 to 13 percent below band C). This is the opposite
+profile to the small opaque-haven holders, which own single prime or period
+units with poor efficiency. Portfolio size and low efficiency are therefore
+negatively, not positively, correlated in this universe: the biggest offshore
+landlords are ground-rent financiers, not the worst-performing owners.
+
+\section{Outliers}
+
+The outlier table reports, per group, the five worst-EPC, largest-floor-area,
+highest-price, largest-portfolio-member and most-unusual-combination properties
+(75 rows). Implausible values (floor area under 10 or over 1{,}000 sqm, price
+under 1{,}000) are retained but flagged \texttt{data\_quality\_suspect} rather
+than presented as headline cases; the worst-EPC extremes in particular are
+dominated by nominal-price freehold-reversion transfers (a ``price'' of a few
+thousand pounds for a ground rent) and should not be read as market sales. The
+substantive outliers, super-prime central London units held through wealth
+havens with band F or G efficiency, are carried forward as the case studies
+below.
+
+\section{Case studies}
+
+% One subsection per researched case; drafted from case_studies.csv shortlist
+% plus public Companies House filings and press coverage.
+% PRIVACY RULE: company-level public data only; no individual beneficial-owner
+% names in any published output.
+
+Each proprietor below is a registered company; facts are drawn from the UK
+Register of Overseas Entities (ROE) and Companies House, and from reputable press
+or public planning records where cited. Consistent with the project's disclosure
+rule, only company-level and public-register information is reported: no
+individual director, shareholder or beneficial-owner names appear. Register
+numbers are the ROE ``OE'' identifiers on the Companies House service. Where a
+source supports only a corporate-family link rather than the exact title-holding
+vehicle, that is said plainly.
+
+\subsection{Adriatic Land 3 (Guernsey): ground-rent freeholds}
+
+Adriatic Land 3 Limited (ROE \texttt{OE018380}, incorporated in Guernsey,
+registered on the ROE on 26 January 2023) is one of the Channel Islands vehicles
+behind the largest offshore freehold holding in England and Wales. Our data
+attributes to it roughly 14{,}490 properties across 321 local authorities, with a
+good mean efficiency (EPC 79) characteristic of a freehold-reversion owner of
+modern leasehold flats rather than an occupier-landlord. Reporting by Global
+Witness places the Adriatic Land and Abacus Land companies together at 2{,}926
+freeholds, describes them as the country's largest offshore corporate freeholders,
+and links the group to the Long Harbour ground-rent investment
+fund.\footnote{\url{https://www.globalwitness.org/en/campaigns/corruption-and-money-laundering/anonymous-company-owners/legalised-extortion/}}
+In March 2022 Adriatic Land 3 Limited gave voluntary undertakings to the
+Competition and Markets Authority to remove doubling ground-rent clauses at a
+north London development, freeze ground rents at their commencement level, and
+meet leaseholders'
+costs.\footnote{\url{https://www.homegroundonline.com/news/2022/03/voluntary-undertakings-by-adriatic-land-3-limited-with-the-cma/}}
+A sibling entity, Abacus Land 4, illustrates the RPI-indexed model, its ground
+rent rising from \pounds{}350 to \pounds{}711 at first
+review.\footnote{\url{https://www.leaseholdknowledge.com/abacus-land-sees-its-ground-rents-more-than-double-to-711-thanks-to-rpi/}}
+(The Guernsey ROE entity is distinct from the separately UK-incorporated
+``Adriatic Land 3 (GR1) Limited''; the specific Edgbaston freehold in our data is
+not among the published CMA cases.)
+
+\subsection{Vevil Properties (Jersey): the Curzon Mayfair estate}
+
+Vevil Properties Limited (ROE \texttt{OE013879}, Jersey, registered 17 January
+2023) belongs to the Vevil corporate family, reported to sit under Vevil
+International Ltd in the British Virgin Islands (where beneficial ownership is not
+publicly filed) with Jersey holding and operating
+subsidiaries.\footnote{\url{https://londoninbits.substack.com/p/the-curse-of-the-curzon}}
+A 2016 marketing brochure listed the family's central London portfolio as
+including 38 Curzon Street, the site of the Curzon Mayfair cinema, alongside 160
+Piccadilly (The Wolseley) and 27 Poultry (The Ned). The Curzon Mayfair (37--38
+Curzon Street) is a Grade~II listed 1960s building described by Historic England
+as the finest surviving post-war cinema, and it survived a 2016 closure threat
+after a public campaign. In our data the associated title carries a band-G
+efficiency (EPC 3), the extreme low end of the prime-central tail. The precise
+mapping of ``Vevil Properties Limited'' to the Curzon title, as opposed to a
+sibling Vevil vehicle, is not publicly confirmed.
+
+\subsection{Wildec Establishment (Liechtenstein): a Belgravia Anstalt}
+
+Wildec Establishment (ROE \texttt{OE004860}) is a Liechtenstein \emph{Anstalt}, a
+distinctive establishment entity with no exact UK analogue. Planning records of
+the Royal Borough of Kensington and Chelsea name Wildec Establishment as the
+client for alterations to 29 Wilton Crescent, a listed six-storey Belgravia house
+it purchased in
+2018.\footnote{\url{https://docs.planning.org.uk/20211126/115/R2ZG25RPJ1S00/5r6xtq7rp5v29fcb.pdf}}
+The property appears in our data at \pounds{}17.5m with a band-D efficiency.
+
+\subsection{AG Bloom LML 2 (Netherlands): an institutional joint-venture vehicle}
+
+AG Bloom LML 2 BV (ROE \texttt{OE002659}, Netherlands, registered 28 October 2022)
+shares its naming, registered-office and control-correspondence pattern with the
+``AG Bloom'' entities behind the Bloom / Angelo Gordon (now TPG Angelo Gordon)
+urban-logistics joint venture announced in December 2021, whose confirmed asset
+list includes a Camberwell scheme matching the SE5 address in our
+data.\footnote{\url{https://www.thelogisticspoint.com/2021/12/13/bloom-and-angelo-gordon-announce-250mn-ultra-urban-warehouse-joint-venture/}}
+The link between this specific vehicle and 61 Lilford Road is inferred from the
+shared corporate signatures rather than a single filing; and because the venture
+is an ``ultra-urban warehouse'' programme, the residential EPC linkage in our data
+(\pounds{}16m, band E) should be read with caution, as it may reflect a mixed-use
+or ancillary residential element rather than a purely residential holding.
+
+\subsection{Privilege Oxford (Luxembourg): student accommodation}
+
+Privilege Oxford S.\`a r.l. (ROE \texttt{OE024676}, Luxembourg, registered 8
+February 2023) is the registered proprietor of the Slade Park student apartments
+in Headington, Oxford (\pounds{}37m in our data), the single largest
+foreign-non-profit holding by value. Public reporting confirms an earlier
+ownership chain for the same Oxford Brookes scheme (a 2019 sale by Gatehouse Bank
+to a Scottish Widows property trust) but does not itself name Privilege Oxford, so
+the current title-to-vehicle step is consistent with, but not directly confirmed
+by, the public record.
+
+\subsection{Athena Healthcare (Much Hoole) (Isle of Man): a care home}
+
+The proprietor recorded in our data, Athena Healthcare (Much Hoole) Limited (Isle
+of Man, UK establishment \texttt{FC036769}, nature of business ``operation of
+residential care home''), was renamed Sandstone Care (Much Hoole) Limited on 20
+April 2021; the wider Athena Healthcare Group continues as a separate ongoing
+operator.\footnote{\url{https://find-and-update.company-information.service.gov.uk/company/FC036769}}
+The home, a residential and nursing home near Preston, shows that the
+offshore-incorporation universe is not solely prime-residential: operational care
+assets are held through the same Crown Dependency structures. (Our register
+cross-section predates the rename, hence the Athena name; the site is branded
+``Ribble Court'' by the current operator.)
+
+\subsection{Register-only cases}
+
+For four of the shortlisted proprietors only the bare incorporation could be
+verified, and no company-level public reporting was located: MRF Managing Trustee
+No.\,1 Limited (Jersey, \texttt{OE007919}; the ``Managing Trustee'' form is
+consistent with a Jersey Property Unit Trust structure), Balea Stiftung
+(Liechtenstein foundation, \texttt{OE017732}), Caerus Limited (Jersey,
+\texttt{OE030686}) and Ripley Ventures SA (British Virgin Islands,
+\texttt{OE013441}, administered through a BVI registered agent). That the register
+yields an address, a jurisdiction and nothing more is itself the point: for a
+large share of the offshore universe the public record stops at the incorporation
+certificate, which is precisely the transparency gap that a beneficial-ownership
+layer (future work) would close.
+
+\section{Caveats and future work}
+
+The ownership cross-section is the January 2025 register, so profiles are
+survivorship-conditioned; \texttt{date\_proprietor\_added} reflects the current
+owner's registration, not acquisition of the portfolio. Jurisdiction here is
+the country of \emph{legal incorporation} of the registered proprietor. A
+beneficial-ownership layer (PSC and Register of Overseas Entities linkage, as
+built for the London project) would separate offshore incorporation from
+offshore control and is left as future work for this branch.
+
+\end{document}

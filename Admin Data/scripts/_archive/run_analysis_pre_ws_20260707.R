@@ -22,8 +22,6 @@ RUN_MATCHING    <- as.logical(Sys.getenv("RUN_MATCHING",    unset = "FALSE"))
 RUN_REGRESSIONS <- as.logical(Sys.getenv("RUN_REGRESSIONS", unset = "TRUE"))
 RUN_BALANCE     <- as.logical(Sys.getenv("RUN_BALANCE",     unset = "TRUE"))
 RUN_ENRICHMENT  <- as.logical(Sys.getenv("RUN_ENRICHMENT",  unset = "TRUE"))
-RUN_HTE         <- as.logical(Sys.getenv("RUN_HTE",         unset = "FALSE"))
-RUN_TXN_VINTAGE <- as.logical(Sys.getenv("RUN_TXN_VINTAGE", unset = "FALSE"))
 RUN_SYNTHESIS   <- as.logical(Sys.getenv("RUN_SYNTHESIS",   unset = "TRUE"))
 RUN_WITHIN_CORPORATE <- as.logical(Sys.getenv("RUN_WITHIN_CORPORATE", unset = "FALSE"))
 
@@ -64,8 +62,8 @@ fwrite(data.table(
   duration_s = numeric(0)
 ), pipeline_log_path)
 
-message(sprintf("RUN_MATCHING: %s | RUN_REGRESSIONS: %s | RUN_BALANCE: %s | RUN_ENRICHMENT: %s | RUN_HTE: %s | RUN_TXN_VINTAGE: %s | RUN_SYNTHESIS: %s | WITHIN_CORPORATE: %s",
-                RUN_MATCHING, RUN_REGRESSIONS, RUN_BALANCE, RUN_ENRICHMENT, RUN_HTE, RUN_TXN_VINTAGE, RUN_SYNTHESIS, RUN_WITHIN_CORPORATE))
+message(sprintf("RUN_MATCHING: %s | RUN_REGRESSIONS: %s | RUN_BALANCE: %s | RUN_ENRICHMENT: %s | RUN_SYNTHESIS: %s | WITHIN_CORPORATE: %s",
+                RUN_MATCHING, RUN_REGRESSIONS, RUN_BALANCE, RUN_ENRICHMENT, RUN_SYNTHESIS, RUN_WITHIN_CORPORATE))
 message(sprintf("OVERWRITE_MATCHING: %s | OVERWRITE_REGRESSIONS: %s",
                 OVERWRITE_MATCHING, OVERWRITE_REGRESSIONS))
 
@@ -236,56 +234,6 @@ if (RUN_ENRICHMENT) {
   }
 } else {
   message("\n\n========== PHASE 4: ENRICHMENT (SKIPPED) ==========\n")
-}
-
-
-# Phase 4b: Heterogeneous Treatment Effects (06c) ---------------------------
-
-if (RUN_HTE) {
-  message("\n\n========== PHASE 4b: HETEROGENEOUS EFFECTS (all geographies) ==========\n")
-
-  for (level in geo_levels) {
-    message(sprintf("\n>>> HTE / Archetypes [%s] <<<", level))
-    Sys.setenv(MATCHING_GEOGRAPHY_OVERRIDE = level)
-
-    t_start <- Sys.time()
-    status  <- run_step(
-      sprintf("HTE [%s]", level),
-      here::here("scripts", "06c_heterogeneous_effects.R")
-    )
-    t_end <- Sys.time()
-
-    log_step(run_id, level, "hte", status, t_start, t_end)
-    run_log[[paste0(level, ":hte")]] <- status
-    gc()
-  }
-} else {
-  message("\n\n========== PHASE 4b: HETEROGENEOUS EFFECTS (SKIPPED) ==========\n")
-}
-
-
-# Phase 4c: Transaction-Vintage Gradient (06d) -------------------------------
-
-if (RUN_TXN_VINTAGE) {
-  message("\n\n========== PHASE 4c: TRANSACTION VINTAGE (all geographies) ==========\n")
-
-  for (level in geo_levels) {
-    message(sprintf("\n>>> Transaction vintage [%s] <<<", level))
-    Sys.setenv(MATCHING_GEOGRAPHY_OVERRIDE = level)
-
-    t_start <- Sys.time()
-    status  <- run_step(
-      sprintf("Transaction vintage [%s]", level),
-      here::here("scripts", "06d_transaction_vintage.R")
-    )
-    t_end <- Sys.time()
-
-    log_step(run_id, level, "txn_vintage", status, t_start, t_end)
-    run_log[[paste0(level, ":txn_vintage")]] <- status
-    gc()
-  }
-} else {
-  message("\n\n========== PHASE 4c: TRANSACTION VINTAGE (SKIPPED) ==========\n")
 }
 
 

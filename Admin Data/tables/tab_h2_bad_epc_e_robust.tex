@@ -1,0 +1,29 @@
+\begin{table}[htbp]
+\centering
+\caption{For-Profit Below-E EPC: Robustness Across Specifications}
+\label{tab:h2_bad_epc_e_robust}
+\begin{tabular}{llrrr}
+\toprule
+Specification & Core & Coef (pp) & $p$-value & $N$ \\
+\midrule
+Baseline & base & +0.64*** & $<$0.001 & 2,764,756 \\
+Baseline & council\_tax & +0.58*** & $<$0.001 & 2,133,463 \\
+Baseline & ppd & +0.68*** & $<$0.001 & 1,505,216 \\
+Baseline & ppd\_counciltax & +0.63*** & $<$0.001 & 1,344,462 \\
+Council Tax & council\_tax & +0.65*** & $<$0.001 & 1,751,815 \\
+Council Tax & ppd\_counciltax & +0.65*** & $<$0.001 & 1,120,103 \\
+Price Paid & ppd & +0.61*** & $<$0.001 & 654,863 \\
+Price Paid & ppd\_counciltax & +0.54*** & $<$0.001 & 572,355 \\
+Council Tax + Price Paid & ppd\_counciltax & +0.55*** & $<$0.001 & 401,041 \\
+\bottomrule
+\end{tabular}
+\begin{minipage}{0.9\textwidth}
+\vspace{4pt}
+\footnotesize
+\textit{Notes:} PSM with subclass FE, LA geography.
+Treatment: for-profit (all). Outcome: \texttt{bad\_epc\_e} (below EPC E).
+All spec $\times$ core combinations shown.
+$^{***}p<0.001$; $^{**}p<0.01$; $^{*}p<0.05$.
+Source: \texttt{results\_enriched\_LA.csv}.
+\end{minipage}
+\end{table}

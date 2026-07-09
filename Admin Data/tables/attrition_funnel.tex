@@ -1,0 +1,53 @@
+\begin{table}[htbp]
+\centering
+\caption{Matching Attrition Funnel: Treated Units and LA Survival by Stage}
+\label{tab:attrition_funnel}
+\small
+\begin{tabular}{lrrrrr}
+\toprule
+Stage & For-profit & Foreign FP & Tax haven & Non-profit & Public \\
+\midrule
+\multicolumn{6}{l}{\textit{Panel A: Baseline spec, base core}} \\
+Eligible (raw, core sample) & 3,027,035 & 174,526 & 174,947 & 2,489,856 & 1,435,432 \\
+Complete covariate cases & 2,282,352 & 90,252 & 90,336 & 2,002,000 & 1,361,592 \\
+Passed size gate & 2,282,352 & 90,109 & 90,202 & 2,002,000 & 1,361,460 \\
+Matched (1:1 PSM) & 913,094 & 40,233 & 40,385 & 559,071 & 360,774 \\
+Caliper PS $\leq$ 0.2 & 23,356 & 34,412 & 34,314 & 37,101 & 26,631 \\
+Caliper PS $\leq$ 0.1 & 4,214 & 25,625 & 25,503 & 6,728 & 8,638 \\
+\addlinespace
+LAs at start & 346 & 346 & 346 & 346 & 346 \\
+LAs with eligible sample & 346 & 345 & 346 & 346 & 346 \\
+LAs passing gate & 346 & 319 & 319 & 346 & 325 \\
+LAs with matches & 346 & 325 & 324 & 346 & 331 \\
+LAs in headline regression & 346 & 329 & 326 & 346 & 338 \\
+\midrule
+\multicolumn{6}{l}{\textit{Panel B: Price Paid spec, ppd core}} \\
+Eligible (raw, core sample) & 2,000,667 & 119,985 & 120,657 & 332,225 & 278,108 \\
+Complete covariate cases & 1,638,777 & 65,014 & 65,245 & 261,186 & 261,863 \\
+Passed size gate & 1,637,430 & 64,887 & 65,113 & 261,135 & 260,469 \\
+Matched (1:1 PSM) & 218,576 & 5,423 & 5,290 & 27,607 & 21,243 \\
+Caliper PS $\leq$ 0.2 & 13,529 & 4,033 & 3,873 & 16,852 & 8,393 \\
+Caliper PS $\leq$ 0.1 & 3,959 & 3,012 & 2,859 & 9,219 & 4,683 \\
+\addlinespace
+LAs at start & 346 & 346 & 346 & 346 & 346 \\
+LAs with eligible sample & 346 & 343 & 344 & 345 & 337 \\
+LAs passing gate & 344 & 320 & 317 & 344 & 295 \\
+LAs with matches & 345 & 262 & 255 & 343 & 275 \\
+LAs in headline regression & 345 & 269 & 261 & 344 & 278 \\
+\bottomrule
+\end{tabular}
+\begin{minipage}{0.95\textwidth}
+\vspace{4pt}
+\footnotesize
+\textit{Notes:} Counts of treated properties surviving each stage of the matching
+funnel, pooled across local authorities, plus the number of LAs surviving each stage.
+Eligible = non-missing treatment indicator within the core sample. Complete cases =
+non-missing matching covariates. Size gate = per-LA minimum treated/control counts
+(sparse cores: $>5$ treated, $>25$ control; other cores: $>10$ treated, $>50$ control).
+Matched = 1:1 nearest-neighbour propensity-score matches with exact strata.
+Calipers are post-hoc propensity-score filters as in the PS$\leq$0.2 / PS$\leq$0.1 models.
+``LAs in headline regression'' = distinct-LA cluster count of the PSM + Subclass FE model
+(outcome \texttt{current\_energy\_efficiency}).
+Source: \texttt{attrition\_funnel\_LA.csv} (script 05b).
+\end{minipage}
+\end{table}

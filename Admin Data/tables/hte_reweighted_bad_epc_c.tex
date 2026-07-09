@@ -1,0 +1,31 @@
+\begin{table}[htbp]
+\centering
+\caption{Composition vs.\ Treatment: Reweighted Effects, Below EPC C}
+\label{tab:hte_reweighted_bad_epc_c}
+\small
+\begin{tabular}{lrrrrr}
+\toprule
+Treatment & ATT (pp) & $\tau_{rw}$ (full) & $\tau_{rw}$ (10 arch.) & Composition & Wald $p$ \\
+\midrule
+For-profit (all) & -3.12*** & -2.80 (0.239) & -2.43 (0.324) & -0.32 & $<$0.001 \\
+UK for-profit & -3.10*** & -2.78 (0.240) & -2.38 (0.320) & -0.32 & $<$0.001 \\
+Foreign for-profit & -5.38*** & -2.99 (0.670) & -0.57 (0.984) & -2.39 & $<$0.001 \\
+Non-profit & -14.76*** & -14.83 (0.537) & -15.99 (0.653) & +0.08 & $<$0.001 \\
+Tax haven (all) & -5.44*** & -3.03 (0.694) & +0.11 (1.165) & -2.41 & $<$0.001 \\
+Public sector & -16.55*** & -12.58 (0.785) & -12.04 (0.965) & -3.97 & $<$0.001 \\
+\bottomrule
+\end{tabular}
+\begin{minipage}{0.95\textwidth}
+\vspace{4pt}
+\footnotesize
+\textit{Notes:} Matched-pair design, Baseline spec, base core, LA-clustered.
+ATT = pooled pair-difference estimate (identical to the PSM + Subclass FE
+coefficient). $\tau_{rw}$ = cell CATEs reweighted to the control-pool covariate
+distribution (delta-method SEs in parentheses); full = all estimated cells,
+10 arch. = the ten headline archetypes. Composition = ATT $-$ $\tau_{rw}$ (full):
+the part of the pooled effect attributable to the treated group's covariate mix.
+Wald $p$: test that all cell CATEs are equal.
+Coefficients in percentage points.
+Source: \texttt{hte\_reweighted\_LA.csv} (script 06c).
+\end{minipage}
+\end{table}

@@ -1,0 +1,26 @@
+\begin{table}[htbp]
+\centering
+\caption{Below-E EPC Prevalence by Ownership Type}
+\label{tab:h2_bad_epc_e}
+\begin{tabular}{lrrrr}
+\toprule
+Treatment & Coef (pp) & Std.\ coef & $p$-value & $N$ \\
+\midrule
+Public sector & -0.3** & -0.028 & 0.003 & 965,606 \\
+Non-profit & -0.5*** & -0.045 & $<$0.001 & 1,599,851 \\
+Tax haven (all) & -0.2 & -0.011 & 0.346 & 122,017 \\
+Foreign for-profit & -0.2 & -0.012 & 0.320 & 121,371 \\
+For-profit (all) & +0.6*** & 0.038 & $<$0.001 & 2,764,756 \\
+\bottomrule
+\end{tabular}
+\begin{minipage}{0.9\textwidth}
+\vspace{4pt}
+\footnotesize
+\textit{Notes:} PSM with subclass FE, LA geography, Baseline spec, base core.
+Outcome: \texttt{bad\_epc\_e} (= 1 if below EPC E, i.e.\ SAP score $<$ 39) --- the present regulatory minimum.
+Coefficients in percentage points (coef $\times$ 100).
+Negative = treated properties are \textit{less} likely to fall below E.
+$^{***}p<0.001$; $^{**}p<0.01$; $^{*}p<0.05$.
+Source: \texttt{results\_enriched\_LA.csv}.
+\end{minipage}
+\end{table}
