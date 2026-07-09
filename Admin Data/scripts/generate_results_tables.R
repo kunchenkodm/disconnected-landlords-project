@@ -881,6 +881,71 @@ if (file.exists(hte_typical_path)) {
   cat("Skipped hte_typical_property.tex (no hte_typical_property_LA.csv; run 06c)\n")
 }
 
+# --- Table H1c: archetype x ownership CATE matrix with baseline anchor (R2) ---
+# Interpretable "baseline + treatment effect": rows = representative archetypes
+# with their control-pool baseline EPC; columns = ownership CATEs, flagged
+# (dagger = suspect, -- = no matched support) rather than dropped.
+hte_matrix_path    <- here("output/summary_tables/hte_archetype_matrix_LA.csv")
+hte_baselines_path <- here("output/summary_tables/hte_cell_baselines_LA.csv")
+if (file.exists(hte_matrix_path) && file.exists(hte_defs_path) && file.exists(hte_baselines_path)) {
+  mxx <- fread(hte_matrix_path, na.strings = c("NA", ""))
+  bll <- fread(hte_baselines_path, na.strings = c("NA", ""))
+  dfx <- fread(hte_defs_path, na.strings = c("NA", ""))[is_archetype == TRUE]
+  m_treats <- c("fp", "np", "ps", "th", "frfp")
+  m_labs   <- c(fp = "For-profit", np = "Non-profit", ps = "Public",
+                th = "Tax haven", frfp = "Foreign FP")
+  cee <- mxx[outcome == "current_energy_efficiency" & treatment_short_id %in% m_treats]
+  if (nrow(cee) > 0L) {
+    arch_rows <- dfx[, .(cell_id, arch_rank, property_type, built_form,
+                         era = if ("era" %in% names(dfx)) era else NA_character_,
+                         fuel_class = if ("fuel_class" %in% names(dfx)) fuel_class else NA_character_)]
+    arch_rows <- merge(arch_rows,
+                       bll[, .(cell_id, base_epc = baseline_current_energy_efficiency)],
+                       by = "cell_id")[order(arch_rank)]
+    fmt_m <- function(beta, support) {
+      if (length(support) == 0L || is.na(support) || support == "none" || is.na(beta)) return("--")
+      s <- if (beta >= 0) sprintf("+%.2f", beta) else sprintf("%.2f", beta)
+      if (support == "suspect") paste0(s, "$^{\\dagger}$") else s
+    }
+    lines <- c(
+      "\\begin{table}[htbp]", "\\centering",
+      "\\caption{Archetype $\\times$ Ownership Treatment Effects with Baseline Anchor (EPC Score)}",
+      "\\label{tab:hte_archetype_matrix}", "\\scriptsize",
+      "\\begin{tabular}{llrrrrrr}",
+      "\\toprule",
+      paste0("A & Archetype & Baseline & ",
+             paste(m_labs[m_treats], collapse = " & "), " \\\\"),
+      "\\midrule")
+    for (i in seq_len(nrow(arch_rows))) {
+      r <- arch_rows[i]
+      desc <- tex_esc(paste0(r$property_type, "/", substr(r$built_form, 1, 4), "/", r$era, "/", r$fuel_class))
+      cells <- vapply(m_treats, function(t) {
+        rr <- cee[cell_id == r$cell_id & treatment_short_id == t]
+        if (nrow(rr) == 0L) "--" else fmt_m(rr$beta[1L], rr$support[1L])
+      }, character(1L))
+      lines <- c(lines, sprintf("A%d & %s & %.1f & %s \\\\", r$arch_rank, desc,
+                                r$base_epc, paste(cells, collapse = " & ")))
+    }
+    lines <- c(lines,
+               "\\bottomrule", "\\end{tabular}",
+               "\\begin{minipage}{0.95\\textwidth}", "\\vspace{4pt}", "\\footnotesize",
+               "\\textit{Notes:} Each cell is the matched-pair CATE (treated $-$ control) in EPC",
+               "score for that ownership type, holding the property fixed at the row archetype;",
+               "positive = more efficient than the private-individual control. Baseline = control-pool",
+               "mean EPC of the archetype (the level the effect shifts from). Effects are estimated",
+               "per owner and flagged, not dropped: $^{\\dagger}$ = suspect (thin / few-cluster support,",
+               "still reported); -- = no matched support. Archetypes are the diverse representative",
+               "control-pool cells of Table~\\ref{tab:hte_archetypes}. Baseline spec, base core,",
+               "LA-clustered. Source: \\texttt{hte\\_archetype\\_matrix\\_LA.csv} + \\texttt{hte\\_cell\\_baselines\\_LA.csv} (06c).",
+               "\\end{minipage}", "\\end{table}")
+    write_tex(lines, "hte_archetype_matrix.tex")
+  } else {
+    cat("Skipped hte_archetype_matrix.tex (no CEE matrix rows)\n")
+  }
+} else {
+  cat("Skipped hte_archetype_matrix.tex (need hte_archetype_matrix + baselines + defs; run 06c)\n")
+}
+
 # --- Table H2: ATT vs reweighted ATT vs composition effect ---
 if (file.exists(hte_rw_path)) {
   hr <- fread(hte_rw_path, na.strings = c("NA", ""))

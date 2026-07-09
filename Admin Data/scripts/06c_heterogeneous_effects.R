@@ -73,6 +73,16 @@ BROKEN_PAIR_WARN_SHARE <- 0.03
 # minimum control-pool share for a cell to be an archetype candidate.
 ARCH_SHARE_FLOOR <- 0.0015
 
+# Archetype x ownership CATE matrix (interpretable "baseline + treatment effect"
+# exhibit). Estimate each narrative-archetype cell's pair-difference CATE per
+# treatment DIRECTLY, down to a low floor, and FLAG rather than drop: a cell is
+# "ok" with >= HTE_MIN_PAIRS pairs and >= FEW_CLUSTERS_THRESHOLD LAs, "suspect"
+# when thin or few-cluster (still reported), and "none" below MATRIX_MIN_PAIRS
+# (no reliable estimate). This recovers an archetype for the treatments that can
+# support it instead of restricting the set to universally-estimable cells.
+MATRIX_OUTCOMES   <- c("current_energy_efficiency", "bad_epc_c")
+MATRIX_MIN_PAIRS  <- 10L
+
 HTE_SPEC_NAME     <- "Baseline"
 HTE_MATCHING_CORE <- "base"
 
@@ -153,6 +163,8 @@ rw_path    <- file.path(summary_dir, paste0("hte_reweighted_", MATCHING_GEOGRAPH
 tree_path  <- file.path(summary_dir, paste0("hte_tree_nodes_", MATCHING_GEOGRAPHY, ".csv"))
 err_path   <- file.path(summary_dir, paste0("hte_errors_", MATCHING_GEOGRAPHY, ".csv"))
 typical_path <- file.path(summary_dir, paste0("hte_typical_property_", MATCHING_GEOGRAPHY, ".csv"))
+baselines_path <- file.path(summary_dir, paste0("hte_cell_baselines_", MATCHING_GEOGRAPHY, ".csv"))
+matrix_path <- file.path(summary_dir, paste0("hte_archetype_matrix_", MATCHING_GEOGRAPHY, ".csv"))
 
 log_error <- function(treatment, stage, msg) {
   row <- data.table(run_id = run_id, treatment_short_id = treatment,
@@ -346,6 +358,21 @@ setorder(defs, rank)
 fwrite(defs, defs_path)
 message(sprintf("  Definitions written: %s (%d rows)", basename(defs_path), nrow(defs)))
 
+# --- Per-cell control-pool baseline levels (level anchor for the archetype x
+# ownership matrix). Treatment-invariant baseline: what a property like this
+# cell scores under the ordinary private-individual control. Computed on the
+# eligible control pool (whitelist cells) before it is freed.
+baseline_cols <- intersect(hte_outcomes, names(ctrl_pool))
+cell_baselines <- ctrl_pool[cell_id %in% whitelist,
+  c(list(n_control_pool = .N),
+    setNames(lapply(baseline_cols, function(o) mean(get(o), na.rm = TRUE)),
+             paste0("baseline_", baseline_cols))),
+  by = cell_id]
+cell_baselines[, `:=`(geo_level = MATCHING_GEOGRAPHY, run_id = run_id)]
+fwrite(cell_baselines, baselines_path)
+message(sprintf("  Cell baselines written: %s (%d whitelist cells)",
+                basename(baselines_path), nrow(cell_baselines)))
+
 rm(ctrl_pool); gc()
 
 # --- Typical property per ownership type (R2 descriptive) ---------------------
@@ -402,7 +429,7 @@ if (file.exists(rw_path)) {
     if (length(partial) > 0L) {
       message(sprintf("  Crash-resume: purging partial treatments: %s",
                       paste(partial, collapse = ", ")))
-      for (p in list(cells_path, rw_path, tree_path)) {
+      for (p in list(cells_path, rw_path, tree_path, matrix_path)) {
         if (file.exists(p)) {
           x <- tryCatch(fread(p, na.strings = c("NA", "")), error = function(e) NULL)
           if (!is.null(x) && "treatment_short_id" %in% names(x)) {
@@ -790,6 +817,44 @@ for (config in treatment_metadata) {
     rm(est); gc()
   }  # end outcome loop
 
+  # --- Archetype x ownership CATE matrix (recover + flag, do NOT drop) ---
+  # Direct pair-difference CATE for each narrative-archetype cell, this
+  # treatment. Thin / few-cluster cells are flagged "suspect" and still
+  # reported; cells below MATRIX_MIN_PAIRS are "none" (no reliable estimate).
+  # This is the level-anchored interpretable-baseline exhibit's numerator.
+  matrix_buffer <- list()
+  for (ac in archetype_cells) {
+    for (oc in intersect(MATRIX_OUTCOMES, hte_outcomes)) {
+      dyy <- paste0("D_", oc)
+      sub <- pd[cell_id == ac & !is.na(get(dyy)) & !is.na(D_rooms) & !is.na(D_floor)]
+      npr <- nrow(sub)
+      nla <- if (npr > 0L) uniqueN(sub$local_authority) else 0L
+      beta <- NA_real_; se <- NA_real_; pval <- NA_real_; support <- "none"
+      if (npr >= MATRIX_MIN_PAIRS) {
+        mm <- tryCatch(
+          feols(as.formula(paste0(dyy, " ~ 1 + D_rooms + D_floor")),
+                data = sub, cluster = ~local_authority, lean = TRUE),
+          error = function(e) NULL)
+        if (!is.null(mm)) {
+          mct  <- coeftable(mm)
+          beta <- mct["(Intercept)", "Estimate"]
+          se   <- mct["(Intercept)", "Std. Error"]
+          pval <- mct["(Intercept)", "Pr(>|t|)"]
+          support <- if (npr >= HTE_MIN_PAIRS && nla >= FEW_CLUSTERS_THRESHOLD) "ok" else "suspect"
+          rm(mm)
+        }
+      }
+      matrix_buffer[[paste(ac, oc)]] <- data.table(
+        treatment_short_id = tsid, treatment = config$title,
+        cell_id = ac, arch_rank = match(ac, archetype_cells), outcome = oc,
+        beta = beta, se = se, p_value = pval,
+        ci_lower = beta - 1.96 * se, ci_upper = beta + 1.96 * se,
+        n_pairs = npr, n_las = nla, support = support,
+        spec = HTE_SPEC_NAME, matching_core = HTE_MATCHING_CORE,
+        matching_geography = MATCHING_GEOGRAPHY, run_id = run_id)
+    }
+  }
+
   # Per-treatment write (crash-resume unit)
   if (length(rw_buffer) > 0L) {
     cells_dt <- rbindlist(cells_buffer, fill = TRUE)
@@ -800,16 +865,22 @@ for (config in treatment_metadata) {
       tree_dt <- rbindlist(tree_buffer, fill = TRUE)
       fwrite(tree_dt, tree_path, append = file.exists(tree_path))
     }
-    message(sprintf("  [%s] wrote %d cell rows, %d reweighted rows, %d tree rows (%.1f min)",
+    if (length(matrix_buffer) > 0L) {
+      matrix_dt <- rbindlist(matrix_buffer, fill = TRUE)
+      fwrite(matrix_dt, matrix_path, append = file.exists(matrix_path))
+      rm(matrix_dt)
+    }
+    message(sprintf("  [%s] wrote %d cell rows, %d reweighted rows, %d tree rows, %d matrix rows (%.1f min)",
                     tsid, nrow(cells_dt), nrow(rw_dt),
                     if (length(tree_buffer) > 0L) nrow(rbindlist(tree_buffer, fill = TRUE)) else 0L,
+                    length(matrix_buffer),
                     as.numeric(difftime(Sys.time(), t_treat, units = "mins"))))
     rm(cells_dt, rw_dt)
   } else {
     message(sprintf("  [%s] no results produced (see %s)", tsid, basename(err_path)))
   }
 
-  rm(pd, cells_buffer, rw_buffer, tree_buffer)
+  rm(pd, cells_buffer, rw_buffer, tree_buffer, matrix_buffer)
   gc()
 }
 
