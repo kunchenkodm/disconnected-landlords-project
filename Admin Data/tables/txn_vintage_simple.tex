@@ -1,0 +1,54 @@
+\begin{table}[htbp]
+\centering
+\caption{Estimator Ladder: EPC-Score Ownership Penalty by Transaction Vintage}
+\label{tab:txn_vintage_simple}
+\small
+\begin{tabular}{llrrr}
+\toprule
+Ownership & Years since sale & Simple (raw) & Simple (adj.) & Matched \\
+\midrule
+For-profit & 0-1 & +4.06 & +0.66 & -0.40 \\
+ & 2-4 & +5.44 & +1.26 & +0.40 \\
+ & 5-9 & +5.45 & +1.09 & +0.25 \\
+ & 10-14 & +5.15 & +0.63 & +0.31 \\
+ & 15+ & +3.57 & +0.65 & +0.43 \\
+\midrule
+Foreign for-profit & 0-1 & +9.90 & +3.02 & +0.67 \\
+ & 2-4 & +9.96 & +2.64 & +0.77 \\
+ & 5-9 & +10.17 & +2.56 & -0.01 \\
+ & 10-14 & +9.97 & +2.43 & +0.42 \\
+ & 15+ & +6.58 & +2.40 & +0.41 \\
+\midrule
+Tax haven & 0-1 & +9.94 & +3.00 & +0.57 \\
+ & 2-4 & +9.95 & +2.62 & +0.97 \\
+ & 5-9 & +10.26 & +2.60 & +0.15 \\
+ & 10-14 & +9.95 & +2.39 & +0.39 \\
+ & 15+ & +6.66 & +2.46 & +0.53 \\
+\midrule
+Tax-haven for-profit & 0-1 & +10.01 & +3.03 & +0.65 \\
+ & 2-4 & +10.01 & +2.63 & +0.98 \\
+ & 5-9 & +10.29 & +2.62 & +0.11 \\
+ & 10-14 & +10.02 & +2.42 & +0.36 \\
+ & 15+ & +6.74 & +2.47 & +0.49 \\
+\midrule
+Non-profit & 0-1 & +6.88 & +2.10 & +1.15 \\
+ & 2-4 & +6.79 & +2.19 & +1.47 \\
+ & 5-9 & +6.16 & +2.18 & +2.34 \\
+ & 10-14 & +5.16 & +1.97 & +2.50 \\
+ & 15+ & +4.05 & +1.81 & +1.85 \\
+\bottomrule
+\end{tabular}
+\begin{minipage}{0.95\textwidth}
+\vspace{4pt}
+\footnotesize
+\textit{Notes:} Ownership penalty in EPC score (treated $-$ control) by years
+between the property's most recent sale and its EPC lodgement. \emph{Simple (raw)}:
+unmatched per-bin gap from $y \sim \mathrm{i}(\text{bin},\text{owner}) + \text{bin}$.
+\emph{Simple (adjusted)}: same, plus property-type, built-form, age-band, main-fuel
+fixed effects and floor area / habitable rooms (unmatched but composition-adjusted).
+\emph{Matched}: mean pair difference (Price Paid spec, ppd core; exact-matched on
+vintage). Raw includes composition by vintage; matched strips it; adjusted sits
+between. LA-clustered SEs. \textbf{Descriptive:} selection into transaction timing is
+not random. Source: script 06d.
+\end{minipage}
+\end{table}

@@ -771,35 +771,28 @@ hte_tree_path <- here("output/summary_tables/hte_tree_nodes_LA.csv")
 
 tex_esc <- function(x) gsub("([&%$#_{}])", "\\\\\\1", x)
 
-# --- Table H1: diverse narrative archetype definitions (R2) ---
-# The archetypes are chosen for DIVERSITY (a greedy pass spanning property-type
-# x fuel-class x era buckets), not raw frequency, so the narrative spans modern
-# flats, electric/oil fuel, and so on rather than ten near-identical period gas
-# terraces. Bucket + selection reason columns come from script 06c.
+# --- Table H1: archetype definitions ---
 if (file.exists(hte_defs_path)) {
   hd <- fread(hte_defs_path, na.strings = c("NA", ""))
-  hd <- hd[is_archetype == TRUE]
-  if ("arch_rank" %in% names(hd)) hd <- hd[order(arch_rank)] else hd <- hd[order(rank)]
-  has_bucket <- all(c("fuel_class", "era", "arch_rank") %in% names(hd))
+  hd <- hd[is_archetype == TRUE][order(rank)]
   lines <- c(
     "\\begin{table}[htbp]",
     "\\centering",
-    "\\caption{Diverse Property Archetypes for the Narrative Analysis}",
+    "\\caption{The Ten Most Common Control-Group Property Archetypes}",
     "\\label{tab:hte_archetypes}",
     "\\scriptsize",
     "\\begin{tabular}{rlllllrr}",
     "\\toprule",
-    " & Property type & Built form & Age band & Main fuel & Bucket (fuel/era) & Share & Freq.\\ rank \\\\",
+    " & Property type & Built form & Age band & Main fuel & Floor tercile & Share & Cum. \\\\",
     "\\midrule"
   )
   for (i in seq_len(nrow(hd))) {
     r <- hd[i]
-    aid <- if (has_bucket) r$arch_rank else r$rank
-    bucket <- if (has_bucket) tex_esc(paste0(r$fuel_class, "/", r$era)) else tex_esc(r$floor_tercile)
-    lines <- c(lines, sprintf("A%d & %s & %s & %s & %s & %s & %.1f\\%% & %d \\\\",
-                              aid, tex_esc(r$property_type), tex_esc(r$built_form),
-                              tex_esc(r$construction_age_band), tex_esc(substr(r$main_fuel, 1, 22)),
-                              bucket, r$share_control_pool * 100, r$rank))
+    lines <- c(lines, sprintf("%d & %s & %s & %s & %s & %s & %.1f\\%% & %.1f\\%% \\\\",
+                              r$rank, tex_esc(r$property_type), tex_esc(r$built_form),
+                              tex_esc(r$construction_age_band), tex_esc(substr(r$main_fuel, 1, 28)),
+                              r$floor_tercile,
+                              r$share_control_pool * 100, r$cum_share * 100))
   }
   lines <- c(lines,
              "\\bottomrule",
@@ -807,78 +800,18 @@ if (file.exists(hte_defs_path)) {
              "\\begin{minipage}{0.95\\textwidth}",
              "\\vspace{4pt}",
              "\\footnotesize",
-             "\\textit{Notes:} Archetypes are covariate cells (property type $\\times$ built form",
-             "$\\times$ construction age band $\\times$ main fuel $\\times$ floor-area tercile) in the",
-             "eligible private-rental control pool, England-wide. Rather than the ten most frequent",
-             "cells (which are near-duplicate period gas terraces), the narrative set is chosen by a",
-             "diversity-aware greedy pass that spans coarse buckets: property type $\\times$ fuel class",
-             "(gas/electric/oil) $\\times$ era (period $<$1950 / mid 1950--82 / modern $\\geq$1983).",
-             "A1 seeds on the overall modal cell; later rows fill unrepresented buckets by frequency.",
+             "\\textit{Notes:} Archetypes are the most frequent covariate cells",
+             "(property type $\\times$ built form $\\times$ construction age band $\\times$ main fuel",
+             "$\\times$ floor-area tercile) in the eligible private-rental control pool, England-wide.",
              sprintf("Floor-area terciles cut at %.0f and %.0f sqm on the control pool.",
                      hd$floor_tercile_cut1[1], hd$floor_tercile_cut2[1]),
-             "Share = control-pool share of the cell; Freq.\\ rank = its rank by raw frequency.",
+             "Share = share of the control pool in the cell; Cum. = cumulative share.",
              "Source: \\texttt{hte\\_archetype\\_definitions\\_LA.csv} (script 06c).",
              "\\end{minipage}",
              "\\end{table}")
   write_tex(lines, "hte_archetypes.tex")
 } else {
   cat("Skipped hte_archetypes.tex (no hte_archetype_definitions_LA.csv; run 06c)\n")
-}
-
-# --- Table H1b: typical (modal) property per ownership type (R2) ---
-# The distinctive treated stock, in contrast to the common control cells. Shows
-# that offshore/haven owners hold prime flats where for-profit hold period
-# terraces and public/non-profit hold post-war stock; the estimable flag marks
-# whether that modal cell has matched support for a CATE.
-hte_typical_path <- here("output/summary_tables/hte_typical_property_LA.csv")
-if (file.exists(hte_typical_path)) {
-  tp <- fread(hte_typical_path, na.strings = c("NA", ""))
-  tp_order <- c("fp", "ukfp", "frfp", "np", "ps", "th", "thfp", "thnp",
-                "ch", "bh", "eh", "oh", "frnp", "nonprofit")
-  tp[, .ord := match(treatment_short_id, tp_order)]
-  tp[is.na(.ord), .ord := 999L]
-  setorder(tp, .ord)
-  lines <- c(
-    "\\begin{table}[htbp]",
-    "\\centering",
-    "\\caption{Typical (Modal) Property by Ownership Type}",
-    "\\label{tab:hte_typical_property}",
-    "\\scriptsize",
-    "\\begin{tabular}{lllllrrc}",
-    "\\toprule",
-    "Ownership & Property type & Built form & Age band & Main fuel & Share & Mean EPC & Estimable \\\\",
-    "\\midrule"
-  )
-  for (i in seq_len(nrow(tp))) {
-    r <- tp[i]
-    est_flag <- if (isTRUE(r$estimable_matched)) "yes" else if (isFALSE(r$estimable_matched)) "no" else "--"
-    lines <- c(lines, sprintf("%s & %s & %s & %s & %s & %.1f\\%% & %.1f & %s \\\\",
-                              tex_esc(substr(r$treatment, 1, 26)),
-                              tex_esc(r$property_type), tex_esc(r$built_form),
-                              tex_esc(r$construction_age_band),
-                              tex_esc(substr(r$main_fuel, 1, 20)),
-                              r$share_treated * 100, r$treated_mean_epc, est_flag))
-  }
-  lines <- c(lines,
-             "\\bottomrule",
-             "\\end{tabular}",
-             "\\begin{minipage}{0.95\\textwidth}",
-             "\\vspace{4pt}",
-             "\\footnotesize",
-             "\\textit{Notes:} For each ownership type, the single most common covariate cell among",
-             "its \\emph{treated} eligible properties (property type $\\times$ built form $\\times$ age",
-             "band $\\times$ main fuel $\\times$ floor tercile; tercile omitted here for space).",
-             "Share = share of the treated group falling in that modal cell. Mean EPC = mean current",
-             "energy-efficiency score of the treated group. Estimable = the modal cell is in the",
-             "archetype whitelist \\emph{and} has $\\geq 50$ matched pairs for that ownership type, so a",
-             "matched CATE exists for it; distinctive treated cells (e.g.\\ prime flats) often lack",
-             "matched support and so are not estimable, which is why the matched archetypes reflect",
-             "the common control stock instead. Source: \\texttt{hte\\_typical\\_property\\_LA.csv} (06c).",
-             "\\end{minipage}",
-             "\\end{table}")
-  write_tex(lines, "hte_typical_property.tex")
-} else {
-  cat("Skipped hte_typical_property.tex (no hte_typical_property_LA.csv; run 06c)\n")
 }
 
 # --- Table H2: ATT vs reweighted ATT vs composition effect ---
@@ -928,8 +861,7 @@ if (file.exists(hte_rw_path)) {
                "ATT = pooled pair-difference estimate (identical to the PSM + Subclass FE",
                "coefficient). $\\tau_{rw}$ = cell CATEs reweighted to the control-pool covariate",
                "distribution (delta-method SEs in parentheses); full = all estimated cells,",
-               "10 arch. = the diverse narrative archetype set (Table~\\ref{tab:hte_archetypes}).",
-               "Composition = ATT $-$ $\\tau_{rw}$ (full):",
+               "10 arch. = the ten headline archetypes. Composition = ATT $-$ $\\tau_{rw}$ (full):",
                "the part of the pooled effect attributable to the treated group's covariate mix.",
                "Wald $p$: test that all cell CATEs are equal.",
                if (oc == "bad_epc_c") "Coefficients in percentage points." else "",

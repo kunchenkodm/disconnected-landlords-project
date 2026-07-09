@@ -150,11 +150,28 @@ if (file.exists(hte_cells_path) && file.exists(hte_rw_path)) {
   fdat <- hte_cells[is_archetype == TRUE & treatment_short_id %in% forest_treats &
                       outcome %in% forest_outcomes & !is.na(beta)]
 
+  # Join the diverse-archetype metadata (arch_rank + fuel/era bucket) from the
+  # definitions file so the forest rows order and label by the narrative set.
+  hte_defs_path <- file.path(SUMMARY_TABLES_DIR, "hte_archetype_definitions_LA.csv")
+  arch_meta <- if (file.exists(hte_defs_path)) {
+    d <- fread(hte_defs_path, na.strings = c("NA", ""))
+    d <- d[is_archetype == TRUE]
+    if (all(c("arch_rank", "fuel_class", "era", "property_type") %in% names(d))) {
+      d[, .(cell_id, arch_rank, arch_desc = paste0(property_type, ", ", fuel_class, "/", era))]
+    } else NULL
+  } else NULL
+
   if (nrow(fdat) > 0L) {
-    # Short archetype labels: rank by control-pool weight, largest first
-    arch_order <- unique(fdat[order(-w_control_pool), .(cell_id, w_control_pool)])
-    arch_order[, arch_lab := paste0("A", .I, ": ",
-                                    substr(gsub(" | ", ", ", cell_id, fixed = TRUE), 1, 48))]
+    if (!is.null(arch_meta)) {
+      fdat <- merge(fdat, arch_meta, by = "cell_id", all.x = TRUE)
+      arch_order <- unique(fdat[order(arch_rank), .(cell_id, arch_rank, arch_desc)])
+      arch_order[, arch_lab := paste0("A", arch_rank, ": ", substr(arch_desc, 1, 40))]
+    } else {
+      # Fallback: rank by control-pool weight, largest first
+      arch_order <- unique(fdat[order(-w_control_pool), .(cell_id, w_control_pool)])
+      arch_order[, arch_lab := paste0("A", .I, ": ",
+                                      substr(gsub(" | ", ", ", cell_id, fixed = TRUE), 1, 48))]
+    }
     fdat <- merge(fdat, arch_order[, .(cell_id, arch_lab)], by = "cell_id")
     fdat[, arch_lab := factor(arch_lab, levels = rev(arch_order$arch_lab))]
     fdat[, treat_lab := factor(treat_labs[treatment_short_id], levels = treat_labs[forest_treats])]
@@ -178,7 +195,7 @@ if (file.exists(hte_cells_path) && file.exists(hte_rw_path)) {
       facet_grid(treat_lab ~ outcome_lab, scales = "free_x") +
       labs(
         title = "Archetype-level treatment effects (matched-pair CATEs)",
-        subtitle = "Ten most common control-pool covariate archetypes; dashed red line = pooled ATT",
+        subtitle = "Diverse narrative archetypes (property type, fuel/era); dashed red line = pooled ATT",
         x = "Pair-difference CATE (95% CI, LA-clustered)",
         y = NULL
       ) +

@@ -1,0 +1,39 @@
+\begin{table}[htbp]
+\centering
+\caption{Typical (Modal) Property by Ownership Type}
+\label{tab:hte_typical_property}
+\scriptsize
+\begin{tabular}{lllllrrc}
+\toprule
+Ownership & Property type & Built form & Age band & Main fuel & Share & Mean EPC & Estimable \\
+\midrule
+Effect of For-Profit Owner & House & Mid-Terrace & England and Wales: 1900-1929 & mains gas (not commu & 2.2\% & 67.1 & yes \\
+Effect of UK For-Profit Ow & House & Mid-Terrace & England and Wales: 1900-1929 & mains gas (not commu & 2.3\% & 66.9 & yes \\
+Effect of Foreign For-Prof & Flat & Mid-Terrace & England and Wales: 2003-2006 & electricity (not com & 3.0\% & 71.6 & no \\
+Effect of Non-Profit Owner & House & Semi-Detached & England and Wales: 1950-1966 & mains gas (not commu & 2.9\% & 69.9 & yes \\
+Effect of Public Sector Ow & House & Semi-Detached & England and Wales: 1950-1966 & mains gas (not commu & 3.7\% & 68.7 & yes \\
+Effect of Tax Haven Owners & Flat & Mid-Terrace & England and Wales: 2003-2006 & electricity (not com & 2.9\% & 71.6 & no \\
+Effect of Tax Haven For-Pr & Flat & Mid-Terrace & England and Wales: 2003-2006 & electricity (not com & 3.0\% & 71.8 & no \\
+Effect of Tax Haven Non-Pr & Flat & Mid-Terrace & England and Wales: 1900-1929 & mains gas (not commu & 4.9\% & 67.5 & yes \\
+Effect of Caribbean Haven  & Flat & Mid-Terrace & England and Wales: 2003-2006 & electricity (not com & 2.2\% & 69.1 & no \\
+Effect of British Haven Ow & Flat & Mid-Terrace & England and Wales: 2003-2006 & electricity (not com & 2.9\% & 71.9 & no \\
+Effect of European Haven O & Flat & Mid-Terrace & England and Wales: 2003-2006 & electricity (not com & 3.0\% & 72.3 & no \\
+Effect of Other Haven Owne & Flat & Mid-Terrace & England and Wales: 2003-2006 & electricity (not com & 5.1\% & 68.0 & no \\
+Effect of Foreign Non-Prof & Flat & Mid-Terrace & England and Wales: 1930-1949 & mains gas (community & 7.9\% & 67.7 & no \\
+Effect of UK Non-Profit Ow & House & Semi-Detached & England and Wales: 1950-1966 & mains gas (not commu & 2.9\% & 69.9 & yes \\
+\bottomrule
+\end{tabular}
+\begin{minipage}{0.95\textwidth}
+\vspace{4pt}
+\footnotesize
+\textit{Notes:} For each ownership type, the single most common covariate cell among
+its \emph{treated} eligible properties (property type $\times$ built form $\times$ age
+band $\times$ main fuel $\times$ floor tercile; tercile omitted here for space).
+Share = share of the treated group falling in that modal cell. Mean EPC = mean current
+energy-efficiency score of the treated group. Estimable = the modal cell is in the
+archetype whitelist \emph{and} has $\geq 50$ matched pairs for that ownership type, so a
+matched CATE exists for it; distinctive treated cells (e.g.\ prime flats) often lack
+matched support and so are not estimable, which is why the matched archetypes reflect
+the common control stock instead. Source: \texttt{hte\_typical\_property\_LA.csv} (06c).
+\end{minipage}
+\end{table}

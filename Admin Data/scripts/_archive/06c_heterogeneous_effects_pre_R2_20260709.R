@@ -61,17 +61,9 @@ if (WITHIN_CORPORATE) {
 # Tuning parameters ---------------------------------------------------------
 HTE_MIN_PAIRS   <- 50L    # cells with fewer pairs collapse to "_other"
 HTE_MAX_CELLS   <- 100L   # cap: top cells by control-pool frequency
-HTE_N_ARCHETYPES <- 10L   # narrative archetype count
+HTE_N_ARCHETYPES <- 10L   # headline archetype count
 FEW_CLUSTERS_THRESHOLD <- 20L
 BROKEN_PAIR_WARN_SHARE <- 0.03
-
-# R2 (2026-07-09): the narrative archetype set is chosen by DIVERSITY, not raw
-# frequency. The raw top-10 control-pool cells are near-duplicates (period gas
-# terraced houses); a diversity-aware greedy selection over the whitelist spans
-# coarse buckets (property type x fuel class x construction era) so a narrative
-# develops (modern flats, electric/oil fuel, ...). ARCH_SHARE_FLOOR is the
-# minimum control-pool share for a cell to be an archetype candidate.
-ARCH_SHARE_FLOOR <- 0.0015
 
 HTE_SPEC_NAME     <- "Baseline"
 HTE_MATCHING_CORE <- "base"
@@ -90,30 +82,6 @@ HTE_TREATMENTS <- local({
 archetype_vars <- c("property_type", "built_form", "construction_age_band", "main_fuel")
 base_matching_vars <- c("number_habitable_rooms", "total_floor_area", "lodgement_year",
                         "property_type", "main_fuel", "construction_age_band", "built_form")
-
-# Coarse buckets for the diversity-aware archetype selection (R2). Each maps the
-# fine covariate value onto a small category so the greedy picker can span the
-# (property type x fuel class x era) grid.
-classify_fuel_class <- function(mf) {
-  data.table::fcase(
-    grepl("gas", mf, ignore.case = TRUE), "gas",
-    grepl("electric", mf, ignore.case = TRUE), "electric",
-    grepl("oil", mf, ignore.case = TRUE), "oil",
-    default = "other")
-}
-classify_era <- function(ab) {
-  # First 4-digit year in the band ("England and Wales: 1983-1990" -> 1983);
-  # "... before 1900" has no 4-digit start and is treated as period.
-  yr <- suppressWarnings(as.integer(sub(".*?([0-9]{4}).*", "\\1", ab)))
-  is_before1900 <- grepl("before 1900", ab, ignore.case = TRUE)
-  data.table::fcase(
-    is_before1900, "period",
-    !is.na(yr) & yr < 1950, "period",
-    !is.na(yr) & yr <= 1982, "mid",
-    !is.na(yr) & yr >= 1983, "modern",
-    default = "other")
-}
-# property_type {House, Flat, Bungalow, ...} is already coarse.
 
 matched_data_dir <- file.path(MATCHED_DATA_DIR, MATCHING_GEOGRAPHY)
 summary_dir      <- SUMMARY_TABLES_DIR
@@ -152,7 +120,6 @@ cells_path <- file.path(summary_dir, paste0("hte_cells_", MATCHING_GEOGRAPHY, ".
 rw_path    <- file.path(summary_dir, paste0("hte_reweighted_", MATCHING_GEOGRAPHY, ".csv"))
 tree_path  <- file.path(summary_dir, paste0("hte_tree_nodes_", MATCHING_GEOGRAPHY, ".csv"))
 err_path   <- file.path(summary_dir, paste0("hte_errors_", MATCHING_GEOGRAPHY, ".csv"))
-typical_path <- file.path(summary_dir, paste0("hte_typical_property_", MATCHING_GEOGRAPHY, ".csv"))
 
 log_error <- function(treatment, stage, msg) {
   row <- data.table(run_id = run_id, treatment_short_id = treatment,
@@ -272,119 +239,30 @@ cell_freq[, share_control_pool := n_control_pool / sum(n_control_pool)]
 cell_freq[, cum_share := cumsum(share_control_pool)]
 cell_freq[, rank := .I]
 cell_freq[, in_whitelist := rank <= HTE_MAX_CELLS]
-
-# Split covariate components + coarse buckets (needed for the greedy picker)
-cell_freq[, c("property_type", "built_form", "construction_age_band",
-              "main_fuel", "floor_tercile") := tstrsplit(cell_id, " | ", fixed = TRUE)]
-cell_freq[, `:=`(ptype_bucket = property_type,
-                 fuel_class = classify_fuel_class(main_fuel),
-                 era = classify_era(construction_age_band))]
-cell_freq[, arch_bucket := paste(ptype_bucket, fuel_class, era, sep = "/")]
+cell_freq[, is_archetype := rank <= HTE_N_ARCHETYPES]
 
 whitelist <- cell_freq[in_whitelist == TRUE, cell_id]
-w_lookup  <- setNames(cell_freq$share_control_pool, cell_freq$cell_id)
+archetype_cells <- cell_freq[is_archetype == TRUE, cell_id]
+w_lookup <- setNames(cell_freq$share_control_pool, cell_freq$cell_id)
 
-# --- Diversity-aware greedy archetype selection (R2) --------------------------
-# Candidates: whitelist cells above the share floor, ordered by frequency. Seed
-# with the overall modal cell, then repeatedly add the highest-frequency
-# candidate that fills a (property type x fuel class x era) bucket not yet
-# represented; once every reachable bucket is spanned, fill the remaining slots
-# with the highest-frequency candidates until HTE_N_ARCHETYPES is reached.
-cand <- cell_freq[in_whitelist == TRUE & share_control_pool >= ARCH_SHARE_FLOOR][order(-share_control_pool)]
-if (nrow(cand) == 0L) stop("No archetype candidates above ARCH_SHARE_FLOOR — lower the floor.")
-
-sel_ids     <- character(0)
-sel_reason  <- character(0)
-filled      <- character(0)
-n_target    <- min(HTE_N_ARCHETYPES, nrow(cand))
-
-seed <- cand[1L]
-sel_ids    <- seed$cell_id
-sel_reason <- "modal: overall most common control-pool cell"
-filled     <- seed$arch_bucket
-
-while (length(sel_ids) < n_target) {
-  remaining <- cand[!(cell_id %in% sel_ids)]
-  if (nrow(remaining) == 0L) break
-  new_bkt <- remaining[!(arch_bucket %in% filled)]
-  if (nrow(new_bkt) > 0L) {
-    pick <- new_bkt[1L]  # highest frequency filling a fresh bucket
-    reason <- sprintf("diversity: fills bucket %s", pick$arch_bucket)
-    filled <- c(filled, pick$arch_bucket)
-  } else {
-    pick <- remaining[1L]  # buckets spanned; top up by frequency
-    reason <- "frequency: high-share top-up (all reachable buckets spanned)"
-  }
-  sel_ids    <- c(sel_ids, pick$cell_id)
-  sel_reason <- c(sel_reason, reason)
-}
-
-cell_freq[, is_archetype := cell_id %in% sel_ids]
-cell_freq[, arch_rank := match(cell_id, sel_ids)]  # NA for non-archetypes
-sel_reason_lookup <- setNames(sel_reason, sel_ids)
-cell_freq[, selection_reason := unname(sel_reason_lookup[cell_id])]
-archetype_cells <- sel_ids
-
-n_buckets_spanned <- uniqueN(cell_freq[is_archetype == TRUE, arch_bucket])
-message(sprintf("  %d distinct cells; whitelist = top %d (%.1f%% of control pool).",
+message(sprintf("  %d distinct cells; whitelist = top %d (%.1f%% of control pool); top %d archetypes cover %.1f%%.",
                 nrow(cell_freq), length(whitelist),
-                cell_freq[in_whitelist == TRUE, sum(share_control_pool)] * 100))
-message(sprintf("  Narrative archetypes: %d cells spanning %d buckets (%d property types, %d fuel classes, %d eras); cover %.1f%% of control pool.",
-                length(archetype_cells), n_buckets_spanned,
-                uniqueN(cell_freq[is_archetype == TRUE, ptype_bucket]),
-                uniqueN(cell_freq[is_archetype == TRUE, fuel_class]),
-                uniqueN(cell_freq[is_archetype == TRUE, era]),
+                cell_freq[in_whitelist == TRUE, sum(share_control_pool)] * 100,
+                HTE_N_ARCHETYPES,
                 cell_freq[is_archetype == TRUE, sum(share_control_pool)] * 100))
 
-# Persist definitions (covariate values + buckets + tercile cuts + flags)
-defs <- copy(cell_freq[in_whitelist == TRUE])
+# Persist definitions (covariate values + tercile cuts + whitelist flags)
+defs <- cell_freq[in_whitelist == TRUE]
+defs[, c("property_type", "built_form", "construction_age_band",
+         "main_fuel", "floor_tercile") := tstrsplit(cell_id, " | ", fixed = TRUE)]
 defs[, `:=`(floor_tercile_cut1 = tercile_cuts[1],
             floor_tercile_cut2 = tercile_cuts[2],
             n_control_pool_total = nrow(ctrl_pool),
             geo_level = MATCHING_GEOGRAPHY, run_id = run_id)]
-setorder(defs, rank)
 fwrite(defs, defs_path)
 message(sprintf("  Definitions written: %s (%d rows)", basename(defs_path), nrow(defs)))
 
 rm(ctrl_pool); gc()
-
-# --- Typical property per ownership type (R2 descriptive) ---------------------
-# For each treatment, the modal covariate cell of its TREATED eligible units
-# (not the matched-control modal, which is the common control stock). This is
-# where the distinctive treated stock shows up (e.g. offshore -> prime flats).
-# estimable_matched (cell in whitelist AND >= HTE_MIN_PAIRS matched for that
-# treatment) is filled in the main loop; NA for treatments not processed here.
-message("\n--- Building typical-property-per-ownership-type table ---")
-typical_rows <- list()
-for (cfg in treatment_metadata) {
-  tv_col <- cfg$var
-  if (!tv_col %in% names(dat)) next
-  tp <- unique(dat[!is.na(get(tv_col)) & get(tv_col) == 1L], by = "uprn")
-  tp <- tp[complete.cases(tp[, ..base_matching_vars])]
-  if (nrow(tp) == 0L) next
-  tp[, cell_id := make_cell_id(.SD)]
-  freq <- tp[, .N, by = cell_id][order(-N)]
-  modal_id <- freq$cell_id[1L]
-  comp <- as.list(tstrsplit(modal_id, " | ", fixed = TRUE))
-  typical_rows[[cfg$short_id]] <- data.table(
-    treatment_short_id = cfg$short_id,
-    treatment = cfg$title,
-    modal_cell_id = modal_id,
-    property_type = comp[[1L]], built_form = comp[[2L]],
-    construction_age_band = comp[[3L]], main_fuel = comp[[4L]],
-    floor_tercile = comp[[5L]],
-    n_treated = nrow(tp),
-    n_modal = freq$N[1L],
-    share_treated = freq$N[1L] / nrow(tp),
-    treated_mean_epc = mean(tp$current_energy_efficiency, na.rm = TRUE),
-    in_whitelist = modal_id %in% whitelist,
-    estimable_matched = NA,
-    geo_level = MATCHING_GEOGRAPHY, run_id = run_id)
-  rm(tp, freq)
-}
-typical_dt <- rbindlist(typical_rows, fill = TRUE)
-message(sprintf("  Typical-property base built for %d treatments.", nrow(typical_dt)))
-rm(typical_rows); gc()
 
 
 # 3. Crash-resume --------------------------------------------------------------
@@ -577,17 +455,6 @@ for (config in treatment_metadata) {
   # Cell collapse: whitelist + minimum pair support (per treatment)
   pair_cell_n <- pd[, .N, by = cell_id]
   keep_cells <- pair_cell_n[cell_id %in% whitelist & N >= HTE_MIN_PAIRS, cell_id]
-
-  # Fill the typical-property estimable_matched flag for this treatment: the
-  # treated-modal cell is estimable when it is in the whitelist AND has enough
-  # matched pairs for this treatment.
-  modal_id_t <- typical_dt[treatment_short_id == tsid, modal_cell_id]
-  if (length(modal_id_t) == 1L && !is.na(modal_id_t)) {
-    n_mm <- pair_cell_n[cell_id == modal_id_t, N]
-    n_mm <- if (length(n_mm) == 0L) 0L else n_mm[1L]
-    typical_dt[treatment_short_id == tsid,
-               estimable_matched := (modal_id_t %in% whitelist) && (n_mm >= HTE_MIN_PAIRS)]
-  }
   pd[, cell_est := fifelse(cell_id %in% keep_cells, cell_id, "_other")]
   message(sprintf("  %d cells estimated (+ _other pooling %s pairs)",
                   length(keep_cells),
@@ -811,14 +678,6 @@ for (config in treatment_metadata) {
 
   rm(pd, cells_buffer, rw_buffer, tree_buffer)
   gc()
-}
-
-# Write the typical-property descriptive table (R2)
-if (exists("typical_dt") && nrow(typical_dt) > 0L) {
-  fwrite(typical_dt, typical_path)
-  message(sprintf("\n  Typical-property table written: %s (%d treatments; %d with estimable matched modal cell)",
-                  basename(typical_path), nrow(typical_dt),
-                  sum(typical_dt$estimable_matched %in% TRUE)))
 }
 
 end.time <- Sys.time()
