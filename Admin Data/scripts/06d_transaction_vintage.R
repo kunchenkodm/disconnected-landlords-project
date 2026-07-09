@@ -549,10 +549,15 @@ if (exists("simple_dt") && nrow(simple_dt) > 0L && exists("plot_dt") && nrow(plo
   overlay[, estimator_lab := factor(estimator, levels = c("raw", "adjusted", "matched"),
                                     labels = c("Simple (raw)", "Simple (adjusted)",
                                                "Matched (pair-diff)"))]
-  overlay[, outcome_lab := outcome_labs_o[outcome]]
+  overlay[, outcome_lab := factor(outcome_labs_o[outcome],
+                                  levels = outcome_labs_o[tv_outcomes])]
   overlay[, treat_lab := factor(treat_labs_o[treatment_short_id],
                                 levels = treat_labs_o[tv_treatments])]
 
+  # facet_wrap (not facet_grid) so EACH panel gets its own free y-scale: the
+  # three outcomes have incompatible units (SAP points vs a 0-1 share vs
+  # kWh/sqm) and must not share an axis. ncol = n_outcomes reproduces the
+  # treatment x outcome grid layout (treatment-major panel order).
   p2 <- ggplot(overlay, aes(x = ts_bin_f, y = penalty,
                             colour = estimator_lab, group = estimator_lab)) +
     geom_hline(yintercept = 0, colour = "grey55", linewidth = 0.4) +
@@ -560,7 +565,8 @@ if (exists("simple_dt") && nrow(simple_dt) > 0L && exists("plot_dt") && nrow(plo
                 alpha = 0.10, colour = NA) +
     geom_line(linewidth = 0.5) +
     geom_point(size = 1.4) +
-    facet_grid(treat_lab ~ outcome_lab, scales = "free_y") +
+    facet_wrap(vars(treat_lab, outcome_lab), scales = "free_y",
+               ncol = length(tv_outcomes), labeller = label_wrap_gen(width = 24)) +
     scale_colour_manual(values = c("Simple (raw)" = "#d95f02",
                                    "Simple (adjusted)" = "#7570b3",
                                    "Matched (pair-diff)" = "#1b9e77")) +
@@ -569,18 +575,19 @@ if (exists("simple_dt") && nrow(simple_dt) > 0L && exists("plot_dt") && nrow(plo
                                  "Matched (pair-diff)" = "#1b9e77")) +
     labs(
       title = "Ownership penalty by time since last transaction: estimator ladder",
-      subtitle = "Unmatched raw and covariate-adjusted vs matched pair-difference (ppd core); 95% CI, LA-clustered",
+      subtitle = "Unmatched raw and covariate-adjusted vs matched pair-difference (ppd core); 95% CI, LA-clustered; free y-scale per panel",
       x = "Years between last sale and EPC lodgement",
       y = "Ownership penalty (treated - control)",
       colour = NULL, fill = NULL,
       caption = paste("Raw = unmatched per-bin gap; adjusted = + property covariates;",
                       "matched = pair difference. Descriptive: not identification of retrofit dynamics.")
     ) +
-    theme_minimal(base_size = 9) +
-    theme(strip.text.y = element_text(angle = 0), legend.position = "bottom")
+    theme_minimal(base_size = 8.5) +
+    theme(legend.position = "bottom",
+          strip.text = element_text(size = 7, lineheight = 0.9))
 
   figure_simple_path <- file.path(FIGURES_DIR, paste0("txn_vintage_simple_", MATCHING_GEOGRAPHY, ".pdf"))
-  ggsave(figure_simple_path, p2, width = 10, height = 11, limitsize = FALSE)
+  ggsave(figure_simple_path, p2, width = 10, height = 12, limitsize = FALSE)
   message(sprintf("  Figure written: %s", figure_simple_path))
 
   # LaTeX table: estimator ladder for EPC score, grouped by treatment
