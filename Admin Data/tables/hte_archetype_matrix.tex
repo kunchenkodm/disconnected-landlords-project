@@ -17,6 +17,10 @@ A7 & Bungalow/Semi/mid/gas & 63.1 & -0.17 & +3.05 & +3.08 & -- & -- \\
 A8 & House/Mid-/period/gas & 60.9 & +0.58 & +3.55 & +2.64 & +0.41 & +0.63 \\
 A9 & House/Semi/period/gas & 60.6 & +0.08 & +4.80 & +4.81 & +0.47 & -0.13 \\
 A10 & House/Mid-/period/gas & 61.1 & -0.88 & +3.50 & +1.24 & -1.17 & -0.97 \\
+\midrule
+\multicolumn{8}{l}{\textit{Council-stock reference (representative social housing)}} \\
+R & Council flat (post-war gas) & 66.7 & +0.99 & +3.49 & +3.17 & +1.37 & +1.74 \\
+R & Council house (post-war gas semi) & 63.5 & +0.18 & +3.63 & +3.75 & -0.71 & -1.55 \\
 \bottomrule
 \end{tabular}
 \begin{minipage}{0.95\textwidth}
@@ -27,8 +31,11 @@ score for that ownership type, holding the property fixed at the row archetype;
 positive = more efficient than the private-individual control. Baseline = control-pool
 mean EPC of the archetype (the level the effect shifts from). Effects are estimated
 per owner and flagged, not dropped: $^{\dagger}$ = suspect (thin / few-cluster support,
-still reported); -- = no matched support. Archetypes are the diverse representative
-control-pool cells of Table~\ref{tab:hte_archetypes}. Baseline spec, base core,
-LA-clustered. Source: \texttt{hte\_archetype\_matrix\_LA.csv} + \texttt{hte\_cell\_baselines\_LA.csv} (06c).
+still reported); -- = no matched support. Archetypes (A) are the diverse representative
+control-pool cells of Table~\ref{tab:hte_archetypes}; the council-stock reference (R)
+rows anchor the public / non-profit effect on representative social housing (the
+post-war gas semi and a post-war purpose-built gas flat; the flat's RdSAP built form
+is `semi-detached', i.e.\ one party wall, not a house typology). Baseline spec, base
+core, LA-clustered. Source: \texttt{hte\_archetype\_matrix\_LA.csv} + \texttt{hte\_cell\_baselines\_LA.csv} (06c).
 \end{minipage}
 \end{table}

@@ -926,6 +926,27 @@ if (file.exists(hte_matrix_path) && file.exists(hte_defs_path) && file.exists(ht
       lines <- c(lines, sprintf("A%d & %s & %.1f & %s \\\\", r$arch_rank, desc,
                                 r$base_epc, paste(cells, collapse = " & ")))
     }
+    # Council-stock reference rows (representative social housing), labelled block
+    if ("is_reference" %in% names(cee)) {
+      refm <- unique(cee[is_reference == TRUE & !is.na(ref_label), .(cell_id, ref_label)])
+      if (nrow(refm) > 0L) {
+        refm <- merge(refm, bll[, .(cell_id, base_epc = baseline_current_energy_efficiency)],
+                      by = "cell_id")
+        setorder(refm, ref_label)
+        lines <- c(lines, "\\midrule",
+                   paste0("\\multicolumn{", 3 + length(m_treats),
+                          "}{l}{\\textit{Council-stock reference (representative social housing)}} \\\\"))
+        for (i in seq_len(nrow(refm))) {
+          r <- refm[i]
+          cells <- vapply(m_treats, function(t) {
+            rr <- cee[cell_id == r$cell_id & treatment_short_id == t]
+            if (nrow(rr) == 0L) "--" else fmt_m(rr$beta[1L], rr$support[1L])
+          }, character(1L))
+          lines <- c(lines, sprintf("R & %s & %.1f & %s \\\\", tex_esc(r$ref_label),
+                                    r$base_epc, paste(cells, collapse = " & ")))
+        }
+      }
+    }
     lines <- c(lines,
                "\\bottomrule", "\\end{tabular}",
                "\\begin{minipage}{0.95\\textwidth}", "\\vspace{4pt}", "\\footnotesize",
@@ -934,9 +955,12 @@ if (file.exists(hte_matrix_path) && file.exists(hte_defs_path) && file.exists(ht
                "positive = more efficient than the private-individual control. Baseline = control-pool",
                "mean EPC of the archetype (the level the effect shifts from). Effects are estimated",
                "per owner and flagged, not dropped: $^{\\dagger}$ = suspect (thin / few-cluster support,",
-               "still reported); -- = no matched support. Archetypes are the diverse representative",
-               "control-pool cells of Table~\\ref{tab:hte_archetypes}. Baseline spec, base core,",
-               "LA-clustered. Source: \\texttt{hte\\_archetype\\_matrix\\_LA.csv} + \\texttt{hte\\_cell\\_baselines\\_LA.csv} (06c).",
+               "still reported); -- = no matched support. Archetypes (A) are the diverse representative",
+               "control-pool cells of Table~\\ref{tab:hte_archetypes}; the council-stock reference (R)",
+               "rows anchor the public / non-profit effect on representative social housing (the",
+               "post-war gas semi and a post-war purpose-built gas flat; the flat's RdSAP built form",
+               "is `semi-detached', i.e.\\ one party wall, not a house typology). Baseline spec, base",
+               "core, LA-clustered. Source: \\texttt{hte\\_archetype\\_matrix\\_LA.csv} + \\texttt{hte\\_cell\\_baselines\\_LA.csv} (06c).",
                "\\end{minipage}", "\\end{table}")
     write_tex(lines, "hte_archetype_matrix.tex")
   } else {

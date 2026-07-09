@@ -165,6 +165,7 @@ err_path   <- file.path(summary_dir, paste0("hte_errors_", MATCHING_GEOGRAPHY, "
 typical_path <- file.path(summary_dir, paste0("hte_typical_property_", MATCHING_GEOGRAPHY, ".csv"))
 baselines_path <- file.path(summary_dir, paste0("hte_cell_baselines_", MATCHING_GEOGRAPHY, ".csv"))
 matrix_path <- file.path(summary_dir, paste0("hte_archetype_matrix_", MATCHING_GEOGRAPHY, ".csv"))
+reference_path <- file.path(summary_dir, paste0("hte_reference_cells_", MATCHING_GEOGRAPHY, ".csv"))
 
 log_error <- function(treatment, stage, msg) {
   row <- data.table(run_id = run_id, treatment_short_id = treatment,
@@ -358,12 +359,42 @@ setorder(defs, rank)
 fwrite(defs, defs_path)
 message(sprintf("  Definitions written: %s (%d rows)", basename(defs_path), nrow(defs)))
 
+# --- Reference archetypes: representative social/council stock (post-war gas
+# house + flat). These anchor the public / non-profit effect on THEIR typical
+# stock, which the private-rental control pool under-represents (no post-war
+# flat reaches the top-100 whitelist). Chosen as the modal control-pool cell in
+# each social-stock bucket; carried into the baselines and the archetype x
+# ownership matrix (flagged where matched support is thin). Note the council
+# house is typically also a narrative archetype (A3); the council flat is new.
+pick_modal <- function(pt, er, fc) {
+  x <- cell_freq[property_type == pt & era == er & fuel_class == fc][order(-share_control_pool)]
+  if (nrow(x) == 0L) NA_character_ else x$cell_id[1L]
+}
+reference_defs <- data.table(
+  ref_label = c("Council house (post-war gas semi)", "Council flat (post-war gas)"),
+  ref_type  = c("council_house", "council_flat"),
+  cell_id   = c(pick_modal("House", "mid", "gas"), pick_modal("Flat", "mid", "gas")))
+reference_defs <- reference_defs[!is.na(cell_id)]
+reference_cells <- reference_defs$cell_id
+ref_label_lookup <- setNames(reference_defs$ref_label, reference_defs$cell_id)
+if (nrow(reference_defs) > 0L) {
+  refj <- merge(reference_defs,
+                cell_freq[, .(cell_id, share_control_pool, rank, property_type,
+                              built_form, construction_age_band, main_fuel, floor_tercile)],
+                by = "cell_id", all.x = TRUE)
+  refj[, `:=`(geo_level = MATCHING_GEOGRAPHY, run_id = run_id)]
+  fwrite(refj, reference_path)
+  message(sprintf("  Reference (council) archetypes: %s",
+                  paste(sprintf("%s = %s", reference_defs$ref_type, reference_defs$cell_id),
+                        collapse = " | ")))
+}
+
 # --- Per-cell control-pool baseline levels (level anchor for the archetype x
 # ownership matrix). Treatment-invariant baseline: what a property like this
 # cell scores under the ordinary private-individual control. Computed on the
-# eligible control pool (whitelist cells) before it is freed.
+# eligible control pool (whitelist + reference cells) before it is freed.
 baseline_cols <- intersect(hte_outcomes, names(ctrl_pool))
-cell_baselines <- ctrl_pool[cell_id %in% whitelist,
+cell_baselines <- ctrl_pool[cell_id %in% unique(c(whitelist, reference_cells)),
   c(list(n_control_pool = .N),
     setNames(lapply(baseline_cols, function(o) mean(get(o), na.rm = TRUE)),
              paste0("baseline_", baseline_cols))),
@@ -823,7 +854,8 @@ for (config in treatment_metadata) {
   # reported; cells below MATRIX_MIN_PAIRS are "none" (no reliable estimate).
   # This is the level-anchored interpretable-baseline exhibit's numerator.
   matrix_buffer <- list()
-  for (ac in archetype_cells) {
+  matrix_cells <- unique(c(archetype_cells, reference_cells))
+  for (ac in matrix_cells) {
     for (oc in intersect(MATRIX_OUTCOMES, hte_outcomes)) {
       dyy <- paste0("D_", oc)
       sub <- pd[cell_id == ac & !is.na(get(dyy)) & !is.na(D_rooms) & !is.na(D_floor)]
@@ -846,7 +878,9 @@ for (config in treatment_metadata) {
       }
       matrix_buffer[[paste(ac, oc)]] <- data.table(
         treatment_short_id = tsid, treatment = config$title,
-        cell_id = ac, arch_rank = match(ac, archetype_cells), outcome = oc,
+        cell_id = ac, arch_rank = match(ac, archetype_cells),
+        is_reference = ac %in% reference_cells,
+        ref_label = unname(ref_label_lookup[ac]), outcome = oc,
         beta = beta, se = se, p_value = pval,
         ci_lower = beta - 1.96 * se, ci_upper = beta + 1.96 * se,
         n_pairs = npr, n_las = nla, support = support,
