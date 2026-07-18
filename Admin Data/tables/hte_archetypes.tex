@@ -1,36 +1,42 @@
 \begin{table}[htbp]
 \centering
-\caption{Diverse Property Archetypes for the Narrative Analysis}
+\caption{Property Archetypes: Short Names and Defining Covariates}
 \label{tab:hte_archetypes}
 \scriptsize
-\begin{tabular}{rlllllrr}
+\begin{tabular}{rlllllcr}
 \toprule
- & Property type & Built form & Age band & Main fuel & Bucket (fuel/era) & Share & Freq.\ rank \\
+ & Short name & Property type & Built form & Age band & Main fuel & Floor tercile & Baseline EPC \\
 \midrule
-A1 & House & Mid-Terrace & England and Wales: 1900-1929 & mains gas (not communi & gas/period & 4.0\% & 1 \\
-A2 & Flat & Mid-Terrace & England and Wales: 1900-1929 & mains gas (not communi & gas/period & 2.0\% & 4 \\
-A3 & House & Semi-Detached & England and Wales: 1950-1966 & mains gas (not communi & gas/mid & 1.5\% & 8 \\
-A4 & Flat & Mid-Terrace & England and Wales: 1900-1929 & electricity (not commu & electric/period & 0.8\% & 21 \\
-A5 & House & Mid-Terrace & England and Wales: 1983-1990 & mains gas (not communi & gas/modern & 0.5\% & 27 \\
-A6 & House & Detached & England and Wales: before 1900 & oil (not community) & oil/period & 0.5\% & 28 \\
-A7 & Bungalow & Semi-Detached & England and Wales: 1950-1966 & mains gas (not communi & gas/mid & 0.2\% & 91 \\
-A8 & House & Mid-Terrace & England and Wales: 1900-1929 & mains gas (not communi & gas/period & 3.7\% & 2 \\
-A9 & House & Semi-Detached & England and Wales: 1930-1949 & mains gas (not communi & gas/period & 2.0\% & 3 \\
-A10 & House & Mid-Terrace & England and Wales: before 1900 & mains gas (not communi & gas/period & 1.7\% & 5 \\
+A1 & Edwardian terrace (medium) & House & Mid-Terrace & 1900-1929 & Mains gas & medium & 62.1 \\
+A2 & Edwardian flat & Flat & Mid-Terrace & 1900-1929 & Mains gas & small & 67.0 \\
+A3 & Post-war semi & House & Semi-Detached & 1950-1966 & Mains gas & medium & 63.5 \\
+A4 & Edwardian electric flat & Flat & Mid-Terrace & 1900-1929 & Electricity & small & 56.2 \\
+A5 & 1980s terrace & House & Mid-Terrace & 1983-1990 & Mains gas & small & 69.9 \\
+A6 & Victorian oil detached & House & Detached & before 1900 & Oil & large & 42.7 \\
+A7 & Post-war bungalow & Bungalow & Semi-Detached & 1950-1966 & Mains gas & small & 63.1 \\
+A8 & Edwardian terrace (large) & House & Mid-Terrace & 1900-1929 & Mains gas & large & 60.9 \\
+A9 & Interwar semi & House & Semi-Detached & 1930-1949 & Mains gas & large & 60.6 \\
+A10 & Victorian terrace & House & Mid-Terrace & before 1900 & Mains gas & medium & 61.1 \\
+\midrule
+\multicolumn{8}{l}{\textit{Council-stock reference (representative social housing)}} \\
+R & Council flat & Flat & Semi-Detached & 1950-1966 & Mains gas & small & 66.7 \\
+R & Council semi & House & Semi-Detached & 1950-1966 & Mains gas & medium & 63.5 \\
 \bottomrule
 \end{tabular}
 \begin{minipage}{0.95\textwidth}
 \vspace{4pt}
 \footnotesize
-\textit{Notes:} Archetypes are covariate cells (property type $\times$ built form
-$\times$ construction age band $\times$ main fuel $\times$ floor-area tercile) in the
-eligible private-rental control pool, England-wide. Rather than the ten most frequent
-cells (which are near-duplicate period gas terraces), the narrative set is chosen by a
-diversity-aware greedy pass that spans coarse buckets: property type $\times$ fuel class
-(gas/electric/oil) $\times$ era (period $<$1950 / mid 1950--82 / modern $\geq$1983).
-A1 seeds on the overall modal cell; later rows fill unrepresented buckets by frequency.
+\textit{Notes:} Each archetype is a covariate cell = property type $\times$ built form
+$\times$ construction age band $\times$ main fuel $\times$ floor-area tercile, in the
+eligible private-rental control pool, England-wide. Archetypes (A) are a diversity-aware
+selection spanning property type $\times$ fuel class (gas/electric/oil) $\times$ era
+(Victorian/Edwardian/Interwar/post-war/modern); the council-stock reference (R) rows add
+representative social housing. Short names are used in all other HTE exhibits. For flats,
+`built form' is the RdSAP heat-loss exposure category (number of party walls), not a house
+typology. Baseline EPC = control-pool mean EPC score of the cell (the level a treatment
+effect shifts from).
 Floor-area terciles cut at 64 and 86 sqm on the control pool.
-Share = control-pool share of the cell; Freq.\ rank = its rank by raw frequency.
-Source: \texttt{hte\_archetype\_definitions\_LA.csv} (script 06c).
+Source: \texttt{hte\_archetype\_definitions\_LA.csv}, \texttt{hte\_reference\_cells\_LA.csv},
+\texttt{hte\_cell\_baselines\_LA.csv} (script 06c).
 \end{minipage}
 \end{table}

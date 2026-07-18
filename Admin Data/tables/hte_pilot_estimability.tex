@@ -1,0 +1,44 @@
+\begin{landscape}
+\begin{table}[htbp]
+\centering
+\caption{Estimability sweep: modal cell of every treatment under the top-100 whitelist vs the matched-support rule (EPC score)}
+\label{tab:hte_pilot_estimability}
+\scriptsize
+\begin{tabular}{llrrrccccrr}
+\toprule
+Treat. & Modal cell (short) & Total & Modal & LAs & In & Est. & Est. & Status & $\tau_{rw}$/cov & $\tau_{rw}$/cov \\
+ & & pairs & pairs & & top100 & 06c & support & & (top100) & (support) \\
+\midrule
+fp & Edwardian terrace & 1,013,341 & 50,915 & 335 & yes & yes & yes & \textbf{ok} & +0.20/0.58 & +0.38/0.92 \\
+ukfp & Edwardian terrace & 997,205 & 50,545 & 335 & yes & yes & yes & \textbf{ok} & +0.19/0.58 & +0.37/0.92 \\
+frfp & New-build electric flat & 42,738 & 876 & 123 & no & no & yes & \textbf{ok} & +0.61/0.52 & +0.69/0.60 \\
+thfp & New-build electric flat & 41,137 & 823 & 123 & no & no & yes & \textbf{ok} & +0.63/0.50 & +0.74/0.57 \\
+np & Post-war semi & 607,446 & 19,061 & 333 & yes & yes & yes & \textbf{ok} & +3.32/0.58 & +3.15/0.89 \\
+uknp & Post-war semi & 604,891 & 19,055 & 332 & yes & yes & yes & \textbf{ok} & +3.32/0.58 & +3.16/0.89 \\
+frnp & Interwar flat & 3,034 & 27 & 4 & no & no & no & \textit{fail} & -0.89/0.09 & -2.20/0.06 \\
+thnp & Edwardian flat & 1,683 & 133 & 13 & yes & yes & no & suspect$^\dagger$ & -0.96/0.04 & --/-- \\
+ps & Post-war semi & 376,649 & 18,925 & 245 & yes & yes & yes & \textbf{ok} & +2.66/0.58 & +2.70/0.80 \\
+th & New-build electric flat & 42,845 & 830 & 124 & no & no & yes & \textbf{ok} & +0.66/0.52 & +0.77/0.59 \\
+bh & New-build electric flat & 39,903 & 827 & 124 & no & no & yes & \textbf{ok} & +0.69/0.50 & +0.80/0.57 \\
+eh & New-build electric flat & 33,685 & 740 & 115 & no & no & yes & \textbf{ok} & +0.84/0.47 & +0.91/0.52 \\
+ch & New-build electric flat & 8,776 & 198 & 39 & no & no & yes & \textbf{ok} & +0.13/0.24 & +0.23/0.23 \\
+oh & New-build electric flat & 983 & 12 & 6 & no & no & no & \textit{fail} & --/-- & --/-- \\
+\bottomrule
+\end{tabular}
+\begin{minipage}{0.95\textwidth}
+\vspace{4pt}
+\footnotesize
+\textit{Notes:} One row per treatment = its modal (most common treated) covariate
+cell. `Est.\ 06c' = estimable under the production rule (cell in the top-100
+control-pool whitelist \emph{and} $\geq 50$ matched pairs); `Est.\ support' =
+estimable under the pilot rule ($\geq 50$ matched pairs \emph{and} $\geq 20$
+distinct LAs, whitelist not required). Status: \textbf{ok} = clears the support
+floor; suspect$^\dagger$ = enough pairs but few clusters ($<20$ LAs); \textit{fail}
+= below the pair floor. $\tau_{rw}$/cov = reweighted ATT and control-pool coverage
+under each rule. The offshore-haven 2003--2006 electric flats (frfp, thfp, th, bh, eh)
+flip from `no' to `ok' and coverage rises markedly; \texttt{oh} genuinely fails
+(too few matched pairs) -- the honest ``not every cell needs its own estimate''.
+Source: \texttt{hte\_pilot\_estimability\_LA.csv}, \texttt{hte\_pilot\_summary\_LA.csv} (pilot 06c).
+\end{minipage}
+\end{table}
+\end{landscape}

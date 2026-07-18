@@ -768,61 +768,101 @@ if (file.exists(funnel_path)) {
 hte_defs_path <- here("output/summary_tables/hte_archetype_definitions_LA.csv")
 hte_rw_path   <- here("output/summary_tables/hte_reweighted_LA.csv")
 hte_tree_path <- here("output/summary_tables/hte_tree_nodes_LA.csv")
+hte_baselines_path <- here("output/summary_tables/hte_cell_baselines_LA.csv")
+hte_reference_path <- here("output/summary_tables/hte_reference_cells_LA.csv")
+source(here("scripts", "archetype_names.R"))  # make_archetype_names()
 
 tex_esc <- function(x) gsub("([&%$#_{}])", "\\\\\\1", x)
 
-# --- Table H1: diverse narrative archetype definitions (R2) ---
-# The archetypes are chosen for DIVERSITY (a greedy pass spanning property-type
-# x fuel-class x era buckets), not raw frequency, so the narrative spans modern
-# flats, electric/oil fuel, and so on rather than ten near-identical period gas
-# terraces. Bucket + selection reason columns come from script 06c.
-if (file.exists(hte_defs_path)) {
-  hd <- fread(hte_defs_path, na.strings = c("NA", ""))
-  hd <- hd[is_archetype == TRUE]
-  if ("arch_rank" %in% names(hd)) hd <- hd[order(arch_rank)] else hd <- hd[order(rank)]
-  has_bucket <- all(c("fuel_class", "era", "arch_rank") %in% names(hd))
+# Short-name lookup keyed on cell_id (archetypes + council references), so every
+# HTE exhibit labels a cell the same way. Built once from the definitions.
+archetype_short_lookup <- function() {
+  if (!file.exists(hte_defs_path)) return(setNames(character(0), character(0)))
+  d <- fread(hte_defs_path, na.strings = c("NA", ""))[is_archetype == TRUE]
+  nm <- make_archetype_names(d)
+  lk <- setNames(nm, d$cell_id)
+  if (file.exists(hte_reference_path)) {
+    rf <- fread(hte_reference_path, na.strings = c("NA", ""))
+    rlk <- setNames(fifelse(rf$ref_type == "council_flat", "Council flat", "Council semi"),
+                    rf$cell_id)
+    lk <- c(lk, rlk[!(names(rlk) %in% names(lk))])
+  }
+  lk
+}
+SHORT_NAME <- archetype_short_lookup()
+
+# --- Table H1: archetype covariate legend (short names + defining covariates) ---
+# The single reference table for the HTE exhibits: each archetype's short name,
+# the covariates that define it, and its control-pool baseline EPC. Archetypes
+# (A) are the diversity-aware selection; the council-stock reference (R) rows add
+# representative social housing. Every other HTE exhibit refers to these names.
+clean_band <- function(x) sub("England and Wales: ", "", x)
+short_fuel <- function(mf) fifelse(grepl("electric", mf, ignore.case = TRUE), "Electricity",
+                          fifelse(grepl("oil", mf, ignore.case = TRUE), "Oil",
+                          fifelse(grepl("gas", mf, ignore.case = TRUE), "Mains gas", "Other")))
+if (file.exists(hte_defs_path) && file.exists(hte_baselines_path)) {
+  hd <- fread(hte_defs_path, na.strings = c("NA", ""))[is_archetype == TRUE]
+  hd <- if ("arch_rank" %in% names(hd)) hd[order(arch_rank)] else hd[order(rank)]
+  blz <- fread(hte_baselines_path, na.strings = c("NA", ""))
+  hd[, short := make_archetype_names(hd)]
+  hd <- merge(hd, blz[, .(cell_id, base_epc = baseline_current_energy_efficiency)],
+              by = "cell_id", all.x = TRUE)
+  if ("arch_rank" %in% names(hd)) setorder(hd, arch_rank)
+  refrows <- NULL
+  if (file.exists(hte_reference_path)) {
+    rf <- fread(hte_reference_path, na.strings = c("NA", ""))
+    rf <- merge(rf, blz[, .(cell_id, base_epc = baseline_current_energy_efficiency)],
+                by = "cell_id", all.x = TRUE)
+    rf[, short := fifelse(ref_type == "council_flat", "Council flat", "Council semi")]
+    setorder(rf, ref_type)
+    refrows <- rf
+  }
   lines <- c(
-    "\\begin{table}[htbp]",
-    "\\centering",
-    "\\caption{Diverse Property Archetypes for the Narrative Analysis}",
-    "\\label{tab:hte_archetypes}",
-    "\\scriptsize",
-    "\\begin{tabular}{rlllllrr}",
+    "\\begin{table}[htbp]", "\\centering",
+    "\\caption{Property Archetypes: Short Names and Defining Covariates}",
+    "\\label{tab:hte_archetypes}", "\\scriptsize",
+    "\\begin{tabular}{rlllllcr}",
     "\\toprule",
-    " & Property type & Built form & Age band & Main fuel & Bucket (fuel/era) & Share & Freq.\\ rank \\\\",
-    "\\midrule"
-  )
+    " & Short name & Property type & Built form & Age band & Main fuel & Floor tercile & Baseline EPC \\\\",
+    "\\midrule")
   for (i in seq_len(nrow(hd))) {
     r <- hd[i]
-    aid <- if (has_bucket) r$arch_rank else r$rank
-    bucket <- if (has_bucket) tex_esc(paste0(r$fuel_class, "/", r$era)) else tex_esc(r$floor_tercile)
-    lines <- c(lines, sprintf("A%d & %s & %s & %s & %s & %s & %.1f\\%% & %d \\\\",
-                              aid, tex_esc(r$property_type), tex_esc(r$built_form),
-                              tex_esc(r$construction_age_band), tex_esc(substr(r$main_fuel, 1, 22)),
-                              bucket, r$share_control_pool * 100, r$rank))
+    lines <- c(lines, sprintf("A%d & %s & %s & %s & %s & %s & %s & %.1f \\\\",
+                              r$arch_rank, tex_esc(r$short), tex_esc(r$property_type),
+                              tex_esc(r$built_form), tex_esc(clean_band(r$construction_age_band)),
+                              tex_esc(short_fuel(r$main_fuel)), r$floor_tercile, r$base_epc))
+  }
+  if (!is.null(refrows) && nrow(refrows) > 0L) {
+    lines <- c(lines, "\\midrule",
+               "\\multicolumn{8}{l}{\\textit{Council-stock reference (representative social housing)}} \\\\")
+    for (i in seq_len(nrow(refrows))) {
+      r <- refrows[i]
+      lines <- c(lines, sprintf("R & %s & %s & %s & %s & %s & %s & %.1f \\\\",
+                                tex_esc(r$short), tex_esc(r$property_type), tex_esc(r$built_form),
+                                tex_esc(clean_band(r$construction_age_band)),
+                                tex_esc(short_fuel(r$main_fuel)), r$floor_tercile, r$base_epc))
+    }
   }
   lines <- c(lines,
-             "\\bottomrule",
-             "\\end{tabular}",
-             "\\begin{minipage}{0.95\\textwidth}",
-             "\\vspace{4pt}",
-             "\\footnotesize",
-             "\\textit{Notes:} Archetypes are covariate cells (property type $\\times$ built form",
-             "$\\times$ construction age band $\\times$ main fuel $\\times$ floor-area tercile) in the",
-             "eligible private-rental control pool, England-wide. Rather than the ten most frequent",
-             "cells (which are near-duplicate period gas terraces), the narrative set is chosen by a",
-             "diversity-aware greedy pass that spans coarse buckets: property type $\\times$ fuel class",
-             "(gas/electric/oil) $\\times$ era (period $<$1950 / mid 1950--82 / modern $\\geq$1983).",
-             "A1 seeds on the overall modal cell; later rows fill unrepresented buckets by frequency.",
+             "\\bottomrule", "\\end{tabular}",
+             "\\begin{minipage}{0.95\\textwidth}", "\\vspace{4pt}", "\\footnotesize",
+             "\\textit{Notes:} Each archetype is a covariate cell = property type $\\times$ built form",
+             "$\\times$ construction age band $\\times$ main fuel $\\times$ floor-area tercile, in the",
+             "eligible private-rental control pool, England-wide. Archetypes (A) are a diversity-aware",
+             "selection spanning property type $\\times$ fuel class (gas/electric/oil) $\\times$ era",
+             "(Victorian/Edwardian/Interwar/post-war/modern); the council-stock reference (R) rows add",
+             "representative social housing. Short names are used in all other HTE exhibits. For flats,",
+             "`built form' is the RdSAP heat-loss exposure category (number of party walls), not a house",
+             "typology. Baseline EPC = control-pool mean EPC score of the cell (the level a treatment",
+             "effect shifts from).",
              sprintf("Floor-area terciles cut at %.0f and %.0f sqm on the control pool.",
                      hd$floor_tercile_cut1[1], hd$floor_tercile_cut2[1]),
-             "Share = control-pool share of the cell; Freq.\\ rank = its rank by raw frequency.",
-             "Source: \\texttt{hte\\_archetype\\_definitions\\_LA.csv} (script 06c).",
-             "\\end{minipage}",
-             "\\end{table}")
+             "Source: \\texttt{hte\\_archetype\\_definitions\\_LA.csv}, \\texttt{hte\\_reference\\_cells\\_LA.csv},",
+             "\\texttt{hte\\_cell\\_baselines\\_LA.csv} (script 06c).",
+             "\\end{minipage}", "\\end{table}")
   write_tex(lines, "hte_archetypes.tex")
 } else {
-  cat("Skipped hte_archetypes.tex (no hte_archetype_definitions_LA.csv; run 06c)\n")
+  cat("Skipped hte_archetypes.tex (no defs/baselines; run 06c)\n")
 }
 
 # --- Table H1b: typical (modal) property per ownership type (R2) ---
@@ -852,11 +892,13 @@ if (file.exists(hte_typical_path)) {
   for (i in seq_len(nrow(tp))) {
     r <- tp[i]
     est_flag <- if (isTRUE(r$estimable_matched)) "yes" else if (isFALSE(r$estimable_matched)) "no" else "--"
+    own <- sub("^Effect of ", "", r$treatment)          # drop the "Effect of " prefix
+    own <- sub(" Ownership$", "", own)                    # and the trailing "Ownership"
     lines <- c(lines, sprintf("%s & %s & %s & %s & %s & %.1f\\%% & %.1f & %s \\\\",
-                              tex_esc(substr(r$treatment, 1, 26)),
+                              tex_esc(substr(own, 1, 22)),
                               tex_esc(r$property_type), tex_esc(r$built_form),
-                              tex_esc(r$construction_age_band),
-                              tex_esc(substr(r$main_fuel, 1, 20)),
+                              tex_esc(clean_band(r$construction_age_band)),
+                              tex_esc(short_fuel(r$main_fuel)),
                               r$share_treated * 100, r$treated_mean_epc, est_flag))
   }
   lines <- c(lines,
@@ -918,12 +960,14 @@ if (file.exists(hte_matrix_path) && file.exists(hte_defs_path) && file.exists(ht
       "\\midrule")
     for (i in seq_len(nrow(arch_rows))) {
       r <- arch_rows[i]
-      desc <- tex_esc(paste0(r$property_type, "/", substr(r$built_form, 1, 4), "/", r$era, "/", r$fuel_class))
+      desc <- unname(SHORT_NAME[r$cell_id])
+      if (is.na(desc)) desc <- paste0(r$property_type, "/", substr(r$built_form, 1, 4),
+                                      "/", r$era, "/", r$fuel_class)
       cells <- vapply(m_treats, function(t) {
         rr <- cee[cell_id == r$cell_id & treatment_short_id == t]
         if (nrow(rr) == 0L) "--" else fmt_m(rr$beta[1L], rr$support[1L])
       }, character(1L))
-      lines <- c(lines, sprintf("A%d & %s & %.1f & %s \\\\", r$arch_rank, desc,
+      lines <- c(lines, sprintf("A%d & %s & %.1f & %s \\\\", r$arch_rank, tex_esc(desc),
                                 r$base_epc, paste(cells, collapse = " & ")))
     }
     # Council-stock reference rows (representative social housing), labelled block
@@ -942,7 +986,8 @@ if (file.exists(hte_matrix_path) && file.exists(hte_defs_path) && file.exists(ht
             rr <- cee[cell_id == r$cell_id & treatment_short_id == t]
             if (nrow(rr) == 0L) "--" else fmt_m(rr$beta[1L], rr$support[1L])
           }, character(1L))
-          lines <- c(lines, sprintf("R & %s & %.1f & %s \\\\", tex_esc(r$ref_label),
+          rlab <- if (grepl("flat", r$ref_label, ignore.case = TRUE)) "Council flat" else "Council semi"
+          lines <- c(lines, sprintf("R & %s & %.1f & %s \\\\", tex_esc(rlab),
                                     r$base_epc, paste(cells, collapse = " & ")))
         }
       }

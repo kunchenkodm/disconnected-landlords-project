@@ -12,6 +12,7 @@ start.time <- Sys.time()
 
 # Source global setup script for paths and configurations
 source(here::here("scripts", "00_setup.R"))
+source(here::here("scripts", "archetype_names.R"))  # make_archetype_names()
 
 ### Requirements ###
 library(data.table)
@@ -157,7 +158,8 @@ if (file.exists(hte_cells_path) && file.exists(hte_rw_path)) {
     d <- fread(hte_defs_path, na.strings = c("NA", ""))
     d <- d[is_archetype == TRUE]
     if (all(c("arch_rank", "fuel_class", "era", "property_type") %in% names(d))) {
-      d[, .(cell_id, arch_rank, arch_desc = paste0(property_type, ", ", fuel_class, "/", era))]
+      d[, arch_desc := make_archetype_names(d)]
+      d[, .(cell_id, arch_rank, arch_desc)]
     } else NULL
   } else NULL
 
@@ -212,4 +214,79 @@ if (file.exists(hte_cells_path) && file.exists(hte_rw_path)) {
   }
 } else {
   message("HTE forest plot skipped: hte_cells_LA.csv / hte_reweighted_LA.csv not found (run 06c).")
+}
+
+
+# HTE archetype x ownership matrix heatmap (interpretable baseline + effect) ----
+# Rows = representative archetypes (short names) + council-stock references;
+# columns = ownership types; fill = matched-pair CATE on EPC score (green = more
+# efficient). Suspect cells dashed, no-support greyed. Sources hte_archetype_
+# matrix_LA.csv + hte_cell_baselines_LA.csv + defs/reference (script 06c).
+hte_matrix_path    <- file.path(SUMMARY_TABLES_DIR, "hte_archetype_matrix_LA.csv")
+hte_baselines_path <- file.path(SUMMARY_TABLES_DIR, "hte_cell_baselines_LA.csv")
+hte_defs_path2     <- file.path(SUMMARY_TABLES_DIR, "hte_archetype_definitions_LA.csv")
+hte_ref_path       <- file.path(SUMMARY_TABLES_DIR, "hte_reference_cells_LA.csv")
+if (all(file.exists(c(hte_matrix_path, hte_baselines_path, hte_defs_path2)))) {
+  message("Building HTE archetype x ownership matrix heatmap...")
+  mx <- fread(hte_matrix_path, na.strings = c("NA", ""))
+  bl <- fread(hte_baselines_path, na.strings = c("NA", ""))
+  df <- fread(hte_defs_path2, na.strings = c("NA", ""))[is_archetype == TRUE]
+
+  m_treats  <- c("fp", "np", "ps", "th", "frfp")
+  treat_lab <- c(fp = "For-profit", np = "Non-profit", ps = "Public",
+                 th = "Tax haven", frfp = "Foreign FP")
+
+  df[, short := make_archetype_names(df)]
+  arch <- merge(df[, .(cell_id, arch_rank, short)],
+                bl[, .(cell_id, base = baseline_current_energy_efficiency)], by = "cell_id")
+  arch[, rowlab := paste0("A", arch_rank, ": ", short, "  (base ", round(base), ")")]
+  arch[, grp := "Representative archetypes"]
+
+  rows <- arch[, .(cell_id, arch_rank, rowlab, grp)]
+  if (file.exists(hte_ref_path)) {
+    rf <- fread(hte_ref_path, na.strings = c("NA", ""))
+    rf <- merge(rf, bl[, .(cell_id, base = baseline_current_energy_efficiency)], by = "cell_id")
+    rf[, short := fifelse(ref_type == "council_flat", "Council flat", "Council semi")]
+    rf[, rowlab := paste0(short, "  (base ", round(base), ")")]
+    rf[, arch_rank := 100L + seq_len(.N)][, grp := "Council reference"]
+    rows <- rbind(rows, rf[, .(cell_id, arch_rank, rowlab, grp)])
+  }
+
+  hm <- mx[outcome == "current_energy_efficiency" & treatment_short_id %in% m_treats &
+             cell_id %in% rows$cell_id, .(cell_id, treatment_short_id, beta, support)]
+  hm <- merge(hm, rows, by = "cell_id")
+  if (nrow(hm) > 0L) {
+    hm[, owner := factor(treat_lab[treatment_short_id], levels = treat_lab[m_treats])]
+    hm[, rowlab := factor(rowlab, levels = rev(unique(hm[order(arch_rank)]$rowlab)))]
+    hm[, grp := factor(grp, levels = c("Representative archetypes", "Council reference"))]
+    hm[, fillbeta := ifelse(support == "none", NA_real_, beta)]
+    hm[, txt := ifelse(support == "none", "n/s",
+                ifelse(support == "suspect", paste0(sprintf("%+.1f", beta), "†"),
+                       sprintf("%+.1f", beta)))]
+
+    hte_matrix_plot <- ggplot(hm, aes(owner, rowlab, fill = fillbeta)) +
+      geom_tile(colour = "grey90") +
+      geom_tile(data = hm[support == "suspect"], colour = "grey20",
+                linewidth = 0.5, linetype = "dashed", fill = NA) +
+      geom_text(aes(label = txt), size = 2.7) +
+      facet_grid(grp ~ ., scales = "free_y", space = "free_y") +
+      scale_fill_gradient2(low = "#8073ac", mid = "grey96", high = "#1b9e77", midpoint = 0,
+                           na.value = "grey88", name = "CATE (SAP pts)\n+ = more efficient") +
+      labs(title = "Archetype x ownership treatment effects (matched-pair CATEs)",
+           subtitle = "Effect on EPC score holding the property fixed; baseline = control-pool mean",
+           x = NULL, y = NULL,
+           caption = "dagger = suspect (thin/few-cluster); n/s = no support. See Table 1 for archetype covariates.") +
+      theme_minimal(base_size = 9) +
+      theme(axis.text.y = element_text(size = 7), panel.grid = element_blank(),
+            legend.position = "right",
+            strip.text.y = element_text(angle = 0, size = 8, face = "bold"))
+
+    hte_matrix_file <- file.path(output_dir, "hte_archetype_matrix_LA.pdf")
+    ggsave(hte_matrix_file, hte_matrix_plot, width = 9.2, height = 6.0)
+    message("Saved HTE matrix heatmap to: ", hte_matrix_file)
+  } else {
+    message("HTE matrix heatmap skipped: no matrix rows for the selected treatments.")
+  }
+} else {
+  message("HTE matrix heatmap skipped: matrix / baselines / defs not found (run 06c).")
 }

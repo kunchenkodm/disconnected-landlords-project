@@ -1,0 +1,32 @@
+\begin{table}[htbp]
+\centering
+\caption{Two-archetype contribution to the reweighted effect (EPC score, foreign for-profit focal)}
+\label{tab:hte_pilot_contribution}
+\small
+\begin{tabular}{llrrrrr}
+\toprule
+ & Archetype & $w_c$ & Baseline & frfp $\beta_c$ & np $\beta_c$ & frfp $w_c\beta_c$ \\
+ & (covariate cell) & (share) & EPC & (SAP pts) & (SAP pts) & contribution \\
+\midrule
+A1 & Edwardian terrace & 0.040 & 62.1 & +0.23 & +4.38 & +0.015 \\
+Offshore flat & New-build electric flat & 0.001 & 75.4 & +2.53 & +3.89 & +0.005 \\
+\midrule
+\multicolumn{7}{l}{\textit{Foreign for-profit (frfp):} raw ATT $= +1.53$; $\tau_{rw} = +0.69$ (coverage 0.60); composition $= +0.83$} \\
+\multicolumn{7}{l}{\textit{Non-profit (np):} raw ATT $= +3.15$; $\tau_{rw} = +3.15$; composition $= +0.00$} \\
+\bottomrule
+\end{tabular}
+\begin{minipage}{0.95\textwidth}
+\vspace{4pt}
+\footnotesize
+\textit{Notes:} A1 is the rank-1 (most common) cell in the eligible private-rental
+control pool; the offshore flat is the foreign for-profit modal cell, which the
+top-100 whitelist gate in the production 06c excludes but the matched-support gate
+makes directly estimable (over 800 matched pairs across 123 LAs). $w_c$ = control-pool share
+(the reweighting weight); baseline EPC = control-pool mean score of the cell; $\beta_c$
+= matched-pair CATE (treated $-$ control, LA-clustered). The contribution column uses
+coverage-renormalised weights and sums (with the other estimated cells) to $\tau_{rw}$.
+The small weight on the high-baseline offshore flat is the source of the composition
+effect: reweighting to the common stock down-weights it and the raw premium collapses.
+Source: \texttt{hte\_pilot\_cells\_LA.csv}, \texttt{hte\_pilot\_summary\_LA.csv} (pilot 06c).
+\end{minipage}
+\end{table}
