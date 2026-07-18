@@ -1,0 +1,115 @@
+\documentclass[11pt]{article}
+\usepackage[a4paper,margin=2.2cm]{geometry}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{pdflscape}
+\usepackage[hidelinks]{hyperref}
+
+\title{Disconnected Landlords --- PI-Feedback Task Exhibits}
+\author{Admin Data pipeline (branch \texttt{Full-Sample})}
+\date{2026-07-09 (LA geography)}
+
+\begin{document}
+\maketitle
+
+\noindent This document assembles the tables and figures for the four PI-feedback
+tasks. \textbf{Sign conventions:} \texttt{current\_energy\_efficiency} (EPC/SAP
+score) is \emph{higher = more efficient (better)}; matched-pair effects are
+treated minus control, so a \emph{positive} value means the ownership type is
+\emph{more efficient than its matched private-individual control}.
+\texttt{bad\_epc\_c} is the share below EPC band C (\emph{higher = worse}).
+Archetypes are referred to throughout by the short names defined in
+Table~\ref{tab:hte_archetypes}.
+
+\tableofcontents
+\clearpage
+
+\section{Heterogeneous Treatment Effects and Property Archetypes}
+Task~1. Matched-pair CATEs by property archetype, composition vs.\ like-for-like
+reweighting, the distinctive treated stock per ownership type, and the
+interpretable archetype~$\times$~ownership matrix with baseline anchors.
+Table~\ref{tab:hte_archetypes} is the archetype legend: the short name and the
+covariates that define each archetype.
+
+\input{tables/hte_archetypes.tex}
+
+\input{tables/hte_reweighted_current_energy_efficiency.tex}
+
+\input{tables/hte_reweighted_bad_epc_c.tex}
+
+\input{tables/hte_typical_property.tex}
+
+\input{tables/hte_archetype_matrix.tex}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth,height=0.85\textheight,keepaspectratio]%
+    {output/figures/hte_archetype_forest.pdf}
+  \caption{Archetype-level treatment effects (matched-pair CATEs) for the six
+  headline ownership types and two outcomes; the dashed red line is the pooled
+  ATT. Rows are the archetypes of Table~\ref{tab:hte_archetypes}.}
+  \label{fig:hte_forest}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth,height=0.85\textheight,keepaspectratio]%
+    {output/figures/hte_archetype_matrix_LA.pdf}
+  \caption{Archetype~$\times$~ownership matrix as a heatmap (green = more
+  efficient, purple = less). Baseline EPC in each row label; dashed outline =
+  suspect support; grey = no matched support. Council-stock references shown as a
+  separate panel.}
+  \label{fig:hte_matrix}
+\end{figure}
+
+\clearpage
+\section{Matching Attrition}
+Task~2. Property and Local-Authority counts at each stage of the matching funnel.
+
+\input{tables/attrition_funnel.tex}
+
+\clearpage
+\section{Transaction-Vintage Gradient}
+Task~3. Does the ownership efficiency gap fade with time since the property last
+transacted? Matched pair-difference gradient and the unmatched/matched estimator
+ladder. Descriptive: selection into transaction timing is not random.
+
+\input{tables/txn_vintage_gradient.tex}
+
+\input{tables/txn_vintage_simple.tex}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth,height=0.85\textheight,keepaspectratio]%
+    {output/figures/txn_vintage_penalty_LA.pdf}
+  \caption{Matched-pair ownership penalty by years since last sale (levels; 95\%
+  CI ribbons; panel per outcome).}
+  \label{fig:txn_penalty}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth,height=0.85\textheight,keepaspectratio]%
+    {output/figures/txn_vintage_simple_LA.pdf}
+  \caption{Estimator ladder: unmatched raw and covariate-adjusted vs.\ matched
+  pair-difference penalty, free $y$-scale per panel.}
+  \label{fig:txn_ladder}
+\end{figure}
+
+\clearpage
+\section{Foreign Non-Profits and Tax Havens}
+Task~4. Descriptive universe of offshore and foreign non-profit ownership
+(company-level public register data only).
+
+\input{tables/offshore_universe_jurisdiction.tex}
+
+% Wide table (long registered-company names): rotate to landscape so it fits.
+\begin{landscape}
+\input{tables/offshore_top_proprietors.tex}
+\end{landscape}
+
+\end{document}

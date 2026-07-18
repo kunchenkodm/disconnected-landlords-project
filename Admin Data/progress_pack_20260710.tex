@@ -1,0 +1,379 @@
+\documentclass[11pt]{article}
+\usepackage[a4paper,margin=2.1cm]{geometry}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{pdflscape}
+\usepackage{xcolor}
+\usepackage{framed}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage[hidelinks]{hyperref}
+
+% ---- palette ----
+\definecolor{dlnavy}{RGB}{18,52,86}
+\definecolor{dlaccent}{RGB}{176,42,55}
+\definecolor{shadecolor}{RGB}{238,243,248}
+\definecolor{codebg}{RGB}{246,246,246}
+\definecolor{codekw}{RGB}{18,52,86}
+\definecolor{codecom}{RGB}{110,120,130}
+
+\setlist[itemize]{leftmargin=1.4em,itemsep=1.5pt,topsep=2pt}
+\setlist[enumerate]{leftmargin=1.6em,itemsep=1.5pt,topsep=2pt}
+
+\lstdefinestyle{rstyle}{
+  language=R,
+  basicstyle=\ttfamily\scriptsize,
+  backgroundcolor=\color{codebg},
+  keywordstyle=\color{codekw}\bfseries,
+  commentstyle=\color{codecom}\itshape,
+  stringstyle=\color{dlaccent},
+  breaklines=true,
+  showstringspaces=false,
+  frame=single,
+  rulecolor=\color{gray!40},
+  framexleftmargin=3pt,
+  xleftmargin=3pt,
+  aboveskip=4pt,belowskip=4pt,
+  columns=fullflexible,
+}
+\lstset{style=rstyle}
+
+\newcommand{\status}[1]{\textcolor{dlnavy}{\textbf{[#1]}}}
+
+\title{\vspace{-1.2cm}\color{dlnavy}\textbf{Disconnected Landlords --- Progress Pack}\\[2pt]
+\large\normalcolor Call briefing, 10 July 2026 (LA geography, \texttt{Full-Sample})}
+\author{Dmytro Kunchenko}
+\date{Prepared 2026-07-10}
+
+\begin{document}
+\maketitle
+\vspace{-0.6cm}
+
+\noindent This note summarises the three active workstreams behind the 09 July
+update --- the EPC data transition, the property-archetype reweighting method, and
+the transaction-vintage gradient --- with the underlying formulae, the actual
+estimating code, and the current exhibits. Two further tasks (attrition accounting;
+foreign non-profits and tax havens) are appended for reference and are not the focus
+of tomorrow's call. \textbf{Sign convention:} \texttt{current\_energy\_efficiency}
+(SAP score) is higher~$=$~better; matched-pair effects are treated~$-$~control, so a
+positive value means the ownership type is more efficient than its matched
+private-individual control. \texttt{bad\_epc\_c} is the share of a group below EPC
+band C (higher~$=$~worse).
+
+\vspace{-0.1cm}
+{\small\tableofcontents}
+\clearpage
+
+% ============================================================
+\section{Data: moving to the new EPC release}
+% ============================================================
+\status{In progress}
+
+The underlying EPC certificate dataset is being migrated to its newer release. The
+schema is close to the old one, so most of the pipeline carries over unchanged. The
+one complication is that ownership is observed from the OCOD/CCOD company-ownership
+registers, which are a snapshot dated \textbf{January 2025}; certificates lodged
+after that date could belong to a property that has since changed hands, and pairing
+a post-snapshot EPC with a pre-snapshot owner risks misattributing the certificate to
+the wrong landlord. The current, conservative fix is to cut the certificate feed off
+at January 2025 as well, so both sources sit on the same clock. This only affects the
+roughly 18-month tail; a cleaner long-run fix is to refresh EPC \emph{and} ownership
+data together to a common, more recent vintage, which is worth planning for.
+
+% ============================================================
+\section{Property archetypes and reweighting}
+% ============================================================
+\status{Core method --- preliminary results}
+
+\subsection{Motivation}
+Different landlord types own systematically different property stock: offshore
+owners concentrate in modern flats, councils in post-war semis. A raw treated-minus-
+control gap therefore mixes two things --- a genuine \textbf{treatment effect} (how an
+owner runs a property) and a \textbf{composition effect} (what kind of property that
+owner happens to hold). The archetype exercise separates the two, so that a
+like-for-like effect on a common reference stock can be reported alongside the raw
+gap.
+
+\subsection{Matched pairs}
+The design is unchanged from the main regressions: 1:1 nearest-neighbour propensity
+matching within exact strata. Categorical covariates --- property type, built form,
+construction age band, main fuel --- are exact-matched, as is local authority;
+habitable rooms and floor area are matched on nearest neighbour. Each stratum $s$
+therefore contains exactly one treated and one control property.
+
+\subsection{Step 1: recovering the pooled effect by differencing}
+The baseline matching regression for property $i$ in subclass $s$ is
+\begin{equation}
+  Y_{is} = \tau\,\mathrm{Treat}_{is} + \gamma_1 \mathrm{Rooms}_{is}
+           + \gamma_2 \mathrm{Floor}_{is} + \delta_s + \epsilon_{is}.
+\end{equation}
+Because each subclass holds one treated and one control unit, differencing the two
+removes the subclass fixed effect $\delta_s$:
+\begin{equation}
+  \Delta Y_s = \tau + \gamma_1 \Delta \mathrm{Rooms}_s
+             + \gamma_2 \Delta \mathrm{Floor}_s + \Delta\epsilon_s .
+\end{equation}
+This is estimated directly in \texttt{06c\_heterogeneous\_effects.R}:
+\begin{lstlisting}
+att <- feols(as.formula(paste0(dy, " ~ 1 + D_rooms + D_floor")),
+             data = est, cluster = ~local_authority, lean = TRUE)
+\end{lstlisting}
+The intercept recovers the same pooled ATT as the headline PSM~+~subclass-FE
+regression, without needing to build the subclass fixed effect at all.
+
+\subsection{Step 2: cell-specific effects}
+Splitting properties into archetype cells $c \in C$ (property type $\times$ built
+form $\times$ age band $\times$ main fuel $\times$ floor-area tercile) and replacing
+the single intercept with one per cell gives the conditional average treatment
+effect (CATE) for each archetype:
+\begin{equation}
+  \Delta Y_s = \sum_{c\in C}\beta_c\,\mathbb{I}(\mathrm{Cell}_s=c)
+             + \gamma_1 \Delta \mathrm{Rooms}_s
+             + \gamma_2 \Delta \mathrm{Floor}_s + \Delta\epsilon_s .
+\end{equation}
+\begin{lstlisting}
+est[, cell_f := factor(cell_est)]
+cm <- feols(as.formula(paste0(dy, " ~ 0 + i(cell_f) + D_rooms + D_floor")),
+            data = est, cluster = ~local_authority, lean = TRUE)
+\end{lstlisting}
+
+\subsection{Step 3: reweighting to a common stock}
+Let $w_c$ be cell $c$'s share of the eligible private-rental control pool
+($\sum_c w_c = 1$). The reweighted effect is the control-pool-weighted average of the
+cell CATEs, with a clustered delta-method standard error:
+\begin{equation}
+  \tau_{rw} = \sum_{c\in C} w_c\,\beta_c ,
+  \qquad
+  \mathrm{SE}(\tau_{rw}) = \sqrt{W^{\!\top} V\, W},
+\end{equation}
+where $V$ is the local-authority-cluster-robust variance-covariance matrix of
+$\hat\beta$ from the Step~2 regression.
+\begin{lstlisting}
+w_norm <- w_raw / cov_full
+rw_row[, tau_rw_full := sum(w_norm * b[real_idx])]
+rw_row[, tau_rw_full_se := sqrt(as.numeric(
+  t(w_norm) %*% V[real_idx, real_idx, drop = FALSE] %*% w_norm))]
+rw_row[, composition_effect := att_coef - tau_rw_full]
+\end{lstlisting}
+
+\subsection{Step 4: the composition effect}
+\begin{equation}
+  \underbrace{\tau}_{\text{pooled ATT}} - \underbrace{\tau_{rw}}_{\text{like-for-like}}
+  \;=\; \text{composition effect}.
+\end{equation}
+This is the part of the headline gap explained purely by \emph{which} properties the
+treated group owns, holding fixed how each individual archetype is treated.
+
+\subsection{Worked example: two real archetypes}
+Rather than list every cell, two contrasting archetypes make the mechanics concrete.
+Both are drawn from the current \texttt{06c} output for the EPC-score outcome,
+LA geography, baseline spec.
+
+\vspace{2pt}
+\noindent\textbf{The modal archetype (A1): Edwardian gas mid-terrace.}
+The single most common cell in the control pool --- a mid-terrace house, built
+1900--1929, on mains gas, medium floor area --- covers \textbf{4.04\% of the control
+pool} (94,446 of 2,339,552 eligible properties) and has a control-pool baseline of
+62.1 SAP points. Its cell CATEs: for-profit owners are essentially neutral here
+($\beta = -0.37$), while non-profit owners are \textbf{4.38 points more efficient}
+than the matched private-individual control on exactly this property type.
+
+\vspace{2pt}
+\noindent\textbf{An interesting minority archetype (A4): the period electric flat.}
+A mid-terrace flat built 1900--1929 on electricity, small floor area, covers only
+\textbf{0.76\% of the control pool} (17,887 properties) but has a much lower
+baseline (56.2 SAP --- electric heating is expensive and inefficient in older stock)
+and far larger CATEs: for-profit $+2.33$, non-profit $+7.12$, tax haven $+7.16$. This
+is the closest \emph{estimable} analogue to the property type that offshore owners
+actually concentrate in --- modern (2003--2006) electric flats. That true modal cell
+for offshore ownership never clears the archetype whitelist (the top 100 cells by
+control-pool frequency): no 2000s-built electric flat appears among them, only
+pre-1950 ones. In other words, the stock offshore landlords typically hold is too
+rare in the wider private-rental pool to get its own matched CATE at all --- which is
+exactly why their composition effect is so large: the like-for-like comparison has
+to fall back on the common stock they share with everyone else.
+
+\vspace{2pt}
+\noindent\textbf{Building the weighted estimate.}
+$\tau_{rw}$ sums $w_c\beta_c$ over roughly 90--100 whitelisted cells; A1 and A4 are
+two terms in that sum. For non-profit ownership, A1 contributes
+$0.0404 \times 4.38 \approx 0.18$ points and A4 contributes
+$0.0076 \times 7.12 \approx 0.05$ points --- together under a tenth of the full
+reweighted effect ($\tau_{rw} = +3.29$, against a raw pooled ATT of $+3.15$): no
+single archetype drives the result, which is the point of reweighting over the whole
+distribution rather than reading off one or two cells.
+
+\subsection{Reading the exhibits}
+The archetype matrix (Table~\ref{tab:hte_archetypes}, Figure~\ref{fig:hte_matrix})
+and the forest plot (Figure~\ref{fig:hte_forest}) report the \emph{same} cell CATEs
+$\beta_c$ from Step~2, just in two formats: the matrix as a heatmap by archetype and
+ownership type, the forest as points with confidence intervals. The forest adds one
+extra piece of information, the pooled ATT $\tau$ from Step~1, marked with a red
+dashed line, so the two views can be checked against each other cell-for-cell.
+
+\subsection{Results}
+
+\input{tables/hte_archetypes.tex}
+
+\input{tables/hte_reweighted_current_energy_efficiency.tex}
+
+Public sector and non-profit owners are genuinely more efficient than private
+rental like-for-like: their reweighted effect is as large as, or larger than, the
+raw ATT. For offshore and haven owners, most of the raw efficiency advantage is
+composition --- reweighted to a common stock, the premium collapses toward zero.
+
+\input{tables/hte_typical_property.tex}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth,height=0.78\textheight,keepaspectratio]%
+    {output/figures/hte_archetype_forest.pdf}
+  \caption{Archetype CATEs ($\beta_c$) for six ownership types and two outcomes; red
+  dashed line = pooled ATT $\tau$. Rows are the archetypes of
+  Table~\ref{tab:hte_archetypes}.}
+  \label{fig:hte_forest}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth,height=0.72\textheight,keepaspectratio]%
+    {output/figures/hte_archetype_matrix_LA.pdf}
+  \caption{Archetype~$\times$~ownership CATEs as a heatmap (green = more efficient,
+  purple = less). Baseline EPC in each row label; dashed outline = suspect support;
+  grey = no matched support. Council-stock references shown separately.}
+  \label{fig:hte_matrix}
+\end{figure}
+
+% ============================================================
+\section{Transaction vintage and retrofitting}
+% ============================================================
+\status{Preliminary --- descriptive}
+
+The same pair-difference machinery, applied to time since a property last
+transacted, asks whether the ownership efficiency gap fades with time. Pairs are
+additionally exact-matched on vintage (both lodgement year and sale year), so time-
+since-sale is constant within a pair; sales postdating the EPC are dropped.
+
+\subsection{The estimator ladder}
+Three estimators of the same penalty are compared, from most to least confounded by
+composition. \emph{Raw}: an unmatched per-bin gap that still reflects whichever
+properties happen to transact in that window,
+\begin{lstlisting}
+feols(oc ~ i(ts_bin_f, treat_var) + ts_bin_f,
+      data = est, cluster = ~local_authority, lean = TRUE)
+\end{lstlisting}
+\emph{Adjusted}: the same regression with property-type, built-form, age-band and
+main-fuel fixed effects plus floor area and habitable rooms as controls --- still
+unmatched, but composition-adjusted,
+\begin{lstlisting}
+feols(oc ~ i(ts_bin_f, treat_var) + ts_bin_f + total_floor_area + number_habitable_rooms
+      | property_type + built_form + construction_age_band + main_fuel,
+      data = est, cluster = ~local_authority, lean = TRUE)
+\end{lstlisting}
+\emph{Matched}: the pair-difference gradient, which strips composition out entirely,
+\begin{lstlisting}
+feols(as.formula(paste0(dy, " ~ 0 + i(ts_bin_f)")),
+      data = est, cluster = ~local_authority, lean = TRUE)
+\end{lstlisting}
+Raw $\to$ adjusted $\to$ matched typically shrinks by an order of magnitude: for
+foreign for-profit and tax-haven owners the unmatched gap is around 10 SAP points,
+falls to around 2.5 once composition-adjusted, and to under 1 once matched --- the
+raw comparison is dominated by the fact that offshore owners hold newer, better
+stock, exactly as in the archetype exercise above.
+
+\input{tables/txn_vintage_gradient.tex}
+
+\input{tables/txn_vintage_simple.tex}
+
+For-profit and offshore owners show a small, roughly flat matched gap across
+vintage bins --- once composition is stripped out there is little vintage story left
+to tell. Non-profit owners show a larger matched gap that peaks at 5--14 years since
+sale, consistent with a retrofit cycle on retained stock. Selection into transaction
+timing is not random, so this is a descriptive gradient shape, not an identified
+retrofit dynamic.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth,height=0.6\textheight,keepaspectratio]%
+    {output/figures/txn_vintage_penalty_LA.pdf}
+  \caption{Matched-pair ownership penalty by years since last sale (levels; 95\% CI
+  ribbons; panel per outcome).}
+  \label{fig:txn_penalty}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth,height=0.6\textheight,keepaspectratio]%
+    {output/figures/txn_vintage_simple_LA.pdf}
+  \caption{Estimator ladder: unmatched raw and covariate-adjusted vs.\ matched
+  pair-difference penalty (free $y$-scale per panel).}
+  \label{fig:txn_ladder}
+\end{figure}
+
+% ============================================================
+\section{Matching attrition \textnormal{\small(reference)}}
+% ============================================================
+\status{Complete --- not the focus of this call}
+
+Property- and local-authority-level survival through the matching funnel (eligible
+$\to$ complete covariate cases $\to$ size gate $\to$ 1:1 propensity match $\to$
+caliper filters), computed in \texttt{05b\_compute\_balance.R}. Match rates run
+27--45\%; the caliper is aggressive for the large for-profit pool but retains most
+matches for the smaller, more distinctive offshore pools. Local-authority coverage
+stays close to complete throughout.
+
+\input{tables/attrition_funnel.tex}
+
+% ============================================================
+\section{Foreign non-profits and tax havens \textnormal{\small(reference)}}
+% ============================================================
+\status{Descriptive --- not the focus of this call}
+
+A descriptive profile of offshore and foreign non-profit ownership from company-level
+public register data (OCOD/CCOD plus jurisdiction). The tax-haven universe is
+dominated by Crown-Dependency (Guernsey/Jersey) ground-rent vehicles --- large
+freehold-reversion portfolios spanning over a hundred local authorities with good
+EPCs --- rather than the disinvesting offshore landlords the hypothesis anticipates.
+A smaller, genuinely opaque tail (British Virgin Islands, Gibraltar, and the wider
+Caribbean/other haven classes) holds worse and more expensive prime stock. Full
+tables are in \texttt{task\_exhibits.pdf}; named case studies are drafted in
+\texttt{task\_4\_offshore\_nonprofit\_profiles.tex}.
+
+% ============================================================
+\section{For discussion tomorrow}
+% ============================================================
+\begin{enumerate}
+  \item \textbf{Data:} accept the January-2025 cutoff, or commit to refreshing EPC and
+        ownership data to a common recent vintage?
+  \item \textbf{Reweighting:} is the control pool the right reference distribution for
+        $w_c$, or should it be the treated pool, or a national stock benchmark?
+  \item \textbf{Scope:} the pair-difference collapse is cheap and exact --- worth
+        applying to the main regressions more broadly?
+  \item \textbf{Vintage:} keep the gradient descriptive, or is it worth pursuing an
+        identified retrofit design?
+\end{enumerate}
+
+% ============================================================
+\appendix
+\section{Notation and code pointers}
+\begin{itemize}
+  \item $i$ property, $s$ matched pair/subclass, $c$ archetype cell.
+  \item $\tau$ pooled ATT; $\beta_c$ cell CATE; $w_c$ control-pool share;
+        $\tau_{rw} = W^\top\beta$.
+  \item $V$ local-authority-cluster-robust VCOV of $\hat\beta$;
+        $\mathrm{SE}(\tau_{rw}) = \sqrt{W^\top V W}$.
+  \item Archetype = property type $\times$ built form $\times$ age band $\times$ main
+        fuel $\times$ floor tercile (no geography; both units of a pair share an LA
+        by construction).
+\end{itemize}
+\textbf{Scripts:} \texttt{05b\_compute\_balance.R} (attrition),
+\texttt{06c\_heterogeneous\_effects.R} (archetypes and reweighting),
+\texttt{06d\_transaction\_vintage.R} (vintage ladder),
+\texttt{archetype\_names.R} (narrative labels). Method note:
+\texttt{docs/06c\_reweighting\_methodology.md}.
+
+\end{document}

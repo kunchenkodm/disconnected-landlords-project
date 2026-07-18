@@ -1,0 +1,164 @@
+\documentclass[11pt]{article}
+\usepackage[a4paper,margin=2.1cm]{geometry}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{pdflscape}
+\usepackage{xcolor}
+\usepackage{framed}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage[hidelinks]{hyperref}
+
+% ---- palette (shared with the main progress pack) ----
+\definecolor{dlnavy}{RGB}{18,52,86}
+\definecolor{dlaccent}{RGB}{176,42,55}
+\definecolor{shadecolor}{RGB}{238,243,248}
+\definecolor{codebg}{RGB}{246,246,246}
+\definecolor{codekw}{RGB}{18,52,86}
+\definecolor{codecom}{RGB}{110,120,130}
+
+\setlist[itemize]{leftmargin=1.4em,itemsep=1.5pt,topsep=2pt}
+\setlist[enumerate]{leftmargin=1.6em,itemsep=1.5pt,topsep=2pt}
+
+\lstdefinestyle{rstyle}{
+  language=R,
+  basicstyle=\ttfamily\scriptsize,
+  backgroundcolor=\color{codebg},
+  keywordstyle=\color{codekw}\bfseries,
+  commentstyle=\color{codecom}\itshape,
+  stringstyle=\color{dlaccent},
+  breaklines=true,
+  showstringspaces=false,
+  frame=single,
+  rulecolor=\color{gray!40},
+  framexleftmargin=3pt,
+  xleftmargin=3pt,
+  aboveskip=4pt,belowskip=4pt,
+  columns=fullflexible,
+}
+\lstset{style=rstyle}
+
+\title{\vspace{-1.2cm}\color{dlnavy}\textbf{Disconnected Landlords: Pilot Note}\\[2pt]
+\large\normalcolor Making the foreign for-profit modal archetype estimable\\[2pt]
+\normalsize\normalcolor (LA geography, \texttt{Full-Sample}, 10 July 2026)}
+\author{Dmytro Kunchenko}
+\date{Prepared 2026-07-10}
+
+\begin{document}
+\maketitle
+\vspace{-0.5cm}
+
+\noindent The archetype reweighting method splits a landlord type's raw matched EPC gap
+(treated minus control) into a treatment effect and a composition effect. The
+production estimator gates which covariate cells receive their own effect on a top-100
+control-pool whitelist. That whitelist is the correct base for the reweighting weights
+but not a valid estimability criterion, so the foreign for-profit modal cell (a
+2003--2006 electric flat) is reported as not estimable. This pilot gates on matched
+support instead and estimates the cell directly. Sign: \texttt{current\_energy\_efficiency}
+(SAP score) higher is better, and matched effects are treated minus control, so positive
+means more efficient than the matched private-individual control.
+
+\section{Method}
+
+\textbf{Pair difference.} With 1:1 matching on exact strata, each subclass is a
+treated/control pair sharing all exact covariates, so the headline PSM $+$ Subclass FE
+model collapses to a pair-difference regression. For pair $i$, $D_{y,i}=y^{T}_i-y^{C}_i$,
+and $D_{\text{rooms},i},D_{\text{floor},i}$ are the within-pair differences the exact
+match leaves. The pooled ATT is $\hat\tau$ in
+\[
+  D_{y,i} \;=\; \tau + \gamma_1 D_{\text{rooms},i} + \gamma_2 D_{\text{floor},i} + \varepsilon_i ,
+\]
+clustered by local authority.
+\begin{lstlisting}
+att <- feols(D_y ~ 1 + D_rooms + D_floor, data = est, cluster = ~local_authority)
+\end{lstlisting}
+
+\textbf{Cell CATEs.} Each cell $c$ = property type $\times$ built form $\times$ age band
+$\times$ main fuel $\times$ floor-area tercile. Its effect $\beta_c$ is the same
+regression fit separately on the pairs in $c$:
+\[
+  D_{y,i} \;=\; \beta_c + \gamma_{1c} D_{\text{rooms},i} + \gamma_{2c} D_{\text{floor},i} + \varepsilon_i ,
+  \qquad i : c(i)=c .
+\]
+Disjoint samples make the $\hat\beta_c$ independent.
+\begin{lstlisting}
+for (c in keep_cells) {
+  m_c <- feols(D_y ~ 1 + D_rooms + D_floor,
+               data = est[cell_id == c], cluster = ~local_authority)
+  beta[c] <- coef(m_c)[1]; var_beta[c] <- vcov(m_c)[1, 1]
+}
+\end{lstlisting}
+
+\textbf{Reweighting.} With control-pool shares $w_c$ renormalised over the kept cells,
+$\tilde w_c = w_c / \sum_{c'} w_{c'}$,
+\[
+  \tau_{rw} = \sum_{c} \tilde w_c\,\beta_c ,
+  \qquad
+  \mathrm{Var}(\hat\tau_{rw}) = \sum_{c} \tilde w_c^{\,2}\,\mathrm{Var}(\hat\beta_c) ,
+  \qquad
+  \text{composition} = \text{ATT} - \tau_{rw} ,
+\]
+with coverage $=\sum_c w_c$.
+\begin{lstlisting}
+w_norm <- w_lookup[keep_cells] / sum(w_lookup[keep_cells])
+tau_rw <- sum(w_norm * beta[keep_cells])
+tau_se <- sqrt(sum(w_norm^2 * var_beta[keep_cells]))
+composition <- att_coef - tau_rw
+\end{lstlisting}
+
+\section{Matched support}\label{sec:support}
+
+A cell's matched support for treatment $t$ is its number of intact pairs
+$n_{\text{pairs}}(c,t)$ and distinct local authorities $n_{\text{LA}}(c,t)$. It is
+distinct from the weight $w_c$, which is treatment-invariant: a cell rare in the pool
+can be well supported for a treatment that concentrates in it. The pilot gates
+estimability on matched support alone:
+\[
+  \text{cell } c \text{ estimable for } t
+  \iff n_{\text{pairs}}(c,t) \ge 50 \;\wedge\; n_{\text{LA}}(c,t) \ge 20 .
+\]
+\begin{lstlisting}
+cell_supp  <- pd[, .(n_pairs = .N, n_las = uniqueN(local_authority)), by = cell_id]
+keep_cells <- cell_supp[n_pairs >= 50 & n_las >= 20, cell_id]
+\end{lstlisting}
+The foreign for-profit modal cell clears the floor (over 800 pairs across 123 LAs), as
+do the other offshore havens; \texttt{oh} falls below it and reverts to the common-stock
+reweighting (Table~\ref{tab:hte_pilot_estimability}, Figure~\ref{fig:hte_pilot_support}).
+
+\input{tables/hte_pilot_estimability.tex}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.98\textwidth]{output/figures/hte_pilot_support_vs_weight.pdf}
+\caption{Matched support (vertical) against reweighting weight (horizontal) for each
+treatment's modal cell, coloured by estimability status. The offshore havens sit at low
+weight but high support; \texttt{oh} falls below the 50-pair floor.}
+\label{fig:hte_pilot_support}
+\end{figure}
+
+\clearpage
+\section{Contribution}
+
+The reweighted effect decomposes per cell,
+$\tau_{rw} = \tilde w_{A1}\beta_{A1} + \tilde w_{\text{flat}}\beta_{\text{flat}} + \cdots$.
+A1 (the modal common cell) carries a large weight but a near-zero CATE; the offshore
+flat carries a high CATE but a small weight. Reweighting the flat back to its small
+control-pool share collapses the raw foreign for-profit premium toward $\tau_{rw}$, and
+the gap is the composition effect (Table~\ref{tab:hte_pilot_contribution},
+Figure~\ref{fig:hte_pilot_decomp}).
+
+\input{tables/hte_pilot_contribution.tex}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.92\textwidth]{output/figures/hte_pilot_contribution_decomp.pdf}
+\caption{Decomposition of the raw ATT into $\tau_{rw}=\sum_c \tilde w_c\beta_c$ and the
+composition gap, for foreign for-profit (focal) and non-profit (contrast).}
+\label{fig:hte_pilot_decomp}
+\end{figure}
+
+\end{document}
