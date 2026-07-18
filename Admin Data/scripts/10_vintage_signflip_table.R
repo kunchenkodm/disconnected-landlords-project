@@ -43,7 +43,7 @@ message("  10_vintage_signflip_table.R - Project 1, Task 1.1")
 message(sprintf("  Started: %s", format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
 message("===================================================================")
 
-OUT_DIR <- here::here("output", "project1_vintage")
+OUT_DIR <- file.path(OUTPUT_ROOT, "project1_vintage")
 dir.create(OUT_DIR, showWarnings = FALSE, recursive = TRUE)
 
 # Offshore-relevant treatments. Subset of treatment_metadata defined in

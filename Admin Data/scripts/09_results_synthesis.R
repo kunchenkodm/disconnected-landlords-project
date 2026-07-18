@@ -27,7 +27,7 @@ source(here::here("scripts", "00_setup.R"))
 source(here::here("scripts", "treatment_definitions.R"))
 
 wc_suffix <- if (WITHIN_CORPORATE) "_wc" else ""
-SYNTHESIS_DIR <- here::here("output", "synthesis")
+SYNTHESIS_DIR <- file.path(OUTPUT_ROOT, "synthesis")
 dir.create(SYNTHESIS_DIR, showWarnings = FALSE, recursive = TRUE)
 
 geo_levels <- c("LA", "ITL2", "ITL3")
@@ -1476,7 +1476,7 @@ tryCatch({
   }
   js_lines[length(js_lines)] <- "];"
 
-  js_path <- here::here("output", "dashboard_data.js")
+  js_path <- file.path(OUTPUT_ROOT, "dashboard_data.js")
   writeLines(js_lines, js_path)
   message(sprintf("  Dashboard data: %s (%d rows, %.1f MB)",
                   basename(js_path), nrow(slim), file.size(js_path) / 1e6))

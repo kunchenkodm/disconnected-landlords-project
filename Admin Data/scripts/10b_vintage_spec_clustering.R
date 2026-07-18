@@ -60,7 +60,7 @@ message("  10b_vintage_spec_clustering.R - Project 1, Task 1.2")
 message(sprintf("  Started: %s", format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
 message("===================================================================")
 
-OUT_DIR <- here::here("output", "project1_vintage")
+OUT_DIR <- file.path(OUTPUT_ROOT, "project1_vintage")
 FIG_DIR <- file.path(OUT_DIR, "figures")
 dir.create(OUT_DIR, showWarnings = FALSE, recursive = TRUE)
 dir.create(FIG_DIR, showWarnings = FALSE, recursive = TRUE)

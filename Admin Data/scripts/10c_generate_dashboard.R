@@ -61,8 +61,8 @@ core_suffix <- if (CORE_ONLY) "_core" else ""
 
 geo_suffix <- paste0("_", WINNER_GEO, wc_suffix, core_suffix)
 
-OUT_DIR <- here::here("output", "project1_vintage")
-SUM_DIR <- here::here("output", "summary_tables")
+OUT_DIR <- file.path(OUTPUT_ROOT, "project1_vintage")
+SUM_DIR <- file.path(OUTPUT_ROOT, "summary_tables")
 
 message("===================================================================")
 message("  10c_generate_dashboard.R")

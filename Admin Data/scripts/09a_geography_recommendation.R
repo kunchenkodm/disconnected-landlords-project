@@ -28,7 +28,7 @@ message("  09a_geography_recommendation.R")
 message(sprintf("  Started: %s", format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
 message("===================================================================")
 
-SYNTHESIS_DIR <- here::here("output", "synthesis")
+SYNTHESIS_DIR <- file.path(OUTPUT_ROOT, "synthesis")
 dir.create(SYNTHESIS_DIR, showWarnings = FALSE, recursive = TRUE)
 
 geo_levels <- c("LA", "ITL2", "ITL3")

@@ -39,31 +39,40 @@ MATCHING_N_WORKERS <- local({
 })
 
 # Directory Paths ---------------------------------------------------------
-# Define all paths relative to the project root using here()
+# Roots are overridable via environment variables (set in .Renviron) so the
+# data can live outside the repo (e.g. a central research-data folder).
+# Defaults preserve the historical in-repo layout: data/raw, data/processed, output.
+.dl_dir <- function(env_var, default) {
+  v <- Sys.getenv(env_var, unset = "")
+  if (nzchar(v)) path.expand(v) else default
+}
+RAW_ROOT       <- .dl_dir("DL_RAW_DIR",       here::here("data", "raw"))
+PROCESSED_ROOT <- .dl_dir("DL_PROCESSED_DIR", here::here("data", "processed"))
+OUTPUT_ROOT    <- .dl_dir("DL_OUTPUT_DIR",    here::here("output"))
 
 # Raw Data Structure
-RAW_DATA_DIR       <- here::here("data", "raw")
-RAW_ADMIN_DIR      <- here::here("data", "raw", "admin")
-RAW_EPC_DIR        <- here::here("data", "raw", "epc")
-RAW_LR_DIR         <- here::here("data", "raw", "land_registry")
-RAW_LOOKUPS_DIR    <- here::here("data", "raw", "lookups")
-RAW_POSTCODE_DIR   <- here::here("data", "raw", "postcode_level")
+RAW_DATA_DIR       <- RAW_ROOT
+RAW_ADMIN_DIR      <- file.path(RAW_ROOT, "admin")
+RAW_EPC_DIR        <- file.path(RAW_ROOT, "epc")
+RAW_LR_DIR         <- file.path(RAW_ROOT, "land_registry")
+RAW_LOOKUPS_DIR    <- file.path(RAW_ROOT, "lookups")
+RAW_POSTCODE_DIR   <- file.path(RAW_ROOT, "postcode_level")
 
 # Intermediate Data
-PROCESSED_DATA_DIR <- here::here("data", "processed")
+PROCESSED_DATA_DIR <- PROCESSED_ROOT
 # Temporary per-LA RDS files written here during chunked EPC processing
-EPC_TEMP_DIR       <- here::here("data", "processed", "epc_la_temp")
+EPC_TEMP_DIR       <- file.path(PROCESSED_ROOT, "epc_la_temp")
 
 # Per-LA pipeline directory (one .parquet file per local authority)
-EPC_LA_REFINED_DIR  <- here::here("data", "processed", "epc_la_refined")
+EPC_LA_REFINED_DIR  <- file.path(PROCESSED_ROOT, "epc_la_refined")
 
 # Output Structure
-OUTPUT_DIR         <- here::here("output")
-MATCHED_DATA_DIR   <- here::here("output", "matched_data")
-RESULTS_DIR        <- here::here("output", "results")         # For individual model .rds files
-SUMMARY_TABLES_DIR <- here::here("output", "summary_tables")  # For aggregated CSVs
-TABLES_DIR         <- here::here("output", "tables")
-FIGURES_DIR        <- here::here("output", "figures")
+OUTPUT_DIR         <- OUTPUT_ROOT
+MATCHED_DATA_DIR   <- file.path(OUTPUT_ROOT, "matched_data")
+RESULTS_DIR        <- file.path(OUTPUT_ROOT, "results")         # For individual model .rds files
+SUMMARY_TABLES_DIR <- file.path(OUTPUT_ROOT, "summary_tables")  # For aggregated CSVs
+TABLES_DIR         <- file.path(OUTPUT_ROOT, "tables")
+FIGURES_DIR        <- file.path(OUTPUT_ROOT, "figures")
 
 # Directory Creation  ---------------------------------------------------------
 # Create Raw Data Directories
@@ -88,7 +97,8 @@ dir.create(SUMMARY_TABLES_DIR, showWarnings = FALSE, recursive = TRUE)
 dir.create(TABLES_DIR, showWarnings = FALSE, recursive = TRUE)
 dir.create(FIGURES_DIR, showWarnings = FALSE, recursive = TRUE)
 
-MODEL_ARCHIVE_DIR <- here::here("output", "model_archive")
+MODEL_ARCHIVE_DIR <- file.path(OUTPUT_ROOT, "model_archive")
 dir.create(MODEL_ARCHIVE_DIR, showWarnings = FALSE, recursive = TRUE)
 
 message("Global setup complete. Project root set to: ", here::here())
+message("Data roots: raw=", RAW_ROOT, " | processed=", PROCESSED_ROOT, " | output=", OUTPUT_ROOT)
