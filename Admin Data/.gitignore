@@ -42,4 +42,16 @@ Thumbs.db
 # Backup files
 *.bak
 *.backup
+scripts/backups/
+
+# LaTeX build artifacts
+*.aux
+*.fls
+*.fdb_latexmk
+*.out
+*.toc
+*.synctex.gz
+
+# Machine-local helpers (not migrated)
+alarm.ps1
 
